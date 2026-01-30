@@ -44,7 +44,27 @@ export const appRouter = router({
           };
         } catch (error: any) {
           console.error('[Facebook CSV Proxy] Error downloading CSV:', error.message);
-          throw new Error(`Failed to download CSV: ${error.message}`);
+          console.error('[Facebook CSV Proxy] Error details:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            reportRunId,
+          });
+          
+          // Provide more specific error messages
+          if (error.response) {
+            const status = error.response.status;
+            if (status === 503) {
+              throw new Error(`Facebook API temporarily unavailable (503). The report may still be processing. Please wait a moment and try again.`);
+            } else if (status === 400) {
+              throw new Error(`Invalid report request (400). Check that the report run ID and access token are correct.`);
+            } else if (status === 404) {
+              throw new Error(`Report not found (404). The report may have expired or the ID is incorrect.`);
+            }
+            throw new Error(`Facebook API error (${status}): ${error.response.statusText}`);
+          }
+          
+          throw new Error(`Network error: ${error.message}`);
         }
       }),
   }),

@@ -217,40 +217,50 @@ export const facebookApiService = {
   },
 
   // NEW: Download CSV via backend proxy to avoid CORS
-  downloadReportCSV: async (
-    reportRunId: string, 
+  async downloadReportCSV(
+    reportRunId: string,
     accessToken?: string,
     onProgress?: (data: ProductInsightData[]) => void,
     onDownloadProgress?: (percent: number) => void
-  ): Promise<{ data: ProductInsightData[] }> => {
-    if (!accessToken) {
-      throw new Error("Access Token is required.");
-    }
-
-    try {
-      // Use backend proxy to download CSV (avoids CORS)
-      // tRPC batch format: input is a JSON object with "0" key containing the query params
-      const input = {
-        "0": {
-          json: {
-            reportRunId,
-            accessToken
+  ): Promise<{ data: ProductInsightData[] }> {
+    // Retry logic for 503 errors (Facebook CDN not ready)
+    const maxRetries = 3;
+    const retryDelays = [5000, 10000, 15000]; // 5s, 10s, 15s
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Use backend proxy to download CSV (avoids CORS)
+        // tRPC batch format: input is a JSON object with "0" key containing the query params
+        const input = {
+          "0": {
+            json: {
+              reportRunId,
+              accessToken
+            }
           }
+        };
+        
+        // Track download progress
+        if (onDownloadProgress) {
+          onDownloadProgress(10); // Starting download
         }
-      };
-      
-      // Track download progress
-      if (onDownloadProgress) {
-        onDownloadProgress(10); // Starting download
-      }
-      
-      const response = await fetch(`/api/trpc/facebook.downloadReportCSV?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[CSV Download] Server error:', errorText);
-        throw new Error(`Failed to download report via proxy. Status: ${response.status}`);
-      }
+        
+        const response = await fetch(`/api/trpc/facebook.downloadReportCSV?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[CSV Download] Server error:', errorText);
+          
+          // Check if it's a 503 and we have retries left
+          if (response.status === 503 && attempt < maxRetries) {
+            const delay = retryDelays[attempt];
+            console.log(`[CSV Download] 503 error, retrying in ${delay/1000}s (attempt ${attempt + 1}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue; // Retry
+          }
+          
+          throw new Error(`Failed to download report via proxy. Status: ${response.status}`);
+        }
       
       if (onDownloadProgress) {
         onDownloadProgress(50); // Download complete, parsing...
@@ -305,10 +315,17 @@ export const facebookApiService = {
           }
         });
       });
-
-    } catch (error) {
-      console.error("Error downloading/parsing report CSV:", error);
-      throw error;
+      } catch (error) {
+        console.error("Error downloading/parsing report CSV:", error);
+        // If this is the last attempt, throw the error
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        // Otherwise, continue to next retry
+      }
     }
+    
+    // Should never reach here, but TypeScript needs a return
+    throw new Error('Failed to download CSV after all retries');
   }
 };

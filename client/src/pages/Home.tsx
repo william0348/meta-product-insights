@@ -82,8 +82,11 @@ export default function Home() {
 
         if (status.async_status === AsyncJobStatus.COMPLETED) {
            if (pollInterval.current) clearInterval(pollInterval.current);
-           toast.success("Report generation completed. Fetching data...");
-           fetchResults(id, token);
+           toast.success("Report generation completed. Preparing download...");
+           // Add a small delay to ensure Facebook's CDN has the file ready
+           setTimeout(() => {
+             fetchResults(id, token);
+           }, 3000); // 3 second delay
         } else if (status.async_status === AsyncJobStatus.FAILED || status.async_status === AsyncJobStatus.SKIPPED) {
            if (pollInterval.current) clearInterval(pollInterval.current);
            setApiError(`Job ended with status: ${status.async_status}`);

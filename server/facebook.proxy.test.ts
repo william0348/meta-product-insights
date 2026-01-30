@@ -63,7 +63,7 @@ Test Product,1000,50.00`;
         reportRunId: "test_report_123",
         accessToken: "test_token",
       })
-    ).rejects.toThrow("Failed to download CSV");
+    ).rejects.toThrow("Network error");
   });
 
   it("constructs correct Facebook lookaside URL", async () => {

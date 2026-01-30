@@ -14,3 +14,4 @@
 - [ ] Test full CSV download and filtering workflow end-to-end
 - [x] Debug and fix persistent 'readable' error after CSV download
 - [x] Debug why CSV data is not being displayed in UI after download - fixed duplicate error variable
+- [x] Fix 503 Service Unavailable error when downloading CSV from Facebook - added retry logic and delay
