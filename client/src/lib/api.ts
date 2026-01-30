@@ -269,6 +269,7 @@ export const facebookApiService = {
         Papa.parse(csvText, {
           header: true,
           skipEmptyLines: true,
+          download: false, // Explicitly tell Papa we're parsing a string, not downloading
           complete: (results) => {
             if (results.errors && results.errors.length > 0) {
               console.warn("CSV Parsing Warnings:", results.errors);
