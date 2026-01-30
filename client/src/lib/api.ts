@@ -152,7 +152,7 @@ export const facebookApiService = {
       breakdowns: breakdown,
       fields: fields,
       is_async: 'true',
-      export_format: 'xls' // Changed to xls as requested by user (json not supported for this report type)
+      // export_format: 'xls' // Removed to allow API default (JSON-compatible) for fetching via Graph API edge
     };
 
     if (sort) queryParams.sort = sort;
@@ -163,8 +163,9 @@ export const facebookApiService = {
 
     const data = await response.json();
     if (data.error) {
-      console.error("Meta API Error:", data.error);
-      throw new Error(data.error.message || "Failed to create report run");
+      console.error("Meta API Error:", JSON.stringify(data.error, null, 2));
+      const errorMessage = data.error.error_user_msg || data.error.message || "Failed to create report run";
+      throw new Error(`${errorMessage} (Code: ${data.error.code})`);
     }
     return { report_run_id: data.report_run_id };
   },
