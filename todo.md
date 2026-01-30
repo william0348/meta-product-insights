@@ -24,3 +24,6 @@
 - [x] Support filtering by CTR (inline_link_click_ctr) and spend
 - [x] Update UI to allow users to set filter thresholds before generating report
 - [x] Fix uncontrolled to controlled input error in form component
+- [x] Create Python script for CSV download and parsing with pandas
+- [x] Update backend to call Python script instead of axios  
+- [x] Test Python implementation - all tests passing (4/4)
