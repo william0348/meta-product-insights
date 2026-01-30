@@ -214,38 +214,41 @@ export const facebookApiService = {
     }
 
     let allData: ProductInsightData[] = [];
-    // Only fetch the first page (limit=100) and stop
-    const nextUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${reportRunId}/insights?access_token=${accessToken}&limit=100`;
+    // Start with limit=500 to get a good chunk initially
+    let nextUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${reportRunId}/insights?access_token=${accessToken}&limit=500`;
 
     try {
-      const response = await fetch(nextUrl);
-      const json = await response.json();
+      while (nextUrl) {
+        const response = await fetch(nextUrl);
+        const json = await response.json();
 
-      if (json.error) {
-        throw new Error(json.error.message || "Failed to fetch report results");
-      }
-
-      const pageData = json.data.map(mapJsonToProductInsightData);
-      
-      // Calculate derived fields
-      const processedPageData = pageData.map((item: ProductInsightData) => {
-        // CVR = Catalog Purchases / Link Clicks * 100
-        if (item.link_clicks > 0) {
-          item.cvr = ((item.catalog_purchases || 0) / item.link_clicks) * 100;
-        } else {
-          item.cvr = 0;
+        if (json.error) {
+          throw new Error(json.error.message || "Failed to fetch report results");
         }
-        return item;
-      });
 
-      allData = processedPageData;
+        const pageData = json.data.map(mapJsonToProductInsightData);
+        
+        // Calculate derived fields
+        const processedPageData = pageData.map((item: ProductInsightData) => {
+          // CVR = Catalog Purchases / Link Clicks * 100
+          if (item.link_clicks > 0) {
+            item.cvr = ((item.catalog_purchases || 0) / item.link_clicks) * 100;
+          } else {
+            item.cvr = 0;
+          }
+          return item;
+        });
 
-      // Notify UI immediately with data
-      if (onProgress) {
-        onProgress(allData);
+        allData = [...allData, ...processedPageData];
+
+        // Notify UI immediately with cumulative data
+        if (onProgress) {
+          onProgress(allData);
+        }
+        
+        // Fetch next page if available
+        nextUrl = json.paging && json.paging.next ? json.paging.next : null;
       }
-      
-      // We intentionally do NOT fetch next pages (paging.next) as per user request to limit to first 100 rows.
 
     } catch (error) {
       console.error("Error fetching report results:", error);

@@ -153,10 +153,10 @@ export default function Home() {
     });
   }, [reportData, activeFilters]);
 
-  // Preview Data (Limit table display to 500)
+  // Preview Data (Limit table display to 100 as requested)
   const previewData = useMemo(() => {
     if (!filteredData) return [];
-    return filteredData.slice(0, 500);
+    return filteredData.slice(0, 100);
   }, [filteredData]);
 
   const handleDownloadXlsx = () => {
@@ -347,9 +347,9 @@ export default function Home() {
                 {/* Data Table */}
                 <ProductTable data={previewData} totalCount={filteredData ? filteredData.length : 0} />
                 
-                {filteredData && filteredData.length > 500 && (
+                {filteredData && filteredData.length > 100 && (
                    <p className="text-center text-xs text-muted-foreground py-4 italic">
-                     Table preview limited to top 500 items. Download Excel to view full filtered dataset.
+                     Table preview limited to top 100 items. Download Excel to view full filtered dataset.
                    </p>
                 )}
               </div>
