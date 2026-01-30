@@ -216,7 +216,7 @@ export const facebookApiService = {
     };
   },
 
-  // NEW: Download CSV directly and parse locally
+  // NEW: Download CSV via backend proxy to avoid CORS
   downloadReportCSV: async (
     reportRunId: string, 
     accessToken?: string,
@@ -226,17 +226,21 @@ export const facebookApiService = {
       throw new Error("Access Token is required.");
     }
 
-    // Construct the Lookaside Download URL
-    const downloadUrl = `https://lookaside.facebook.com/ads/ads_insights/download_report/business/?report_run_id=${reportRunId}&access_token=${accessToken}`;
-
     try {
-      // Fetch the CSV file as text
-      const response = await fetch(downloadUrl);
+      // Use backend proxy to download CSV (avoids CORS)
+      // Note: This will be replaced with tRPC call in Home.tsx
+      // For now, keeping this as a fallback that calls the backend API
+      const response = await fetch(`/api/trpc/facebook.downloadReportCSV?input=${encodeURIComponent(JSON.stringify({
+        reportRunId,
+        accessToken
+      }))}`);
+      
       if (!response.ok) {
-        throw new Error(`Failed to download report. Status: ${response.status}`);
+        throw new Error(`Failed to download report via proxy. Status: ${response.status}`);
       }
       
-      const csvText = await response.text();
+      const result = await response.json();
+      const csvText = result.result.data.csvData;
 
       // Parse CSV using PapaParse
       return new Promise((resolve, reject) => {
