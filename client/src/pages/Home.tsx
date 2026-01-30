@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { InsightsCharts } from '@/components/InsightsCharts';
 import { ProductTable } from '@/components/ProductTable';
 import { FilterBar } from '@/components/FilterBar';
+import { SavedPresets } from '@/components/SavedPresets';
 import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2 } from 'lucide-react';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -98,6 +99,13 @@ export default function Home() {
         console.error("Polling error", err);
       }
     }, 2000); // Poll every 2s
+  };
+
+  const handleStopReport = () => {
+    if (pollInterval.current) clearInterval(pollInterval.current);
+    setJobStatus(AsyncJobStatus.NOT_STARTED);
+    setIsRequesting(false);
+    toast.info("Report generation stopped by user");
   };
 
   const fetchResults = async (id: string, token?: string) => {
@@ -226,6 +234,15 @@ export default function Home() {
               defaultToken="EAANLrF5ZBRkEBPJSaKYUM1MOEUfxzNNkC7YiEauZCJNZBdTHMlh6BrAfOR0dY6O3kchrrMnCDHHo6E8K6R3s3abZBIFEwxS6TeuQo4g0g3kIVGYi4LIbwb4olq9NgyvZAeotDnwNxX0i4R6nTq3c477HkvTEsJu7B3IZChjYZCjiZAYW9L1dAOqK7tTjUaeDsaoZAqMfxBDKv1EfNO4id"
             />
             
+            {/* Saved Presets */}
+            <SavedPresets 
+              currentFilters={activeFilters} 
+              onLoadPreset={(filters) => {
+                setActiveFilters(filters);
+                toast.success("Filters applied");
+              }} 
+            />
+
             {/* Job Status Card */}
             {(reportId || isRequesting) && (
               <Card className="border-0 shadow-none bg-background border border-border rounded-none">
@@ -248,11 +265,24 @@ export default function Home() {
 
                   {/* Progress Bar - Swiss Style (Sharp, no rounded corners) */}
                   {(jobStatus === AsyncJobStatus.STARTED || jobStatus === AsyncJobStatus.RUNNING) && (
-                    <div className="w-full bg-secondary h-1 mt-2">
-                      <div 
-                        className="bg-primary h-1 transition-all duration-500 ease-out" 
-                        style={{ width: `${jobPercent}%` }}
-                      ></div>
+                    <div className="space-y-2">
+                      <div className="w-full bg-secondary h-1 mt-2">
+                        <div 
+                          className="bg-primary h-1 transition-all duration-500 ease-out" 
+                          style={{ width: `${jobPercent}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground italic">
+                        {jobPercent === 0 ? "Initializing report on Meta servers..." : `Processing: ${jobPercent}%`}
+                      </p>
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        className="w-full h-7 text-xs mt-2 rounded-none"
+                        onClick={handleStopReport}
+                      >
+                        Stop Generation
+                      </Button>
                     </div>
                   )}
                 </CardContent>

@@ -1,15 +1,8 @@
-- [ ] Update `ReportConfigForm.tsx` to handle the `act_` prefix
-  - [ ] Add a visual prefix "act_" to the input field
-  - [ ] Ensure the input value is numeric only or strip existing `act_` if pasted
-  - [ ] Automatically prepend `act_` when submitting the form if missing
-- [ ] Update `api.ts` to implement CSV fetching strategy
-  - [ ] Use `https://lookaside.facebook.com/ads/ads_insights/download_report/business/` endpoint
-  - [ ] Implement CSV parsing logic (using PapaParse or similar)
-  - [ ] Map CSV columns to `ProductInsightData` structure
-- [ ] Add `papaparse` dependency
-- [ ] Update `ProductTable.tsx`
-  - [ ] Rename "Purchases" column to "Ad Purchases"
-  - [ ] Add "Link Clicks" column (mapped to `link_clicks`)
-  - [ ] Add "Catalog Purchases" column (mapped to `catalog_purchases`)
-- [ ] Update `FilterBar.tsx`
-  - [ ] Add `link_clicks` and `catalog_purchases` to filter options
+- [ ] Debug Polling Logic
+  - [ ] Check `pollReportStatus` in `api.ts` for correct handling of `async_percent_completion`
+  - [ ] Add timeout or retry mechanism if status doesn't change for a while
+  - [ ] Verify if `async_status` is being returned correctly from API
+- [ ] Implement Saved Filter Presets
+  - [ ] Create `SavedPresets` component
+  - [ ] Use `localStorage` to persist presets
+  - [ ] Integrate with `FilterBar`
