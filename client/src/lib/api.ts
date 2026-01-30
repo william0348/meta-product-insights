@@ -26,12 +26,6 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
     return action ? pFloat(action.value) : 0;
   };
 
-  const getActionCost = (actions: any[], actionType: string) => {
-    if (!actions || !Array.isArray(actions)) return 0;
-    const action = actions.find((a: any) => a.action_type === actionType);
-    return action ? pFloat(action.value) : 0;
-  };
-
   return {
     product_name: name,
     product_retailer_id: id,
@@ -55,22 +49,25 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
     // CVR calculated later
     cvr: 0, 
 
-    purchases: getActionValue(item.actions, 'omni_purchase'),
-    purchase_value: getActionValue(item.action_values, 'omni_purchase'),
-    avg_purchase_value: pFloat(item.average_purchases_conversion_value), // This might be direct field or action based depending on query
+    // Note: 'actions' and 'action_values' are now removed from main query to avoid conflicts
+    // We rely on the specific converted_product_* fields which are more reliable for product reporting
+    purchases: pInt(item.converted_product_omni_purchase), 
+    purchase_value: pFloat(item.converted_product_omni_purchase_value),
+    avg_purchase_value: 0, // Derived if needed
     
-    website_purchases: getActionValue(item.actions, 'offsite_conversion.fb_pixel_purchase'),
-    mobile_app_purchases: getActionValue(item.actions, 'app_custom_event.fb_mobile_purchase'),
-    offline_purchases: getActionValue(item.actions, 'offline_conversion.purchase'),
-    onsite_purchases: getActionValue(item.actions, 'onsite_conversion.purchase'),
+    website_purchases: pInt(item.converted_product_website_pixel_purchase),
+    mobile_app_purchases: pInt(item.converted_product_app_custom_event_fb_mobile_purchase),
+    offline_purchases: pInt(item.converted_product_offline_purchase),
+    onsite_purchases: 0, // Not always available in simplified view
     
-    purchase_roas: getActionValue(item.purchase_roas, 'omni_purchase'),
-    website_roas: getActionValue(item.website_purchase_roas, 'offsite_conversion.fb_pixel_purchase'),
-    mobile_app_roas: getActionValue(item.mobile_app_purchase_roas, 'app_custom_event.fb_mobile_purchase'),
+    purchase_roas: pFloat(item.purchase_roas), // This might be aggregate
+    website_roas: pFloat(item.website_purchase_roas),
+    mobile_app_roas: pFloat(item.mobile_app_purchase_roas),
     
-    adds_to_cart: getActionValue(item.actions, 'omni_add_to_cart'),
-    website_adds_to_cart: getActionValue(item.actions, 'offsite_conversion.fb_pixel_add_to_cart'),
-    mobile_app_adds_to_cart: getActionValue(item.actions, 'app_custom_event.fb_mobile_add_to_cart'),
+    // Fallback for cart data if not in specific fields (often not available in product breakdown without actions)
+    adds_to_cart: 0, 
+    website_adds_to_cart: 0,
+    mobile_app_adds_to_cart: 0,
 
     catalog_purchases: pInt(item.converted_product_omni_purchase),
     catalog_purchase_value: pFloat(item.converted_product_omni_purchase_value),
@@ -78,7 +75,7 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
     product_set_purchases: pInt(item.converted_promoted_product_omni_purchase),
     product_set_purchase_value: pFloat(item.converted_promoted_product_omni_purchase_value),
     
-    product_views: pInt(item.product_views), // Or check actions for 'view_content'
+    product_views: pInt(item.product_views),
     
     date_start: item.date_start,
     date_stop: item.date_stop
@@ -96,7 +93,8 @@ export const facebookApiService = {
     // Ensure accountId has act_ prefix
     const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
 
-    // Use full field list for rich data export
+    // Optimized field list to avoid "Invalid parameter" conflicts
+    // Removed generic 'actions' and 'action_values' which cause issues when combined with product breakdowns in some API versions
     const fieldList = [
       'product_views',
       'converted_product_app_custom_event_fb_mobile_purchase_value',
@@ -142,10 +140,6 @@ export const facebookApiService = {
       'mobile_app_purchase_roas',
       'results',
       'cost_per_result',
-      'average_purchases_conversion_value',
-      'actions',
-      'action_values',
-      'total_card_view',
       'product_retailer_id'
     ];
     
@@ -157,9 +151,8 @@ export const facebookApiService = {
       time_range: JSON.stringify({ since: startDate, until: endDate }),
       breakdowns: breakdown,
       fields: fields,
-      // Note: We are NOT using export_format=csv anymore to avoid CORS issues with lookaside url
-      // We will fetch JSON pages from the insights edge
-      is_async: 'true'
+      is_async: 'true',
+      export_format: 'json' // Explicitly request JSON
     };
 
     if (sort) queryParams.sort = sort;
@@ -169,7 +162,10 @@ export const facebookApiService = {
     const response = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${formattedAccountId}/insights?${params.toString()}`, { method: 'POST' });
 
     const data = await response.json();
-    if (data.error) throw new Error(data.error.message || "Failed to create report run");
+    if (data.error) {
+      console.error("Meta API Error:", data.error);
+      throw new Error(data.error.message || "Failed to create report run");
+    }
     return { report_run_id: data.report_run_id };
   },
 

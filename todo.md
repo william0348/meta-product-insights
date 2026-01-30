@@ -1,3 +1,4 @@
 - [ ] Update `api.ts`
-  - [ ] Add `is_async: 'true'` back to `createReportRun` parameters
-  - [ ] Ensure `getReportResults` still uses pagination logic for progressive loading
+  - [ ] Remove `actions` and `action_values` from the requested fields list to avoid conflicts with specific action breakdowns
+  - [ ] Explicitly set `export_format: 'json'` (or remove it if default is fine, but be explicit)
+  - [ ] Add better error logging to capture the detailed sub-error code from Meta
