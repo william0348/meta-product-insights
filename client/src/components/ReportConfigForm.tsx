@@ -31,7 +31,8 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
     defaultValues: {
       accessToken: defaultToken || '',
       accountId: '',
-      dateStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      // Set default start date to 60 days ago
+      dateStart: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       dateEnd: new Date().toISOString().split('T')[0],
       level: 'account',
       breakdown: 'product_id'
