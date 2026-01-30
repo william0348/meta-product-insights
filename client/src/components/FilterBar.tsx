@@ -40,9 +40,11 @@ export const FilterBar: React.FC<Props> = ({ activeFilters, onFiltersChange }) =
       spend: 'Spend',
       impressions: 'Impressions',
       clicks: 'Clicks',
+      link_clicks: 'Link Clicks',
       ctr: 'CTR',
       cpc: 'CPC',
-      purchases: 'Purchases',
+      purchases: 'Ad Purchases',
+      catalog_purchases: 'Catalog Purchases',
       purchase_roas: 'ROAS',
       cpa: 'CPA'
     };
@@ -79,16 +81,18 @@ export const FilterBar: React.FC<Props> = ({ activeFilters, onFiltersChange }) =
         {/* Add New Filter */}
         <div className="flex items-center gap-2 bg-background p-1 border border-border w-full md:w-auto">
           <Select value={newFilterField} onValueChange={setNewFilterField}>
-            <SelectTrigger className="w-[120px] h-8 text-xs border-0 focus:ring-0 rounded-none bg-transparent">
+            <SelectTrigger className="w-[140px] h-8 text-xs border-0 focus:ring-0 rounded-none bg-transparent">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="rounded-none">
               <SelectItem value="spend">Spend</SelectItem>
               <SelectItem value="impressions">Impressions</SelectItem>
               <SelectItem value="clicks">Clicks</SelectItem>
+              <SelectItem value="link_clicks">Link Clicks</SelectItem>
               <SelectItem value="ctr">CTR (%)</SelectItem>
               <SelectItem value="cpc">CPC</SelectItem>
-              <SelectItem value="purchases">Purchases</SelectItem>
+              <SelectItem value="purchases">Ad Purchases</SelectItem>
+              <SelectItem value="catalog_purchases">Catalog Purchases</SelectItem>
               <SelectItem value="purchase_roas">ROAS</SelectItem>
             </SelectContent>
           </Select>

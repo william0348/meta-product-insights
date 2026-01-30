@@ -7,3 +7,9 @@
   - [ ] Implement CSV parsing logic (using PapaParse or similar)
   - [ ] Map CSV columns to `ProductInsightData` structure
 - [ ] Add `papaparse` dependency
+- [ ] Update `ProductTable.tsx`
+  - [ ] Rename "Purchases" column to "Ad Purchases"
+  - [ ] Add "Link Clicks" column (mapped to `link_clicks`)
+  - [ ] Add "Catalog Purchases" column (mapped to `catalog_purchases`)
+- [ ] Update `FilterBar.tsx`
+  - [ ] Add `link_clicks` and `catalog_purchases` to filter options
