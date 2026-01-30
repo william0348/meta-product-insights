@@ -19,6 +19,20 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
   const id = item.product_retailer_id || item.product_content_id || item.product_group_content_id || 'N/A';
   const name = item.product_name || id;
 
+  // Extract action values safely
+  const getActionValue = (actions: any[], actionType: string) => {
+    if (!actions || !Array.isArray(actions)) return 0;
+    const action = actions.find((a: any) => a.action_type === actionType);
+    return action ? pFloat(action.value) : 0;
+  };
+
+  // CORRECTED MAPPING:
+  // Ad Purchases (Omni) -> actions:omni_purchase
+  // Catalog Purchases -> converted_product_omni_purchase
+  
+  const adPurchases = getActionValue(item.actions, 'omni_purchase');
+  const catalogPurchases = pInt(item.converted_product_omni_purchase);
+
   return {
     product_name: name,
     product_retailer_id: id,
@@ -43,9 +57,8 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
     cvr: 0, 
 
     // Purchase Metrics
-    // We rely on the specific converted_product_* fields which are more reliable for product reporting
-    purchases: pInt(item.converted_product_omni_purchase), 
-    purchase_value: pFloat(item.converted_product_omni_purchase_value),
+    purchases: adPurchases, // Mapped to Ad Purchases (Omni)
+    purchase_value: getActionValue(item.action_values, 'omni_purchase'),
     avg_purchase_value: 0, // Derived if needed
     
     website_purchases: pInt(item.converted_product_website_pixel_purchase),
@@ -63,7 +76,7 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
     mobile_app_adds_to_cart: pInt(item.converted_product_app_custom_event_fb_mobile_add_to_cart),
 
     // Catalog & Product Set Metrics
-    catalog_purchases: pInt(item.converted_product_omni_purchase),
+    catalog_purchases: catalogPurchases, // Mapped to Catalog Purchases
     catalog_purchase_value: pFloat(item.converted_product_omni_purchase_value),
     
     product_set_purchases: pInt(item.converted_promoted_product_omni_purchase),
@@ -148,7 +161,11 @@ export const facebookApiService = {
       'website_purchase_roas',
       'mobile_app_purchase_roas',
       'results',
-      'cost_per_result'
+      'cost_per_result',
+      
+      // REQUIRED for Ad Purchases (Omni)
+      'actions',
+      'action_values'
     ];
     
     const fields = fieldList.join(',');
