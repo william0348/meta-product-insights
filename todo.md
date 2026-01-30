@@ -23,3 +23,4 @@
 - [x] Add filtering parameters to Facebook API createReportRun request
 - [x] Support filtering by CTR (inline_link_click_ctr) and spend
 - [x] Update UI to allow users to set filter thresholds before generating report
+- [x] Fix uncontrolled to controlled input error in form component

@@ -37,7 +37,9 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
       dateStart: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       dateEnd: new Date().toISOString().split('T')[0],
       level: 'account',
-      breakdown: 'product_id'
+      breakdown: 'product_id',
+      minSpend: '',
+      minCTR: ''
     }
   });
 
