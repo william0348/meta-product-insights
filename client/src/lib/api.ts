@@ -1,94 +1,108 @@
 import { AsyncJobStatus, ProductInsightData, ReportRunResponse, ReportRunStatus } from '../types';
+import Papa from 'papaparse';
 
 const GRAPH_API_VERSION = 'v22.0';
 
-// Helper to map JSON item from Graph API to ProductInsightData
-const mapJsonToProductInsightData = (item: any): ProductInsightData => {
+// Helper to map CSV Row to ProductInsightData
+// The CSV headers from Meta are usually user-friendly (e.g., "Product Name", "Impressions")
+// We need to map them back to our internal structure.
+const mapCsvRowToProductInsightData = (row: any): ProductInsightData => {
   const pFloat = (val: any) => {
     if (!val) return 0;
-    const num = parseFloat(val);
+    // Remove currency symbols or commas if present
+    const cleanVal = String(val).replace(/[$,]/g, '');
+    const num = parseFloat(cleanVal);
     return isNaN(num) ? 0 : num;
   };
   
   const pInt = (val: any) => {
     if (!val) return 0;
-    const num = parseInt(val, 10);
+    const cleanVal = String(val).replace(/[,]/g, '');
+    const num = parseInt(cleanVal, 10);
     return isNaN(num) ? 0 : num;
   };
 
-  const id = item.product_retailer_id || item.product_content_id || item.product_group_content_id || 'N/A';
-  const name = item.product_name || id;
-
-  // Extract action values safely
-  const getActionValue = (actions: any[], actionType: string) => {
-    if (!actions || !Array.isArray(actions)) return 0;
-    const action = actions.find((a: any) => a.action_type === actionType);
-    return action ? pFloat(action.value) : 0;
+  // Helper to find value by possible header names (Meta CSV headers can vary slightly)
+  const getVal = (keys: string[]) => {
+    for (const key of keys) {
+      if (row[key] !== undefined) return row[key];
+    }
+    return undefined;
   };
 
-  // CORRECTED MAPPING:
-  // Ad Purchases (Omni) -> actions:omni_purchase
-  // Catalog Purchases -> actions:catalog_purchase (converted_product_omni_purchase often returns 0 if not explicitly tracked)
+  const id = getVal(['Product Item ID', 'Content ID', 'product_retailer_id', 'product_content_id']) || 'N/A';
+  const name = getVal(['Product Name', 'product_name']) || id;
+
+  // Extract action values from CSV columns if they exist as specific columns
+  // Note: Meta CSV export flattens 'actions' into specific columns like "Purchases", "Website Purchases", etc.
   
-  const adPurchases = getActionValue(item.actions, 'omni_purchase');
-  // Fallback to action:catalog_purchase if converted_product_omni_purchase is 0
-  const catalogPurchases = pInt(item.converted_product_omni_purchase) || getActionValue(item.actions, 'catalog_purchase');
+  // Ad Purchases (Omni)
+  const adPurchases = pInt(getVal(['Purchases', 'Ad Purchases', 'actions:omni_purchase']));
+  
+  // Catalog Purchases
+  // Try finding specific catalog purchase column first
+  let catalogPurchases = pInt(getVal(['Catalog Purchases', 'actions:catalog_purchase', 'converted_product_omni_purchase']));
+  
+  // Link Clicks
+  const linkClicks = pInt(getVal(['Link Clicks', 'inline_link_clicks']));
+
+  // CVR Calculation: Catalog Purchases / Link Clicks * 100
+  let cvr = 0;
+  if (linkClicks > 0) {
+    cvr = (catalogPurchases / linkClicks) * 100;
+  }
 
   return {
     product_name: name,
     product_retailer_id: id,
-    product_brand: item.product_brand,
-    product_category: item.product_category,
+    product_brand: getVal(['Brand', 'product_brand']),
+    product_category: getVal(['Category', 'product_category']),
     
-    impressions: pInt(item.impressions),
-    spend: pFloat(item.spend),
-    clicks: 0, // Removed as requested
-    link_clicks: pInt(item.inline_link_clicks),
-    outbound_clicks: 0, // Removed as requested
+    impressions: pInt(getVal(['Impressions', 'impressions'])),
+    spend: pFloat(getVal(['Amount Spent (USD)', 'Amount Spent', 'spend'])),
+    clicks: 0, 
+    link_clicks: linkClicks,
+    outbound_clicks: 0,
     
-    cpm: pFloat(item.cpm),
-    ctr: pFloat(item.ctr),
-    inline_link_click_ctr: pFloat(item.inline_link_click_ctr),
-    outbound_ctr: 0, // Removed as requested
-    cpc: pFloat(item.cpc),
-    cost_per_inline_link_click: pFloat(item.cost_per_inline_link_click),
-    cost_per_outbound_click: 0, // Removed as requested
+    cpm: pFloat(getVal(['CPM (Cost per 1,000 Impressions)', 'CPM', 'cpm'])),
+    ctr: pFloat(getVal(['CTR (All)', 'CTR', 'ctr'])), // Note: Check if CTR (Link Click-Through Rate) is available
+    inline_link_click_ctr: pFloat(getVal(['CTR (Link Click-Through Rate)', 'inline_link_click_ctr'])),
+    outbound_ctr: 0,
+    cpc: pFloat(getVal(['CPC (All)', 'CPC', 'cpc'])),
+    cost_per_inline_link_click: pFloat(getVal(['Cost per Link Click', 'cost_per_inline_link_click'])),
+    cost_per_outbound_click: 0,
     
-    // CVR calculated later
-    cvr: 0, 
+    cvr: cvr,
 
     // Purchase Metrics
-    purchases: adPurchases, // Mapped to Ad Purchases (Omni)
-    purchase_value: getActionValue(item.action_values, 'omni_purchase'),
-    avg_purchase_value: 0, // Derived if needed
+    purchases: adPurchases,
+    purchase_value: pFloat(getVal(['Purchase ROAS (Return on Ad Spend)', 'purchase_value'])), // This might be value, double check mapping if column exists
+    avg_purchase_value: 0,
     
-    website_purchases: 0, // Removed as requested
-    mobile_app_purchases: 0, // Removed as requested
-    offline_purchases: 0, // Removed as requested
-    onsite_purchases: 0, // Removed as requested
+    website_purchases: 0,
+    mobile_app_purchases: 0,
+    offline_purchases: 0,
+    onsite_purchases: 0,
     
-    purchase_roas: pFloat(item.purchase_roas),
-    website_roas: pFloat(item.website_purchase_roas),
-    mobile_app_roas: pFloat(item.mobile_app_purchase_roas),
+    purchase_roas: pFloat(getVal(['Purchase ROAS (Return on Ad Spend)', 'purchase_roas'])),
+    website_roas: pFloat(getVal(['Website Purchase ROAS', 'website_purchase_roas'])),
+    mobile_app_roas: pFloat(getVal(['Mobile App Purchase ROAS', 'mobile_app_purchase_roas'])),
     
-    // Add to Cart Metrics - Removed as requested
-    adds_to_cart: 0, 
+    adds_to_cart: 0,
     website_adds_to_cart: 0,
     mobile_app_adds_to_cart: 0,
 
     // Catalog & Product Set Metrics
-    catalog_purchases: catalogPurchases, // Mapped to Catalog Purchases
-    // CORRECTED: converted_product_omni_purchase_value -> converted_product_omni_purchase_values
-    catalog_purchase_value: pFloat(item.converted_product_omni_purchase_values),
+    catalog_purchases: catalogPurchases,
+    catalog_purchase_value: pFloat(getVal(['Catalog Purchase Value', 'converted_product_omni_purchase_values'])),
     
-    product_set_purchases: pInt(item.converted_promoted_product_omni_purchase),
-    // CORRECTED: converted_promoted_product_omni_purchase_value -> converted_promoted_product_omni_purchase_values
-    product_set_purchase_value: pFloat(item.converted_promoted_product_omni_purchase_values),
+    product_set_purchases: pInt(getVal(['Product Set Purchases', 'converted_promoted_product_omni_purchase'])),
+    product_set_purchase_value: pFloat(getVal(['Product Set Purchase Value', 'converted_promoted_product_omni_purchase_values'])),
     
-    product_views: pInt(item.product_views),
+    product_views: pInt(getVal(['Content Views', 'product_views'])),
     
-    date_start: item.date_start,
-    date_stop: item.date_stop
+    date_start: getVal(['Reporting Starts', 'date_start']),
+    date_stop: getVal(['Reporting Ends', 'date_stop'])
   };
 };
 
@@ -110,12 +124,10 @@ export const facebookApiService = {
       
       // Purchases (Product Level)
       'converted_product_omni_purchase',
-      // CORRECTED: Plural 'values'
       'converted_product_omni_purchase_values',
       
       // Product Set / Promoted Product Purchases
       'converted_promoted_product_omni_purchase',
-      // CORRECTED: Plural 'values'
       'converted_promoted_product_omni_purchase_values',
       
       'converted_promoted_product_website_pixel_purchase',
@@ -204,57 +216,59 @@ export const facebookApiService = {
     };
   },
 
-  getReportResults: async (
+  // NEW: Download CSV directly and parse locally
+  downloadReportCSV: async (
     reportRunId: string, 
-    accessToken?: string, 
+    accessToken?: string,
     onProgress?: (data: ProductInsightData[]) => void
   ): Promise<{ data: ProductInsightData[] }> => {
     if (!accessToken) {
       throw new Error("Access Token is required.");
     }
 
-    let allData: ProductInsightData[] = [];
-    // Start with limit=500 to get a good chunk initially
-    let nextUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${reportRunId}/insights?access_token=${accessToken}&limit=500`;
+    // Construct the Lookaside Download URL
+    const downloadUrl = `https://lookaside.facebook.com/ads/ads_insights/download_report/business/?report_run_id=${reportRunId}&access_token=${accessToken}`;
 
     try {
-      while (nextUrl) {
-        const response = await fetch(nextUrl);
-        const json = await response.json();
-
-        if (json.error) {
-          throw new Error(json.error.message || "Failed to fetch report results");
-        }
-
-        const pageData = json.data.map(mapJsonToProductInsightData);
-        
-        // Calculate derived fields
-        const processedPageData = pageData.map((item: ProductInsightData) => {
-          // CVR = Catalog Purchases / Link Clicks * 100
-          if (item.link_clicks > 0) {
-            item.cvr = ((item.catalog_purchases || 0) / item.link_clicks) * 100;
-          } else {
-            item.cvr = 0;
-          }
-          return item;
-        });
-
-        allData = [...allData, ...processedPageData];
-
-        // Notify UI immediately with cumulative data
-        if (onProgress) {
-          onProgress(allData);
-        }
-        
-        // Fetch next page if available
-        nextUrl = json.paging && json.paging.next ? json.paging.next : null;
+      // Fetch the CSV file as text
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download report. Status: ${response.status}`);
       }
+      
+      const csvText = await response.text();
+
+      // Parse CSV using PapaParse
+      return new Promise((resolve, reject) => {
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            if (results.errors && results.errors.length > 0) {
+              console.warn("CSV Parsing Warnings:", results.errors);
+            }
+            
+            // Map raw CSV rows to our data structure
+            const mappedData = results.data.map(mapCsvRowToProductInsightData);
+            
+            // Filter out rows with no product name/id if necessary (cleanup)
+            const validData = mappedData.filter(item => item.product_retailer_id !== 'N/A' && item.product_name !== 'N/A');
+
+            if (onProgress) {
+              onProgress(validData);
+            }
+            
+            resolve({ data: validData });
+          },
+          error: (error: any) => {
+            reject(new Error(`CSV Parsing Error: ${error.message}`));
+          }
+        });
+      });
 
     } catch (error) {
-      console.error("Error fetching report results:", error);
+      console.error("Error downloading/parsing report CSV:", error);
       throw error;
     }
-
-    return { data: allData };
   }
 };

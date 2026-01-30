@@ -111,10 +111,10 @@ export default function Home() {
   const fetchResults = async (id: string, token?: string) => {
     try {
       setIsFetchingMore(true);
-      // 3. Get Data with progressive loading
-      // We pass a callback that updates the state immediately as pages arrive
-      const results = await facebookApiService.getReportResults(id, token, (interimData) => {
-        setReportData([...interimData]); // Create new array ref to trigger render
+      // 3. Download and Parse CSV
+      // We pass a callback that updates the state once parsing is complete
+      const results = await facebookApiService.downloadReportCSV(id, token, (parsedData) => {
+        setReportData(parsedData); 
       });
       
       // Ensure final state is set
