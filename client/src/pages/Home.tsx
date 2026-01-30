@@ -6,7 +6,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { InsightsCharts } from '@/components/InsightsCharts';
 import { ProductTable } from '@/components/ProductTable';
 import { FilterBar } from '@/components/FilterBar';
-import { SavedPresets } from '@/components/SavedPresets';
+
 import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2 } from 'lucide-react';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ export default function Home() {
   const [reportData, setReportData] = useState<ProductInsightData[] | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   
   // Filtering
@@ -111,20 +112,29 @@ export default function Home() {
   const fetchResults = async (id: string, token?: string) => {
     try {
       setIsFetchingMore(true);
-      // 3. Download and Parse CSV
-      // We pass a callback that updates the state once parsing is complete
-      const results = await facebookApiService.downloadReportCSV(id, token, (parsedData) => {
-        setReportData(parsedData); 
-      });
+      setDownloadProgress(0);
+      // 3. Download and Parse CSV with progress tracking
+      const results = await facebookApiService.downloadReportCSV(
+        id, 
+        token, 
+        (parsedData) => {
+          setReportData(parsedData); 
+        },
+        (progress) => {
+          setDownloadProgress(progress);
+        }
+      );
       
       // Ensure final state is set
       setReportData(results.data);
+      setDownloadProgress(100);
       toast.success(`Loaded all ${results.data.length} records`);
     } catch (err: any) {
       setError(err.message || "Failed to fetch final report results.");
       toast.error("Failed to fetch results");
     } finally {
       setIsFetchingMore(false);
+      setDownloadProgress(0);
       setJobStatus(AsyncJobStatus.COMPLETED);
     }
   };
@@ -236,15 +246,6 @@ export default function Home() {
               defaultToken="EAANLrF5ZBRkEBPJSaKYUM1MOEUfxzNNkC7YiEauZCJNZBdTHMlh6BrAfOR0dY6O3kchrrMnCDHHo6E8K6R3s3abZBIFEwxS6TeuQo4g0g3kIVGYi4LIbwb4olq9NgyvZAeotDnwNxX0i4R6nTq3c477HkvTEsJu7B3IZChjYZCjiZAYW9L1dAOqK7tTjUaeDsaoZAqMfxBDKv1EfNO4id"
             />
             
-            {/* Saved Presets */}
-            <SavedPresets 
-              currentFilters={activeFilters} 
-              onLoadPreset={(filters) => {
-                setActiveFilters(filters);
-                toast.success("Filters applied");
-              }} 
-            />
-
             {/* Job Status Card */}
             {(reportId || isRequesting) && (
               <Card className="border-0 shadow-none bg-background border border-border rounded-none">
@@ -272,6 +273,21 @@ export default function Home() {
                         className="h-full bg-primary transition-all duration-500 ease-out" 
                         style={{ width: `${jobPercent}%` }}
                       />
+                    </div>
+                  )}
+                  
+                  {/* Download Progress Indicator */}
+                  {isFetchingMore && downloadProgress > 0 && (
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">
+                        Downloading CSV: {downloadProgress}%
+                      </span>
+                      <div className="h-1 w-full bg-secondary mt-2">
+                        <div 
+                          className="h-full bg-emerald-600 transition-all duration-300 ease-out" 
+                          style={{ width: `${downloadProgress}%` }}
+                        />
+                      </div>
                     </div>
                   )}
                 </CardContent>

@@ -1,5 +1,5 @@
 import { AsyncJobStatus, ProductInsightData, ReportRunResponse, ReportRunStatus } from '../types';
-import Papa from 'papaparse';
+import * as Papa from 'papaparse';
 
 const GRAPH_API_VERSION = 'v22.0';
 
@@ -220,7 +220,8 @@ export const facebookApiService = {
   downloadReportCSV: async (
     reportRunId: string, 
     accessToken?: string,
-    onProgress?: (data: ProductInsightData[]) => void
+    onProgress?: (data: ProductInsightData[]) => void,
+    onDownloadProgress?: (percent: number) => void
   ): Promise<{ data: ProductInsightData[] }> => {
     if (!accessToken) {
       throw new Error("Access Token is required.");
@@ -238,6 +239,11 @@ export const facebookApiService = {
         }
       };
       
+      // Track download progress
+      if (onDownloadProgress) {
+        onDownloadProgress(10); // Starting download
+      }
+      
       const response = await fetch(`/api/trpc/facebook.downloadReportCSV?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`);
       
       if (!response.ok) {
@@ -246,9 +252,17 @@ export const facebookApiService = {
         throw new Error(`Failed to download report via proxy. Status: ${response.status}`);
       }
       
+      if (onDownloadProgress) {
+        onDownloadProgress(50); // Download complete, parsing...
+      }
+      
       const result = await response.json();
       // tRPC batch response format: array with result at index 0
       const csvText = result[0].result.data.csvData;
+      
+      if (onDownloadProgress) {
+        onDownloadProgress(70); // Received data, parsing CSV...
+      }
 
       // Parse CSV using PapaParse
       return new Promise((resolve, reject) => {
@@ -263,11 +277,19 @@ export const facebookApiService = {
             // Map raw CSV rows to our data structure
             const mappedData = results.data.map(mapCsvRowToProductInsightData);
             
+            if (onDownloadProgress) {
+              onDownloadProgress(90); // Mapping complete
+            }
+            
             // Filter out rows with no product name/id if necessary (cleanup)
             const validData = mappedData.filter(item => item.product_retailer_id !== 'N/A' && item.product_name !== 'N/A');
 
             if (onProgress) {
               onProgress(validData);
+            }
+            
+            if (onDownloadProgress) {
+              onDownloadProgress(100); // Complete
             }
             
             resolve({ data: validData });
