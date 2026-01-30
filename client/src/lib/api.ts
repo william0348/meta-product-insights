@@ -41,17 +41,17 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
     
     impressions: pInt(item.impressions),
     spend: pFloat(item.spend),
-    clicks: pInt(item.clicks),
+    clicks: 0, // Removed as requested
     link_clicks: pInt(item.inline_link_clicks),
-    outbound_clicks: pInt(item.outbound_clicks),
+    outbound_clicks: 0, // Removed as requested
     
     cpm: pFloat(item.cpm),
     ctr: pFloat(item.ctr),
     inline_link_click_ctr: pFloat(item.inline_link_click_ctr),
-    outbound_ctr: pFloat(item.outbound_clicks_ctr),
+    outbound_ctr: 0, // Removed as requested
     cpc: pFloat(item.cpc),
     cost_per_inline_link_click: pFloat(item.cost_per_inline_link_click),
-    cost_per_outbound_click: pFloat(item.cost_per_outbound_click),
+    cost_per_outbound_click: 0, // Removed as requested
     
     // CVR calculated later
     cvr: 0, 
@@ -61,19 +61,19 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
     purchase_value: getActionValue(item.action_values, 'omni_purchase'),
     avg_purchase_value: 0, // Derived if needed
     
-    website_purchases: pInt(item.converted_product_website_pixel_purchase),
-    mobile_app_purchases: pInt(item.converted_product_app_custom_event_fb_mobile_purchase),
-    offline_purchases: pInt(item.converted_product_offline_purchase),
-    onsite_purchases: 0, 
+    website_purchases: 0, // Removed as requested
+    mobile_app_purchases: 0, // Removed as requested
+    offline_purchases: 0, // Removed as requested
+    onsite_purchases: 0, // Removed as requested
     
     purchase_roas: pFloat(item.purchase_roas),
     website_roas: pFloat(item.website_purchase_roas),
     mobile_app_roas: pFloat(item.mobile_app_purchase_roas),
     
-    // Add to Cart Metrics (Now explicitly mapped)
-    adds_to_cart: pInt(item.converted_product_omni_add_to_cart), 
-    website_adds_to_cart: pInt(item.converted_product_website_pixel_add_to_cart),
-    mobile_app_adds_to_cart: pInt(item.converted_product_app_custom_event_fb_mobile_add_to_cart),
+    // Add to Cart Metrics - Removed as requested
+    adds_to_cart: 0, 
+    website_adds_to_cart: 0,
+    mobile_app_adds_to_cart: 0,
 
     // Catalog & Product Set Metrics
     catalog_purchases: catalogPurchases, // Mapped to Catalog Purchases
@@ -100,7 +100,7 @@ export const facebookApiService = {
     // Ensure accountId has act_ prefix
     const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
 
-    // Optimized field list including Add to Cart and Promoted Product metrics
+    // Optimized field list removing Add to Cart and specific Purchase metrics
     const fieldList = [
       // Product Views
       'product_views',
@@ -108,18 +108,9 @@ export const facebookApiService = {
       // Purchases (Product Level)
       'converted_product_omni_purchase',
       'converted_product_omni_purchase_value',
-      'converted_product_website_pixel_purchase',
-      'converted_product_website_pixel_purchase_value',
-      'converted_product_app_custom_event_fb_mobile_purchase',
-      'converted_product_app_custom_event_fb_mobile_purchase_value',
-      'converted_product_offline_purchase',
-      'converted_product_offline_purchase_value',
+      // Removed specific purchase breakdowns as requested
       
-      // Add to Cart (Product Level) - ADDED
-      'converted_product_omni_add_to_cart',
-      'converted_product_website_pixel_add_to_cart',
-      'converted_product_app_custom_event_fb_mobile_add_to_cart',
-      'converted_product_offline_add_to_cart',
+      // Removed Add to Cart metrics as requested
 
       // Product Set / Promoted Product Purchases
       'converted_promoted_product_omni_purchase',
@@ -147,16 +138,16 @@ export const facebookApiService = {
       // Standard Metrics
       'impressions',
       'spend',
-      'clicks',
+      // 'clicks', // Removed as requested
       'inline_link_clicks',
-      'outbound_clicks',
+      // 'outbound_clicks', // Removed as requested
       'ctr',
       'inline_link_click_ctr',
       'cpm',
       'cpc',
       'cost_per_inline_link_click',
-      'outbound_clicks_ctr',
-      'cost_per_outbound_click',
+      // 'outbound_clicks_ctr', // Removed as requested
+      // 'cost_per_outbound_click', // Removed as requested
       'purchase_roas',
       'website_purchase_roas',
       'mobile_app_purchase_roas',
