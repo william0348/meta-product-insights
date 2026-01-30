@@ -152,7 +152,7 @@ export const facebookApiService = {
       breakdowns: breakdown,
       fields: fields,
       is_async: 'true',
-      export_format: 'json' // Explicitly request JSON
+      export_format: 'xls' // Changed to xls as requested by user (json not supported for this report type)
     };
 
     if (sort) queryParams.sort = sort;
