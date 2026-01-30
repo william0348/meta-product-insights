@@ -16,9 +16,7 @@ const formSchema = z.object({
   dateStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format: YYYY-MM-DD'),
   dateEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format: YYYY-MM-DD'),
   level: z.string(),
-  breakdown: z.string(),
-  minSpend: z.string().optional(),
-  minCTR: z.string().optional()
+  breakdown: z.string()
 });
 
 interface Props {
@@ -187,56 +185,6 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
                   </FormItem>
                 )}
               />
-            </div>
-
-            {/* API-Level Filters Section */}
-            <div className="border-t border-border/50 pt-5 mt-2">
-              <div className="mb-3">
-                <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-1">API Filters (Optional)</h4>
-                <p className="text-[10px] text-muted-foreground/70">Filter data at source to reduce file size</p>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="minSpend"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Min Spend ($)</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number"
-                          step="0.01"
-                          placeholder="e.g., 100" 
-                          {...field} 
-                          className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="minCTR"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Min CTR (%)</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number"
-                          step="0.01"
-                          placeholder="e.g., 1.5" 
-                          {...field} 
-                          className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
             </div>
 
             <Button 
