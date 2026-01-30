@@ -159,6 +159,7 @@ export const facebookApiService = {
       fields: fields,
       // Note: We are NOT using export_format=csv anymore to avoid CORS issues with lookaside url
       // We will fetch JSON pages from the insights edge
+      is_async: 'true'
     };
 
     if (sort) queryParams.sort = sort;

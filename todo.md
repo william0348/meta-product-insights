@@ -1,7 +1,3 @@
 - [ ] Update `api.ts`
-  - [ ] Revert `getReportResults` to use `/{report_id}/insights` endpoint instead of CSV download
-  - [ ] Implement pagination loop to fetch all pages
-  - [ ] Trigger `onProgress` callback after the first page (or every page) to show data immediately
-  - [ ] Handle rate limiting (wait if needed)
-- [ ] Update `Home.tsx`
-  - [ ] Ensure `fetchResults` handles the progressive data updates correctly
+  - [ ] Add `is_async: 'true'` back to `createReportRun` parameters
+  - [ ] Ensure `getReportResults` still uses pagination logic for progressive loading
