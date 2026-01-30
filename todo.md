@@ -1,0 +1,9 @@
+- [ ] Update `ReportConfigForm.tsx` to handle the `act_` prefix
+  - [ ] Add a visual prefix "act_" to the input field
+  - [ ] Ensure the input value is numeric only or strip existing `act_` if pasted
+  - [ ] Automatically prepend `act_` when submitting the form if missing
+- [ ] Update `api.ts` to implement CSV fetching strategy
+  - [ ] Use `https://lookaside.facebook.com/ads/ads_insights/download_report/business/` endpoint
+  - [ ] Implement CSV parsing logic (using PapaParse or similar)
+  - [ ] Map CSV columns to `ProductInsightData` structure
+- [ ] Add `papaparse` dependency

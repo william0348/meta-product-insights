@@ -75,11 +75,24 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
                 <FormItem>
                   <FormLabel className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Ad Account ID</FormLabel>
                   <FormControl>
-                    <Input 
-                      placeholder="act_123456789" 
-                      {...field} 
-                      className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10"
-                    />
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <span className="text-muted-foreground font-mono text-xs">act_</span>
+                      </div>
+                      <Input 
+                        placeholder="123456789" 
+                        {...field} 
+                        onChange={(e) => {
+                          // Strip act_ prefix if user pastes it
+                          const val = e.target.value.replace(/^act_/, '');
+                          // Only allow numeric input
+                          if (/^\d*$/.test(val)) {
+                            field.onChange(val);
+                          }
+                        }}
+                        className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10 pl-10"
+                      />
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
