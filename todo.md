@@ -1,2 +1,25 @@
-- [ ] Update `api.ts`
-  - [ ] Change `export_format` to `'csv'` as explicitly requested by API error message
+# Project TODO
+
+- [x] Update `api.ts` - Change `export_format` to `'csv'`
+- [x] Resolve Home.tsx merge conflicts from template upgrade
+- [x] Create backend proxy route for CSV download to fix CORS
+- [x] Write and pass tests for proxy endpoint
+- [x] Fix 400 error when calling backend proxy - correct tRPC API call format
+- [x] Add loading progress indicator for CSV download
+- [x] Track download progress percentage in backend
+- [x] Display progress in UI during fetch
+- [x] Remove SavedPresets component from UI
+- [x] Fix "Cannot read properties of undefined (reading 'readable')" CSV parsing error
+- [ ] Update CSV mapping to use correct field for Catalog Purchases (converted_product_omni_purchase)
+- [ ] Test full CSV download and filtering workflow end-to-end
+- [x] Debug and fix persistent 'readable' error after CSV download
+- [x] Debug why CSV data is not being displayed in UI after download - fixed duplicate error variable
+- [x] Fix 503 Service Unavailable error when downloading CSV from Facebook - added retry logic and delay
+- [x] Increase initial delay after report completion to 10 seconds
+- [ ] Check if Facebook API provides a way to verify file is ready before download
+- [ ] Consider alternative: poll report status for longer before attempting download
+- [ ] Fix backend proxy bug - direct curl works but proxy returns 503
+- [ ] Handle large file downloads (398MB CSV) in backend proxy
+- [x] Add filtering parameters to Facebook API createReportRun request
+- [x] Support filtering by CTR (inline_link_click_ctr) and spend
+- [x] Update UI to allow users to set filter thresholds before generating report

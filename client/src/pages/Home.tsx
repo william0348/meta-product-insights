@@ -6,7 +6,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { InsightsCharts } from '@/components/InsightsCharts';
 import { ProductTable } from '@/components/ProductTable';
 import { FilterBar } from '@/components/FilterBar';
-import { SavedPresets } from '@/components/SavedPresets';
+
 import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2 } from 'lucide-react';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,8 @@ export default function Home() {
   const [reportData, setReportData] = useState<ProductInsightData[] | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [apiError, setApiError] = useState<string | null>(null);
   
   // Filtering
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
@@ -40,19 +41,41 @@ export default function Home() {
       setJobStatus(AsyncJobStatus.NOT_STARTED);
       setJobPercent(0);
       setReportData(null);
-      setError(null);
+      setApiError(null);
       setIsRequesting(true);
       setActiveAccessToken(config.accessToken);
       // We do not reset filters automatically, user might want to keep them
 
-      // 1. Create Report Run
+      // 1. Build API filters from form data
+      const apiFilters: Array<{field: string, operator: string, value: any}> = [];
+      
+      // Add spend filter if provided
+      if (config.minSpend && parseFloat(config.minSpend) > 0) {
+        apiFilters.push({
+          field: 'spend',
+          operator: 'GREATER_THAN',
+          value: parseFloat(config.minSpend)
+        });
+      }
+      
+      // Add CTR filter if provided
+      if (config.minCTR && parseFloat(config.minCTR) > 0) {
+        apiFilters.push({
+          field: 'inline_link_click_ctr',
+          operator: 'GREATER_THAN',
+          value: parseFloat(config.minCTR)
+        });
+      }
+      
+      // 2. Create Report Run with filters
       const response = await facebookApiService.createReportRun(
         config.accountId, 
         config.dateStart, 
         config.dateEnd,
         config.accessToken,
         config.level,
-        config.breakdown // Pass the selected breakdown
+        config.breakdown,
+        apiFilters.length > 0 ? apiFilters : undefined // Pass filters if any
       );
       
       setReportId(response.report_run_id);
@@ -63,7 +86,7 @@ export default function Home() {
       startPolling(response.report_run_id, config.accessToken);
 
     } catch (err: any) {
-      setError(err.message || "Failed to start report run. Please try again.");
+      setApiError(err.message || "Failed to start report run. Please try again.");
       toast.error("Failed to start report run");
       setIsRequesting(false);
     }
@@ -81,11 +104,14 @@ export default function Home() {
 
         if (status.async_status === AsyncJobStatus.COMPLETED) {
            if (pollInterval.current) clearInterval(pollInterval.current);
-           toast.success("Report generation completed. Fetching data...");
-           fetchResults(id, token);
+           toast.success("Report generation completed. Preparing download...");
+           // Add a small delay to ensure Facebook's CDN has the file ready
+           setTimeout(() => {
+             fetchResults(id, token);
+           }, 10000); // 10 second delay to allow Facebook CDN to prepare file
         } else if (status.async_status === AsyncJobStatus.FAILED || status.async_status === AsyncJobStatus.SKIPPED) {
            if (pollInterval.current) clearInterval(pollInterval.current);
-           setError(`Job ended with status: ${status.async_status}`);
+           setApiError(`Job ended with status: ${status.async_status}`);
            toast.error(`Job failed: ${status.async_status}`);
         }
 
@@ -93,7 +119,7 @@ export default function Home() {
         // Stop polling on critical errors
         if (err.message) {
            if (pollInterval.current) clearInterval(pollInterval.current);
-           setError(`Error: ${err.message}`);
+           setApiError(`Error: ${err.message}`);
            toast.error("Polling error occurred");
         }
         console.error("Polling error", err);
@@ -111,20 +137,31 @@ export default function Home() {
   const fetchResults = async (id: string, token?: string) => {
     try {
       setIsFetchingMore(true);
-      // 3. Get Data with progressive loading
-      // We pass a callback that updates the state immediately as pages arrive
-      const results = await facebookApiService.getReportResults(id, token, (interimData) => {
-        setReportData([...interimData]); // Create new array ref to trigger render
-      });
+      setDownloadProgress(0);
+      // 3. Download and Parse CSV with progress tracking
+      const results = await facebookApiService.downloadReportCSV(
+        id, 
+        token, 
+        (parsedData) => {
+          setReportData(parsedData); 
+        },
+        (progress) => {
+          setDownloadProgress(progress);
+        }
+      );
       
       // Ensure final state is set
+      console.log('[fetchResults] CSV parsed successfully:', results.data.length, 'records');
+      console.log('[fetchResults] First 3 records:', results.data.slice(0, 3));
       setReportData(results.data);
+      setDownloadProgress(100);
       toast.success(`Loaded all ${results.data.length} records`);
     } catch (err: any) {
-      setError(err.message || "Failed to fetch final report results.");
+      setApiError(err.message || "Failed to fetch final report results.");
       toast.error("Failed to fetch results");
     } finally {
       setIsFetchingMore(false);
+      setDownloadProgress(0);
       setJobStatus(AsyncJobStatus.COMPLETED);
     }
   };
@@ -236,15 +273,6 @@ export default function Home() {
               defaultToken="EAANLrF5ZBRkEBPJSaKYUM1MOEUfxzNNkC7YiEauZCJNZBdTHMlh6BrAfOR0dY6O3kchrrMnCDHHo6E8K6R3s3abZBIFEwxS6TeuQo4g0g3kIVGYi4LIbwb4olq9NgyvZAeotDnwNxX0i4R6nTq3c477HkvTEsJu7B3IZChjYZCjiZAYW9L1dAOqK7tTjUaeDsaoZAqMfxBDKv1EfNO4id"
             />
             
-            {/* Saved Presets */}
-            <SavedPresets 
-              currentFilters={activeFilters} 
-              onLoadPreset={(filters) => {
-                setActiveFilters(filters);
-                toast.success("Filters applied");
-              }} 
-            />
-
             {/* Job Status Card */}
             {(reportId || isRequesting) && (
               <Card className="border-0 shadow-none bg-background border border-border rounded-none">
@@ -274,6 +302,21 @@ export default function Home() {
                       />
                     </div>
                   )}
+                  
+                  {/* Download Progress Indicator */}
+                  {isFetchingMore && downloadProgress > 0 && (
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">
+                        Downloading CSV: {downloadProgress}%
+                      </span>
+                      <div className="h-1 w-full bg-secondary mt-2">
+                        <div 
+                          className="h-full bg-emerald-600 transition-all duration-300 ease-out" 
+                          style={{ width: `${downloadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -283,14 +326,14 @@ export default function Home() {
           <div className="lg:col-span-9 space-y-8">
             
             {/* Error Message */}
-            {error && (
+            {apiError && (
               <div className="bg-destructive/10 border border-destructive/20 p-4 text-destructive text-sm font-medium">
-                {error}
+                {apiError}
               </div>
             )}
 
             {/* Empty State */}
-            {!reportData && !isRequesting && !error && (
+            {!reportData && !isRequesting && !apiError && (
               <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border/50 bg-secondary/10">
                 <BarChart2 className="w-12 h-12 mb-4 opacity-20" />
                 <p className="text-sm font-medium uppercase tracking-widest">Ready to Analyze</p>
@@ -301,7 +344,7 @@ export default function Home() {
             )}
 
             {/* Loading State */}
-            {isRequesting && !reportData && !error && (
+            {isRequesting && !reportData && !apiError && (
               <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border/50 bg-secondary/10">
                 <Loader2 className="w-8 h-8 animate-spin mb-4 opacity-50" />
                 <p className="text-xs font-medium uppercase tracking-widest animate-pulse">Connecting to Meta API...</p>
