@@ -77,10 +77,12 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
 
     // Catalog & Product Set Metrics
     catalog_purchases: catalogPurchases, // Mapped to Catalog Purchases
-    catalog_purchase_value: pFloat(item.converted_product_omni_purchase_value),
+    // CORRECTED: converted_product_omni_purchase_value -> converted_product_omni_purchase_values
+    catalog_purchase_value: pFloat(item.converted_product_omni_purchase_values),
     
     product_set_purchases: pInt(item.converted_promoted_product_omni_purchase),
-    product_set_purchase_value: pFloat(item.converted_promoted_product_omni_purchase_value),
+    // CORRECTED: converted_promoted_product_omni_purchase_value -> converted_promoted_product_omni_purchase_values
+    product_set_purchase_value: pFloat(item.converted_promoted_product_omni_purchase_values),
     
     product_views: pInt(item.product_views),
     
@@ -107,14 +109,14 @@ export const facebookApiService = {
       
       // Purchases (Product Level)
       'converted_product_omni_purchase',
-      'converted_product_omni_purchase_value',
-      // Removed specific purchase breakdowns as requested
+      // CORRECTED: Plural 'values'
+      'converted_product_omni_purchase_values',
       
-      // Removed Add to Cart metrics as requested
-
       // Product Set / Promoted Product Purchases
       'converted_promoted_product_omni_purchase',
-      'converted_promoted_product_omni_purchase_value',
+      // CORRECTED: Plural 'values'
+      'converted_promoted_product_omni_purchase_values',
+      
       'converted_promoted_product_website_pixel_purchase',
       'converted_promoted_product_website_pixel_purchase_value',
       'converted_promoted_product_app_custom_event_fb_mobile_purchase',
@@ -138,16 +140,12 @@ export const facebookApiService = {
       // Standard Metrics
       'impressions',
       'spend',
-      // 'clicks', // Removed as requested
       'inline_link_clicks',
-      // 'outbound_clicks', // Removed as requested
       'ctr',
       'inline_link_click_ctr',
       'cpm',
       'cpc',
       'cost_per_inline_link_click',
-      // 'outbound_clicks_ctr', // Removed as requested
-      // 'cost_per_outbound_click', // Removed as requested
       'purchase_roas',
       'website_purchase_roas',
       'mobile_app_purchase_roas',
