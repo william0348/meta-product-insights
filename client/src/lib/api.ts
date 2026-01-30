@@ -19,13 +19,6 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
   const id = item.product_retailer_id || item.product_content_id || item.product_group_content_id || 'N/A';
   const name = item.product_name || id;
 
-  // Extract action values safely
-  const getActionValue = (actions: any[], actionType: string) => {
-    if (!actions || !Array.isArray(actions)) return 0;
-    const action = actions.find((a: any) => a.action_type === actionType);
-    return action ? pFloat(action.value) : 0;
-  };
-
   return {
     product_name: name,
     product_retailer_id: id,
@@ -49,7 +42,7 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
     // CVR calculated later
     cvr: 0, 
 
-    // Note: 'actions' and 'action_values' are now removed from main query to avoid conflicts
+    // Purchase Metrics
     // We rely on the specific converted_product_* fields which are more reliable for product reporting
     purchases: pInt(item.converted_product_omni_purchase), 
     purchase_value: pFloat(item.converted_product_omni_purchase_value),
@@ -58,17 +51,18 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
     website_purchases: pInt(item.converted_product_website_pixel_purchase),
     mobile_app_purchases: pInt(item.converted_product_app_custom_event_fb_mobile_purchase),
     offline_purchases: pInt(item.converted_product_offline_purchase),
-    onsite_purchases: 0, // Not always available in simplified view
+    onsite_purchases: 0, 
     
-    purchase_roas: pFloat(item.purchase_roas), // This might be aggregate
+    purchase_roas: pFloat(item.purchase_roas),
     website_roas: pFloat(item.website_purchase_roas),
     mobile_app_roas: pFloat(item.mobile_app_purchase_roas),
     
-    // Fallback for cart data if not in specific fields (often not available in product breakdown without actions)
-    adds_to_cart: 0, 
-    website_adds_to_cart: 0,
-    mobile_app_adds_to_cart: 0,
+    // Add to Cart Metrics (Now explicitly mapped)
+    adds_to_cart: pInt(item.converted_product_omni_add_to_cart), 
+    website_adds_to_cart: pInt(item.converted_product_website_pixel_add_to_cart),
+    mobile_app_adds_to_cart: pInt(item.converted_product_app_custom_event_fb_mobile_add_to_cart),
 
+    // Catalog & Product Set Metrics
     catalog_purchases: pInt(item.converted_product_omni_purchase),
     catalog_purchase_value: pFloat(item.converted_product_omni_purchase_value),
     
@@ -93,26 +87,38 @@ export const facebookApiService = {
     // Ensure accountId has act_ prefix
     const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
 
-    // Optimized field list to avoid "Invalid parameter" conflicts
-    // Removed generic 'actions' and 'action_values' which cause issues when combined with product breakdowns in some API versions
+    // Optimized field list including Add to Cart and Promoted Product metrics
     const fieldList = [
+      // Product Views
       'product_views',
-      'converted_product_app_custom_event_fb_mobile_purchase_value',
-      'converted_product_website_pixel_purchase_value',
-      'converted_product_offline_purchase_value',
+      
+      // Purchases (Product Level)
       'converted_product_omni_purchase',
+      'converted_product_omni_purchase_value',
       'converted_product_website_pixel_purchase',
+      'converted_product_website_pixel_purchase_value',
       'converted_product_app_custom_event_fb_mobile_purchase',
+      'converted_product_app_custom_event_fb_mobile_purchase_value',
       'converted_product_offline_purchase',
+      'converted_product_offline_purchase_value',
       
-      'converted_promoted_product_app_custom_event_fb_mobile_purchase_value',
-      'converted_promoted_product_website_pixel_purchase_value',
-      'converted_promoted_product_offline_purchase_value',
+      // Add to Cart (Product Level) - ADDED
+      'converted_product_omni_add_to_cart',
+      'converted_product_website_pixel_add_to_cart',
+      'converted_product_app_custom_event_fb_mobile_add_to_cart',
+      'converted_product_offline_add_to_cart',
+
+      // Product Set / Promoted Product Purchases
       'converted_promoted_product_omni_purchase',
-      'converted_promoted_product_app_custom_event_fb_mobile_purchase',
+      'converted_promoted_product_omni_purchase_value',
       'converted_promoted_product_website_pixel_purchase',
+      'converted_promoted_product_website_pixel_purchase_value',
+      'converted_promoted_product_app_custom_event_fb_mobile_purchase',
+      'converted_promoted_product_app_custom_event_fb_mobile_purchase_value',
       'converted_promoted_product_offline_purchase',
+      'converted_promoted_product_offline_purchase_value',
       
+      // Standard Metadata
       'product_name',
       'product_content_id',
       'product_group_content_id',
@@ -123,6 +129,9 @@ export const facebookApiService = {
       'product_custom_label_2',
       'product_custom_label_3',
       'product_custom_label_4',
+      'product_retailer_id',
+      
+      // Standard Metrics
       'impressions',
       'spend',
       'clicks',
@@ -139,8 +148,7 @@ export const facebookApiService = {
       'website_purchase_roas',
       'mobile_app_purchase_roas',
       'results',
-      'cost_per_result',
-      'product_retailer_id'
+      'cost_per_result'
     ];
     
     const fields = fieldList.join(',');
@@ -152,7 +160,7 @@ export const facebookApiService = {
       breakdowns: breakdown,
       fields: fields,
       is_async: 'true',
-      export_format: 'csv' // Explicitly set to 'csv' as required by Meta Product Reporting API
+      export_format: 'csv' // Explicitly set to 'csv'
     };
 
     if (sort) queryParams.sort = sort;
@@ -199,10 +207,10 @@ export const facebookApiService = {
     }
 
     let allData: ProductInsightData[] = [];
-    let nextUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${reportRunId}/insights?access_token=${accessToken}&limit=100`;
+    // Only fetch the first page (limit=100) and stop
+    const nextUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${reportRunId}/insights?access_token=${accessToken}&limit=100`;
 
-    // Progressive loading loop
-    while (nextUrl) {
+    try {
       const response = await fetch(nextUrl);
       const json = await response.json();
 
@@ -220,19 +228,18 @@ export const facebookApiService = {
         return item;
       });
 
-      allData = [...allData, ...processedPageData];
+      allData = processedPageData;
 
-      // Notify UI immediately with accumulated data
+      // Notify UI immediately with data
       if (onProgress) {
         onProgress(allData);
       }
+      
+      // We intentionally do NOT fetch next pages (paging.next) as per user request to limit to first 100 rows.
 
-      // Check for next page
-      if (json.paging && json.paging.next) {
-        nextUrl = json.paging.next;
-      } else {
-        nextUrl = '';
-      }
+    } catch (error) {
+      console.error("Error fetching report results:", error);
+      throw error;
     }
 
     return { data: allData };
