@@ -27,3 +27,4 @@
 - [x] Create Python script for CSV download and parsing with pandas
 - [x] Update backend to call Python script instead of axios  
 - [x] Test Python implementation - all tests passing (4/4)
+- [x] Update CSV field mapping to match Facebook's actual headers (Product Name, Content ID, Link Click CTR (%), etc.)

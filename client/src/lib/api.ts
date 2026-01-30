@@ -30,17 +30,16 @@ const mapCsvRowToProductInsightData = (row: any): ProductInsightData => {
     return undefined;
   };
 
-  const id = getVal(['Product Item ID', 'Content ID', 'product_retailer_id', 'product_content_id']) || 'N/A';
+  const id = getVal(['Content ID', 'Product Item ID', 'product_retailer_id', 'product_content_id']) || 'N/A';
   const name = getVal(['Product Name', 'product_name']) || id;
 
   // Extract action values from CSV columns if they exist as specific columns
   // Note: Meta CSV export flattens 'actions' into specific columns like "Purchases", "Website Purchases", etc.
   
   // Ad Purchases (Omni)
-  const adPurchases = pInt(getVal(['Purchases', 'Ad Purchases', 'actions:omni_purchase']));
+  const adPurchases = pInt(getVal(['Ad Purchases (Omni)', 'Purchases', 'Ad Purchases', 'actions:omni_purchase']));
   
   // Catalog Purchases
-  // Try finding specific catalog purchase column first
   let catalogPurchases = pInt(getVal(['Catalog Purchases', 'actions:catalog_purchase', 'converted_product_omni_purchase']));
   
   // Link Clicks
@@ -59,20 +58,20 @@ const mapCsvRowToProductInsightData = (row: any): ProductInsightData => {
     product_category: getVal(['Category', 'product_category']),
     
     impressions: pInt(getVal(['Impressions', 'impressions'])),
-    spend: pFloat(getVal(['Amount Spent (USD)', 'Amount Spent', 'spend'])),
+    spend: pFloat(getVal(['Spend', 'Amount Spent (USD)', 'Amount Spent', 'spend'])),
     clicks: 0, 
     link_clicks: linkClicks,
     outbound_clicks: 0,
     
     cpm: pFloat(getVal(['CPM (Cost per 1,000 Impressions)', 'CPM', 'cpm'])),
     ctr: pFloat(getVal(['CTR (All)', 'CTR', 'ctr'])), // Note: Check if CTR (Link Click-Through Rate) is available
-    inline_link_click_ctr: pFloat(getVal(['CTR (Link Click-Through Rate)', 'inline_link_click_ctr'])),
+    inline_link_click_ctr: pFloat(getVal(['Link Click CTR (%)', 'CTR (Link Click-Through Rate)', 'inline_link_click_ctr'])),
     outbound_ctr: 0,
     cpc: pFloat(getVal(['CPC (All)', 'CPC', 'cpc'])),
     cost_per_inline_link_click: pFloat(getVal(['Cost per Link Click', 'cost_per_inline_link_click'])),
     cost_per_outbound_click: 0,
     
-    cvr: cvr,
+    cvr: pFloat(getVal(['CVR (%)', 'cvr'])) || cvr,
 
     // Purchase Metrics
     purchases: adPurchases,
@@ -88,7 +87,7 @@ const mapCsvRowToProductInsightData = (row: any): ProductInsightData => {
     website_roas: pFloat(getVal(['Website Purchase ROAS', 'website_purchase_roas'])),
     mobile_app_roas: pFloat(getVal(['Mobile App Purchase ROAS', 'mobile_app_purchase_roas'])),
     
-    adds_to_cart: 0,
+    adds_to_cart: pInt(getVal(['Adds to Cart (Omni)', 'adds_to_cart'])),
     website_adds_to_cart: 0,
     mobile_app_adds_to_cart: 0,
 
@@ -99,7 +98,7 @@ const mapCsvRowToProductInsightData = (row: any): ProductInsightData => {
     product_set_purchases: pInt(getVal(['Product Set Purchases', 'converted_promoted_product_omni_purchase'])),
     product_set_purchase_value: pFloat(getVal(['Product Set Purchase Value', 'converted_promoted_product_omni_purchase_values'])),
     
-    product_views: pInt(getVal(['Content Views', 'product_views'])),
+    product_views: pInt(getVal(['Product Views', 'Content Views', 'product_views'])),
     
     date_start: getVal(['Reporting Starts', 'date_start']),
     date_stop: getVal(['Reporting Ends', 'date_stop'])
