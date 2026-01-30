@@ -228,19 +228,27 @@ export const facebookApiService = {
 
     try {
       // Use backend proxy to download CSV (avoids CORS)
-      // Note: This will be replaced with tRPC call in Home.tsx
-      // For now, keeping this as a fallback that calls the backend API
-      const response = await fetch(`/api/trpc/facebook.downloadReportCSV?input=${encodeURIComponent(JSON.stringify({
-        reportRunId,
-        accessToken
-      }))}`);
+      // tRPC batch format: input is a JSON object with "0" key containing the query params
+      const input = {
+        "0": {
+          json: {
+            reportRunId,
+            accessToken
+          }
+        }
+      };
+      
+      const response = await fetch(`/api/trpc/facebook.downloadReportCSV?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`);
       
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[CSV Download] Server error:', errorText);
         throw new Error(`Failed to download report via proxy. Status: ${response.status}`);
       }
       
       const result = await response.json();
-      const csvText = result.result.data.csvData;
+      // tRPC batch response format: array with result at index 0
+      const csvText = result[0].result.data.csvData;
 
       // Parse CSV using PapaParse
       return new Promise((resolve, reject) => {

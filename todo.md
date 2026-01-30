@@ -6,3 +6,4 @@
 - [x] Write and pass tests for proxy endpoint
 - [ ] Update CSV mapping to use correct field for Catalog Purchases (converted_product_omni_purchase)
 - [ ] Test full CSV download and filtering workflow end-to-end
+- [x] Fix 400 error when calling backend proxy - correct tRPC API call format
