@@ -152,7 +152,7 @@ export const facebookApiService = {
       breakdowns: breakdown,
       fields: fields,
       is_async: 'true',
-      // export_format: 'xls' // Removed to allow API default (JSON-compatible) for fetching via Graph API edge
+      export_format: 'csv' // Explicitly set to 'csv' as required by Meta Product Reporting API
     };
 
     if (sort) queryParams.sort = sort;

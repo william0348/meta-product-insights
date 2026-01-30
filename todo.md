@@ -1,2 +1,2 @@
 - [ ] Update `api.ts`
-  - [ ] Change `export_format` from `'json'` to `'xls'` as requested by user
+  - [ ] Change `export_format` to `'csv'` as explicitly requested by API error message
