@@ -28,10 +28,11 @@ const mapJsonToProductInsightData = (item: any): ProductInsightData => {
 
   // CORRECTED MAPPING:
   // Ad Purchases (Omni) -> actions:omni_purchase
-  // Catalog Purchases -> converted_product_omni_purchase
+  // Catalog Purchases -> actions:catalog_purchase (converted_product_omni_purchase often returns 0 if not explicitly tracked)
   
   const adPurchases = getActionValue(item.actions, 'omni_purchase');
-  const catalogPurchases = pInt(item.converted_product_omni_purchase);
+  // Fallback to action:catalog_purchase if converted_product_omni_purchase is 0
+  const catalogPurchases = pInt(item.converted_product_omni_purchase) || getActionValue(item.actions, 'catalog_purchase');
 
   return {
     product_name: name,
