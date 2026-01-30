@@ -266,133 +266,95 @@ export default function Home() {
                   )}
 
                   {/* Progress Bar - Swiss Style (Sharp, no rounded corners) */}
-                  {(jobStatus === AsyncJobStatus.STARTED || jobStatus === AsyncJobStatus.RUNNING) && (
-                    <div className="space-y-2">
-                      <div className="w-full bg-secondary h-1 mt-2">
-                        <div 
-                          className="bg-primary h-1 transition-all duration-500 ease-out" 
-                          style={{ width: `${jobPercent}%` }}
-                        ></div>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground italic">
-                        {jobPercent === 0 ? "Initializing report on Meta servers..." : `Processing: ${jobPercent}%`}
-                      </p>
-                      <Button 
-                        variant="destructive" 
-                        size="sm" 
-                        className="w-full h-7 text-xs mt-2 rounded-none"
-                        onClick={handleStopReport}
-                      >
-                        Stop Generation
-                      </Button>
+                  {jobStatus === AsyncJobStatus.RUNNING && (
+                    <div className="h-1 w-full bg-secondary mt-2">
+                      <div 
+                        className="h-full bg-primary transition-all duration-500 ease-out" 
+                        style={{ width: `${jobPercent}%` }}
+                      />
                     </div>
                   )}
                 </CardContent>
               </Card>
             )}
-
-            {/* Documentation Note */}
-            <div className="bg-blue-50/50 p-4 border-l-2 border-blue-500 text-xs text-blue-900 space-y-2">
-              <h4 className="font-bold uppercase tracking-wide text-blue-700">API Constraints</h4>
-              <ul className="list-disc list-inside space-y-1 opacity-80">
-                <li>Max 60 queries / 6 hours</li>
-                <li>Limit: 10M products</li>
-                <li>Async polling required</li>
-              </ul>
-            </div>
           </div>
 
-          {/* Right Content: Data & Viz (9 cols) */}
-          <div className="lg:col-span-9">
-            {!filteredData && !error && (
-              <div className="h-[400px] flex flex-col items-center justify-center text-center p-8 border border-dashed border-border bg-secondary/10">
-                <div className="bg-secondary p-4 rounded-full mb-4">
-                  <BarChart2 className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-bold text-foreground">Ready to Analyze</h3>
-                <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+          {/* Right Content: Data & Charts (9 cols) */}
+          <div className="lg:col-span-9 space-y-8">
+            
+            {/* Error Message */}
+            {error && (
+              <div className="bg-destructive/10 border border-destructive/20 p-4 text-destructive text-sm font-medium">
+                {error}
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!reportData && !isRequesting && !error && (
+              <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border/50 bg-secondary/10">
+                <BarChart2 className="w-12 h-12 mb-4 opacity-20" />
+                <p className="text-sm font-medium uppercase tracking-widest">Ready to Analyze</p>
+                <p className="text-xs mt-2 max-w-xs text-center opacity-70">
                   Configure your report parameters on the left to generate real-time product insights.
                 </p>
               </div>
             )}
 
-            {error && (
-              <div className="bg-destructive/5 border-l-4 border-destructive text-destructive px-6 py-4 mb-6">
-                <h3 className="font-bold text-sm uppercase tracking-wide mb-1">Error Encountered</h3>
-                <p className="text-sm font-mono">{error}</p>
+            {/* Loading State */}
+            {isRequesting && !reportData && !error && (
+              <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border/50 bg-secondary/10">
+                <Loader2 className="w-8 h-8 animate-spin mb-4 opacity-50" />
+                <p className="text-xs font-medium uppercase tracking-widest animate-pulse">Connecting to Meta API...</p>
               </div>
             )}
 
-            {filteredData && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+            {/* Data View */}
+            {reportData && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
                 
-                {/* Results Header */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-border">
-                  <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Report Results</h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Analysis from <span className="font-mono text-foreground">{filteredData[0]?.date_start}</span> to <span className="font-mono text-foreground">{filteredData[0]?.date_stop}</span>
-                    </p>
-                  </div>
-                  <Button 
-                    onClick={handleDownloadXlsx}
-                    variant="outline"
-                    className="rounded-none border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors uppercase text-xs font-bold tracking-wide h-10 px-4"
-                  >
-                    <FileSpreadsheet className="w-4 h-4 mr-2" />
-                    Export XLSX
-                  </Button>
-                </div>
-
-                {/* KPI Cards - Big Typography */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border border-border">
-                  <div className="bg-background p-6 hover:bg-secondary/20 transition-colors">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Total Spend</p>
-                    <p className="text-2xl lg:text-3xl font-bold text-foreground tracking-tight">
-                      ${filteredData.reduce((acc, curr) => acc + curr.spend, 0).toLocaleString(undefined, {maximumFractionDigits: 0})}
-                    </p>
-                  </div>
-                  <div className="bg-background p-6 hover:bg-secondary/20 transition-colors">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Total Clicks</p>
-                    <p className="text-2xl lg:text-3xl font-bold text-foreground tracking-tight">
-                      {filteredData.reduce((acc, curr) => acc + curr.clicks, 0).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="bg-background p-6 hover:bg-secondary/20 transition-colors">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Avg. CTR</p>
-                    <p className="text-2xl lg:text-3xl font-bold text-emerald-600 tracking-tight">
-                      {(filteredData.length > 0 ? filteredData.reduce((acc, curr) => acc + curr.ctr, 0) / filteredData.length : 0).toFixed(2)}%
-                    </p>
-                  </div>
-                  <div className="bg-background p-6 hover:bg-secondary/20 transition-colors">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Purchases</p>
-                    <p className="text-2xl lg:text-3xl font-bold text-foreground tracking-tight">
-                      {filteredData.reduce((acc, curr) => acc + curr.purchases, 0).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
                 {/* Filter Bar */}
-                <FilterBar activeFilters={activeFilters} onFiltersChange={setActiveFilters} />
+                <FilterBar 
+                  activeFilters={activeFilters} 
+                  onFiltersChange={setActiveFilters} 
+                />
+
+                {/* Filter Summary & Actions */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <LayoutDashboard className="w-4 h-4 text-primary" />
+                    <h2 className="text-lg font-bold uppercase tracking-tight">Product Performance</h2>
+                    <span className="text-xs font-mono text-muted-foreground ml-2 bg-secondary px-2 py-0.5">
+                      Showing {filteredData ? filteredData.length : 0} of {reportData.length} items
+                    </span>
+                  </div>
+                  
+                  <div className="flex space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleDownloadXlsx}
+                      className="h-8 text-xs uppercase font-bold tracking-wide rounded-none border-border hover:bg-secondary"
+                    >
+                      <FileSpreadsheet className="w-3 h-3 mr-2" />
+                      Download Excel
+                    </Button>
+                  </div>
+                </div>
 
                 {/* Charts */}
-                <InsightsCharts data={filteredData} />
+                <InsightsCharts data={previewData} />
 
                 {/* Data Table */}
-                <ProductTable data={previewData} totalCount={filteredData.length} />
-
-                {/* Loading State for More Data */}
-                {isFetchingMore && (
-                  <div className="fixed bottom-8 right-8 bg-background border border-border shadow-2xl p-4 flex items-center space-x-3 z-50 animate-in slide-in-from-right">
-                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                    <div>
-                      <p className="text-sm font-bold">Fetching more data...</p>
-                      <p className="text-xs text-muted-foreground">{reportData?.length.toLocaleString()} rows loaded</p>
-                    </div>
-                  </div>
+                <ProductTable data={previewData} totalCount={filteredData ? filteredData.length : 0} />
+                
+                {filteredData && filteredData.length > 500 && (
+                   <p className="text-center text-xs text-muted-foreground py-4 italic">
+                     Table preview limited to top 500 items. Download Excel to view full filtered dataset.
+                   </p>
                 )}
               </div>
             )}
+
           </div>
         </div>
       </main>

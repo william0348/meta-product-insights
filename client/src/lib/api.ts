@@ -228,8 +228,11 @@ export const facebookApiService = {
       
       // Calculate derived fields
       const processedPageData = pageData.map((item: ProductInsightData) => {
-        if (item.cvr === 0 && item.link_clicks > 0) {
-          item.cvr = (item.purchases / item.link_clicks) * 100;
+        // CVR = Catalog Purchases / Link Clicks * 100
+        if (item.link_clicks > 0) {
+          item.cvr = ((item.catalog_purchases || 0) / item.link_clicks) * 100;
+        } else {
+          item.cvr = 0;
         }
         return item;
       });

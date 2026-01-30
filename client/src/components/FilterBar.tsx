@@ -39,14 +39,13 @@ export const FilterBar: React.FC<Props> = ({ activeFilters, onFiltersChange }) =
     const map: Record<string, string> = {
       spend: 'Spend',
       impressions: 'Impressions',
-      clicks: 'Clicks',
       link_clicks: 'Link Clicks',
       ctr: 'CTR',
+      cvr: 'CVR',
       cpc: 'CPC',
       purchases: 'Ad Purchases',
       catalog_purchases: 'Catalog Purchases',
-      purchase_roas: 'ROAS',
-      cpa: 'CPA'
+      purchase_roas: 'ROAS'
     };
     return map[field] || field;
   };
@@ -87,9 +86,9 @@ export const FilterBar: React.FC<Props> = ({ activeFilters, onFiltersChange }) =
             <SelectContent className="rounded-none">
               <SelectItem value="spend">Spend</SelectItem>
               <SelectItem value="impressions">Impressions</SelectItem>
-              <SelectItem value="clicks">Clicks</SelectItem>
               <SelectItem value="link_clicks">Link Clicks</SelectItem>
               <SelectItem value="ctr">CTR (%)</SelectItem>
+              <SelectItem value="cvr">CVR (%)</SelectItem>
               <SelectItem value="cpc">CPC</SelectItem>
               <SelectItem value="purchases">Ad Purchases</SelectItem>
               <SelectItem value="catalog_purchases">Catalog Purchases</SelectItem>
