@@ -276,7 +276,11 @@ export const facebookApiService = {
             }
             
             // Map raw CSV rows to our data structure
+            console.log('[CSV Parse] Raw CSV rows:', results.data.length);
+            console.log('[CSV Parse] First raw row:', results.data[0]);
             const mappedData = results.data.map(mapCsvRowToProductInsightData);
+            console.log('[CSV Parse] Mapped data:', mappedData.length, 'records');
+            console.log('[CSV Parse] First mapped record:', mappedData[0]);
             
             if (onDownloadProgress) {
               onDownloadProgress(90); // Mapping complete
@@ -284,6 +288,7 @@ export const facebookApiService = {
             
             // Filter out rows with no product name/id if necessary (cleanup)
             const validData = mappedData.filter(item => item.product_retailer_id !== 'N/A' && item.product_name !== 'N/A');
+            console.log('[CSV Parse] Valid data after filtering:', validData.length, 'records');
 
             if (onProgress) {
               onProgress(validData);

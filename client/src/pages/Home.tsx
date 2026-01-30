@@ -23,7 +23,7 @@ export default function Home() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
-  const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   
   // Filtering
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([]);
@@ -41,7 +41,7 @@ export default function Home() {
       setJobStatus(AsyncJobStatus.NOT_STARTED);
       setJobPercent(0);
       setReportData(null);
-      setError(null);
+      setApiError(null);
       setIsRequesting(true);
       setActiveAccessToken(config.accessToken);
       // We do not reset filters automatically, user might want to keep them
@@ -64,7 +64,7 @@ export default function Home() {
       startPolling(response.report_run_id, config.accessToken);
 
     } catch (err: any) {
-      setError(err.message || "Failed to start report run. Please try again.");
+      setApiError(err.message || "Failed to start report run. Please try again.");
       toast.error("Failed to start report run");
       setIsRequesting(false);
     }
@@ -86,7 +86,7 @@ export default function Home() {
            fetchResults(id, token);
         } else if (status.async_status === AsyncJobStatus.FAILED || status.async_status === AsyncJobStatus.SKIPPED) {
            if (pollInterval.current) clearInterval(pollInterval.current);
-           setError(`Job ended with status: ${status.async_status}`);
+           setApiError(`Job ended with status: ${status.async_status}`);
            toast.error(`Job failed: ${status.async_status}`);
         }
 
@@ -94,7 +94,7 @@ export default function Home() {
         // Stop polling on critical errors
         if (err.message) {
            if (pollInterval.current) clearInterval(pollInterval.current);
-           setError(`Error: ${err.message}`);
+           setApiError(`Error: ${err.message}`);
            toast.error("Polling error occurred");
         }
         console.error("Polling error", err);
@@ -126,11 +126,13 @@ export default function Home() {
       );
       
       // Ensure final state is set
+      console.log('[fetchResults] CSV parsed successfully:', results.data.length, 'records');
+      console.log('[fetchResults] First 3 records:', results.data.slice(0, 3));
       setReportData(results.data);
       setDownloadProgress(100);
       toast.success(`Loaded all ${results.data.length} records`);
     } catch (err: any) {
-      setError(err.message || "Failed to fetch final report results.");
+      setApiError(err.message || "Failed to fetch final report results.");
       toast.error("Failed to fetch results");
     } finally {
       setIsFetchingMore(false);
@@ -299,14 +301,14 @@ export default function Home() {
           <div className="lg:col-span-9 space-y-8">
             
             {/* Error Message */}
-            {error && (
+            {apiError && (
               <div className="bg-destructive/10 border border-destructive/20 p-4 text-destructive text-sm font-medium">
-                {error}
+                {apiError}
               </div>
             )}
 
             {/* Empty State */}
-            {!reportData && !isRequesting && !error && (
+            {!reportData && !isRequesting && !apiError && (
               <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border/50 bg-secondary/10">
                 <BarChart2 className="w-12 h-12 mb-4 opacity-20" />
                 <p className="text-sm font-medium uppercase tracking-widest">Ready to Analyze</p>
@@ -317,7 +319,7 @@ export default function Home() {
             )}
 
             {/* Loading State */}
-            {isRequesting && !reportData && !error && (
+            {isRequesting && !reportData && !apiError && (
               <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border/50 bg-secondary/10">
                 <Loader2 className="w-8 h-8 animate-spin mb-4 opacity-50" />
                 <p className="text-xs font-medium uppercase tracking-widest animate-pulse">Connecting to Meta API...</p>

@@ -13,3 +13,4 @@
 - [ ] Update CSV mapping to use correct field for Catalog Purchases (converted_product_omni_purchase)
 - [ ] Test full CSV download and filtering workflow end-to-end
 - [x] Debug and fix persistent 'readable' error after CSV download
+- [x] Debug why CSV data is not being displayed in UI after download - fixed duplicate error variable
