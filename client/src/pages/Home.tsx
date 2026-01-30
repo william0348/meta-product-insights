@@ -46,14 +46,36 @@ export default function Home() {
       setActiveAccessToken(config.accessToken);
       // We do not reset filters automatically, user might want to keep them
 
-      // 1. Create Report Run
+      // 1. Build API filters from form data
+      const apiFilters: Array<{field: string, operator: string, value: any}> = [];
+      
+      // Add spend filter if provided
+      if (config.minSpend && parseFloat(config.minSpend) > 0) {
+        apiFilters.push({
+          field: 'spend',
+          operator: 'GREATER_THAN',
+          value: parseFloat(config.minSpend)
+        });
+      }
+      
+      // Add CTR filter if provided
+      if (config.minCTR && parseFloat(config.minCTR) > 0) {
+        apiFilters.push({
+          field: 'inline_link_click_ctr',
+          operator: 'GREATER_THAN',
+          value: parseFloat(config.minCTR)
+        });
+      }
+      
+      // 2. Create Report Run with filters
       const response = await facebookApiService.createReportRun(
         config.accountId, 
         config.dateStart, 
         config.dateEnd,
         config.accessToken,
         config.level,
-        config.breakdown // Pass the selected breakdown
+        config.breakdown,
+        apiFilters.length > 0 ? apiFilters : undefined // Pass filters if any
       );
       
       setReportId(response.report_run_id);
@@ -86,7 +108,7 @@ export default function Home() {
            // Add a small delay to ensure Facebook's CDN has the file ready
            setTimeout(() => {
              fetchResults(id, token);
-           }, 3000); // 3 second delay
+           }, 10000); // 10 second delay to allow Facebook CDN to prepare file
         } else if (status.async_status === AsyncJobStatus.FAILED || status.async_status === AsyncJobStatus.SKIPPED) {
            if (pollInterval.current) clearInterval(pollInterval.current);
            setApiError(`Job ended with status: ${status.async_status}`);

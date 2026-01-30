@@ -35,7 +35,9 @@ export const appRouter = router({
         try {
           const response = await axios.get(downloadUrl, {
             responseType: 'text',
-            timeout: 60000, // 60 second timeout for large files
+            timeout: 120000, // 120 second timeout for large files (398MB can take 10-15s)
+            maxContentLength: 500 * 1024 * 1024, // 500MB max
+            maxBodyLength: 500 * 1024 * 1024, // 500MB max
           });
           
           return {

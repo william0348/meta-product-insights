@@ -101,6 +101,9 @@ export interface ReportConfig {
   dateEnd: string;
   level: string;
   breakdown: string;
+  minSpend?: string; // Minimum spend filter
+  minCTR?: string; // Minimum CTR filter
+  apiFilters?: Array<{field: string, operator: string, value: any}>; // Filters applied at API level before CSV generation
 }
 
 export interface FilterCondition {

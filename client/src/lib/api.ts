@@ -108,7 +108,7 @@ const mapCsvRowToProductInsightData = (row: any): ProductInsightData => {
 
 
 export const facebookApiService = {
-  createReportRun: async (accountId: string, startDate: string, endDate: string, accessToken?: string, level: string = 'account', breakdown: string = 'product_id'): Promise<ReportRunResponse> => {
+  createReportRun: async (accountId: string, startDate: string, endDate: string, accessToken?: string, level: string = 'account', breakdown: string = 'product_id', filters?: Array<{field: string, operator: string, value: any}>): Promise<ReportRunResponse> => {
     
     if (!accessToken) {
       throw new Error("Access Token is required to fetch real data from Meta Marketing API.");
@@ -184,6 +184,11 @@ export const facebookApiService = {
 
     if (sort) queryParams.sort = sort;
     if (level && level !== 'account') queryParams.level = level;
+    
+    // Add filtering if provided
+    if (filters && filters.length > 0) {
+      queryParams.filtering = JSON.stringify(filters);
+    }
 
     const params = new URLSearchParams(queryParams);
     const response = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${formattedAccountId}/insights?${params.toString()}`, { method: 'POST' });
@@ -315,7 +320,7 @@ export const facebookApiService = {
           }
         });
       });
-      } catch (error) {
+    } catch (error) {
         console.error("Error downloading/parsing report CSV:", error);
         // If this is the last attempt, throw the error
         if (attempt === maxRetries) {

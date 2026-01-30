@@ -47,7 +47,9 @@ Test Product,1000,50.00`;
       expect.stringContaining("lookaside.facebook.com"),
       expect.objectContaining({
         responseType: "text",
-        timeout: 60000,
+        timeout: 120000,
+        maxContentLength: 500 * 1024 * 1024,
+        maxBodyLength: 500 * 1024 * 1024,
       })
     );
   });

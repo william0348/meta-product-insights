@@ -15,3 +15,11 @@
 - [x] Debug and fix persistent 'readable' error after CSV download
 - [x] Debug why CSV data is not being displayed in UI after download - fixed duplicate error variable
 - [x] Fix 503 Service Unavailable error when downloading CSV from Facebook - added retry logic and delay
+- [x] Increase initial delay after report completion to 10 seconds
+- [ ] Check if Facebook API provides a way to verify file is ready before download
+- [ ] Consider alternative: poll report status for longer before attempting download
+- [ ] Fix backend proxy bug - direct curl works but proxy returns 503
+- [ ] Handle large file downloads (398MB CSV) in backend proxy
+- [x] Add filtering parameters to Facebook API createReportRun request
+- [x] Support filtering by CTR (inline_link_click_ctr) and spend
+- [x] Update UI to allow users to set filter thresholds before generating report
