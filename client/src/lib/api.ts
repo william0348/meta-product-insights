@@ -1,12 +1,9 @@
 import { AsyncJobStatus, ProductInsightData, ReportRunResponse, ReportRunStatus } from '../types';
-import Papa from 'papaparse';
 
 const GRAPH_API_VERSION = 'v22.0';
 
-// Helper to map a raw CSV item to ProductInsightData
-// Note: CSV keys will match the export_columns we requested, but flat
-const mapCsvToProductInsightData = (item: any): ProductInsightData => {
-  // Helper to safely parse numbers
+// Helper to map JSON item from Graph API to ProductInsightData
+const mapJsonToProductInsightData = (item: any): ProductInsightData => {
   const pFloat = (val: any) => {
     if (!val) return 0;
     const num = parseFloat(val);
@@ -19,86 +16,75 @@ const mapCsvToProductInsightData = (item: any): ProductInsightData => {
     return isNaN(num) ? 0 : num;
   };
 
-  const id = item['Product Retailer ID'] || item['Product Content ID'] || item['Product Group Content ID'] || 'N/A';
-  const name = item['Product Name'] || id;
+  const id = item.product_retailer_id || item.product_content_id || item.product_group_content_id || 'N/A';
+  const name = item.product_name || id;
 
-  // Basic fields
-  const spend = pFloat(item['Amount Spent (USD)']); // CSV headers are human readable usually, but API returns machine names if not formatted. 
-  // Wait, the API returns columns as requested in fields. Let's assume machine names first, but check for human readable fallback if needed.
-  // Actually, for export_format=csv, Meta returns headers based on the field names usually, but let's be robust.
-  
-  // Re-mapping strategy: The CSV headers from Meta usually match the "Title" of the column if viewed in Ads Manager, 
-  // OR the field name if requested via API.
-  // Let's assume field names because we are requesting specific fields.
-  
-  // However, `export_columns` parameter might affect this.
-  // Let's look at the keys from a sample response or just map flexibly.
-  
-  // Actually, standard graph API CSV export uses keys like "reporting_starts", "reporting_ends", "ad_name", etc.
-  // But since we use `export_columns`, the order is guaranteed but headers might be friendly names.
-  
-  // Let's try to map by checking both potential keys.
-  const get = (keys: string[]) => {
-    for (const k of keys) {
-      if (item[k] !== undefined) return item[k];
-    }
-    return undefined;
+  // Extract action values safely
+  const getActionValue = (actions: any[], actionType: string) => {
+    if (!actions || !Array.isArray(actions)) return 0;
+    const action = actions.find((a: any) => a.action_type === actionType);
+    return action ? pFloat(action.value) : 0;
   };
 
-  const getNum = (keys: string[]) => pFloat(get(keys));
+  const getActionCost = (actions: any[], actionType: string) => {
+    if (!actions || !Array.isArray(actions)) return 0;
+    const action = actions.find((a: any) => a.action_type === actionType);
+    return action ? pFloat(action.value) : 0;
+  };
 
   return {
-    product_name: get(['product_name', 'Product Name']) || name,
-    product_retailer_id: get(['product_retailer_id', 'Product Retailer ID']) || id,
-    product_brand: get(['product_brand', 'Product Brand']),
-    product_category: get(['product_category', 'Product Category']),
+    product_name: name,
+    product_retailer_id: id,
+    product_brand: item.product_brand,
+    product_category: item.product_category,
     
-    impressions: getNum(['impressions', 'Impressions']),
-    spend: getNum(['spend', 'Amount Spent (USD)', 'Amount Spent']),
-    clicks: getNum(['clicks', 'Clicks (All)']),
-    link_clicks: getNum(['inline_link_clicks', 'Link Clicks']),
-    outbound_clicks: getNum(['outbound_clicks', 'Outbound Clicks']),
+    impressions: pInt(item.impressions),
+    spend: pFloat(item.spend),
+    clicks: pInt(item.clicks),
+    link_clicks: pInt(item.inline_link_clicks),
+    outbound_clicks: pInt(item.outbound_clicks),
     
-    cpm: getNum(['cpm', 'CPM (Cost per 1,000 Impressions)']),
-    ctr: getNum(['ctr', 'CTR (All)']),
-    inline_link_click_ctr: getNum(['inline_link_click_ctr', 'CTR (Link Click-Through Rate)']),
-    outbound_ctr: getNum(['outbound_clicks_ctr', 'CTR (Outbound)']),
-    cpc: getNum(['cpc', 'CPC (All)']),
-    cost_per_inline_link_click: getNum(['cost_per_inline_link_click', 'Cost per Link Click']),
-    cost_per_outbound_click: getNum(['cost_per_outbound_click', 'Cost per Outbound Click']),
+    cpm: pFloat(item.cpm),
+    ctr: pFloat(item.ctr),
+    inline_link_click_ctr: pFloat(item.inline_link_click_ctr),
+    outbound_ctr: pFloat(item.outbound_clicks_ctr),
+    cpc: pFloat(item.cpc),
+    cost_per_inline_link_click: pFloat(item.cost_per_inline_link_click),
+    cost_per_outbound_click: pFloat(item.cost_per_outbound_click),
     
-    // CVR is calculated manually
-    cvr: 0, // Will calc below
+    // CVR calculated later
+    cvr: 0, 
 
-    purchases: getNum(['actions:omni_purchase', 'Purchases']),
-    purchase_value: getNum(['action_values:omni_purchase', 'Purchases Conversion Value']),
-    avg_purchase_value: getNum(['average_purchases_conversion_value', 'Average Purchase Value']),
+    purchases: getActionValue(item.actions, 'omni_purchase'),
+    purchase_value: getActionValue(item.action_values, 'omni_purchase'),
+    avg_purchase_value: pFloat(item.average_purchases_conversion_value), // This might be direct field or action based depending on query
     
-    website_purchases: getNum(['actions:offsite_conversion.fb_pixel_purchase', 'Website Purchases']),
-    mobile_app_purchases: getNum(['actions:app_custom_event.fb_mobile_purchase', 'Mobile App Purchases']),
-    offline_purchases: getNum(['actions:offline_conversion.purchase', 'Offline Purchases']),
-    onsite_purchases: getNum(['actions:onsite_conversion.purchase', 'On-Meta Purchases']),
+    website_purchases: getActionValue(item.actions, 'offsite_conversion.fb_pixel_purchase'),
+    mobile_app_purchases: getActionValue(item.actions, 'app_custom_event.fb_mobile_purchase'),
+    offline_purchases: getActionValue(item.actions, 'offline_conversion.purchase'),
+    onsite_purchases: getActionValue(item.actions, 'onsite_conversion.purchase'),
     
-    purchase_roas: getNum(['purchase_roas:omni_purchase', 'Purchase ROAS (Return on Ad Spend)']),
-    website_roas: getNum(['website_purchase_roas:offsite_conversion.fb_pixel_purchase', 'Website Purchase ROAS']),
-    mobile_app_roas: getNum(['mobile_app_purchase_roas:app_custom_event.fb_mobile_purchase', 'Mobile App Purchase ROAS']),
+    purchase_roas: getActionValue(item.purchase_roas, 'omni_purchase'),
+    website_roas: getActionValue(item.website_purchase_roas, 'offsite_conversion.fb_pixel_purchase'),
+    mobile_app_roas: getActionValue(item.mobile_app_purchase_roas, 'app_custom_event.fb_mobile_purchase'),
     
-    adds_to_cart: getNum(['actions:omni_add_to_cart', 'Adds to Cart']),
-    website_adds_to_cart: getNum(['actions:offsite_conversion.fb_pixel_add_to_cart', 'Website Adds to Cart']),
-    mobile_app_adds_to_cart: getNum(['actions:app_custom_event.fb_mobile_add_to_cart', 'Mobile App Adds to Cart']),
+    adds_to_cart: getActionValue(item.actions, 'omni_add_to_cart'),
+    website_adds_to_cart: getActionValue(item.actions, 'offsite_conversion.fb_pixel_add_to_cart'),
+    mobile_app_adds_to_cart: getActionValue(item.actions, 'app_custom_event.fb_mobile_add_to_cart'),
 
-    catalog_purchases: getNum(['converted_product_omni_purchase', 'Catalog Purchases']),
-    catalog_purchase_value: getNum(['converted_product_omni_purchase_value', 'Catalog Purchase Value']),
+    catalog_purchases: pInt(item.converted_product_omni_purchase),
+    catalog_purchase_value: pFloat(item.converted_product_omni_purchase_value),
     
-    product_set_purchases: getNum(['converted_promoted_product_omni_purchase', 'Product Set Purchases']),
-    product_set_purchase_value: getNum(['converted_promoted_product_omni_purchase_value', 'Product Set Purchase Value']),
+    product_set_purchases: pInt(item.converted_promoted_product_omni_purchase),
+    product_set_purchase_value: pFloat(item.converted_promoted_product_omni_purchase_value),
     
-    product_views: getNum(['product_views', 'Content Views']),
+    product_views: pInt(item.product_views), // Or check actions for 'view_content'
     
-    date_start: get(['date_start', 'Reporting Starts']),
-    date_stop: get(['date_stop', 'Reporting Ends'])
+    date_start: item.date_start,
+    date_stop: item.date_stop
   };
 };
+
 
 export const facebookApiService = {
   createReportRun: async (accountId: string, startDate: string, endDate: string, accessToken?: string, level: string = 'account', breakdown: string = 'product_id'): Promise<ReportRunResponse> => {
@@ -171,8 +157,8 @@ export const facebookApiService = {
       time_range: JSON.stringify({ since: startDate, until: endDate }),
       breakdowns: breakdown,
       fields: fields,
-      is_async: 'true',
-      export_format: 'csv'
+      // Note: We are NOT using export_format=csv anymore to avoid CORS issues with lookaside url
+      // We will fetch JSON pages from the insights edge
     };
 
     if (sort) queryParams.sort = sort;
@@ -214,44 +200,43 @@ export const facebookApiService = {
       throw new Error("Access Token is required.");
     }
 
-    // New Strategy: Fetch CSV from lookaside url
-    const downloadUrl = `https://lookaside.facebook.com/ads/ads_insights/download_report/business/?report_run_id=${reportRunId}&access_token=${accessToken}`;
-    
-    const response = await fetch(downloadUrl);
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Failed to download report: ${response.statusText} - ${errText}`);
+    let allData: ProductInsightData[] = [];
+    let nextUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${reportRunId}/insights?access_token=${accessToken}&limit=100`;
+
+    // Progressive loading loop
+    while (nextUrl) {
+      const response = await fetch(nextUrl);
+      const json = await response.json();
+
+      if (json.error) {
+        throw new Error(json.error.message || "Failed to fetch report results");
+      }
+
+      const pageData = json.data.map(mapJsonToProductInsightData);
+      
+      // Calculate derived fields
+      const processedPageData = pageData.map((item: ProductInsightData) => {
+        if (item.cvr === 0 && item.link_clicks > 0) {
+          item.cvr = (item.purchases / item.link_clicks) * 100;
+        }
+        return item;
+      });
+
+      allData = [...allData, ...processedPageData];
+
+      // Notify UI immediately with accumulated data
+      if (onProgress) {
+        onProgress(allData);
+      }
+
+      // Check for next page
+      if (json.paging && json.paging.next) {
+        nextUrl = json.paging.next;
+      } else {
+        nextUrl = '';
+      }
     }
 
-    const csvText = await response.text();
-
-    return new Promise((resolve, reject) => {
-      Papa.parse(csvText, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          if (results.errors && results.errors.length > 0) {
-            console.warn("CSV Parse Errors:", results.errors);
-          }
-
-          const mappedData = results.data.map(mapCsvToProductInsightData);
-          
-          // Post-calculation for fields that might be missing or need derived values
-          const finalData = mappedData.map(item => {
-            // Calculate CVR if missing
-            if (item.cvr === 0 && item.link_clicks > 0) {
-              item.cvr = (item.purchases / item.link_clicks) * 100;
-            }
-            return item;
-          });
-
-          if (onProgress) onProgress(finalData);
-          resolve({ data: finalData });
-        },
-        error: (error: any) => {
-          reject(new Error(`CSV Parsing failed: ${error.message}`));
-        }
-      });
-    });
+    return { data: allData };
   }
 };

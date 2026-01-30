@@ -1,8 +1,7 @@
-- [ ] Debug Polling Logic
-  - [ ] Check `pollReportStatus` in `api.ts` for correct handling of `async_percent_completion`
-  - [ ] Add timeout or retry mechanism if status doesn't change for a while
-  - [ ] Verify if `async_status` is being returned correctly from API
-- [ ] Implement Saved Filter Presets
-  - [ ] Create `SavedPresets` component
-  - [ ] Use `localStorage` to persist presets
-  - [ ] Integrate with `FilterBar`
+- [ ] Update `api.ts`
+  - [ ] Revert `getReportResults` to use `/{report_id}/insights` endpoint instead of CSV download
+  - [ ] Implement pagination loop to fetch all pages
+  - [ ] Trigger `onProgress` callback after the first page (or every page) to show data immediately
+  - [ ] Handle rate limiting (wait if needed)
+- [ ] Update `Home.tsx`
+  - [ ] Ensure `fetchResults` handles the progressive data updates correctly

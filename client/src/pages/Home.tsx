@@ -112,18 +112,20 @@ export default function Home() {
     try {
       setIsFetchingMore(true);
       // 3. Get Data with progressive loading
+      // We pass a callback that updates the state immediately as pages arrive
       const results = await facebookApiService.getReportResults(id, token, (interimData) => {
-        // Update state progressively as chunks arrive
-        setReportData(interimData);
+        setReportData([...interimData]); // Create new array ref to trigger render
       });
+      
       // Ensure final state is set
       setReportData(results.data);
-      toast.success(`Loaded ${results.data.length} records`);
+      toast.success(`Loaded all ${results.data.length} records`);
     } catch (err: any) {
       setError(err.message || "Failed to fetch final report results.");
       toast.error("Failed to fetch results");
     } finally {
       setIsFetchingMore(false);
+      setJobStatus(AsyncJobStatus.COMPLETED);
     }
   };
 
