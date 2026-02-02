@@ -49,3 +49,7 @@
 - [x] Add summary metrics dashboard (total products, total spend, avg CTR, conversion rate)
 - [x] Implement automatic CSV cleanup for files older than 24 hours (runs every 6 hours)
 - [x] Test complete workflow with real Facebook data - ready for user testing
+- [x] Revert to JSON API response parsing instead of CSV download
+- [x] Update backend to fetch paginated JSON data from Facebook /insights endpoint
+- [x] Update frontend to parse JSON response directly
+- [x] Create mapJsonRowToProductInsightData for JSON data mapping

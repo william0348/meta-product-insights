@@ -1,5 +1,5 @@
-import { AsyncJobStatus, ProductInsightData, ReportRunResponse, ReportRunStatus } from '../types';
-import * as Papa from 'papaparse';
+import type { ProductInsightData, ReportRunResponse } from '../types';
+import { mapJsonRowToProductInsightData } from './facebook-json-mapper';
 
 const GRAPH_API_VERSION = 'v22.0';
 
@@ -201,7 +201,7 @@ export const facebookApiService = {
     return { report_run_id: data.report_run_id };
   },
 
-  pollReportStatus: async (reportRunId: string, accessToken?: string): Promise<ReportRunStatus> => {
+  pollReportStatus: async (reportRunId: string, accessToken?: string): Promise<any> => {
     if (!accessToken) {
       throw new Error("Access Token is required.");
     }
@@ -220,102 +220,92 @@ export const facebookApiService = {
     };
   },
 
-  // NEW: Download CSV via backend proxy to avoid CORS
+  // Fetch insights data as JSON via backend proxy
   async downloadReportCSV(
     reportRunId: string,
     accessToken?: string,
     onProgress?: (data: ProductInsightData[]) => void,
     onDownloadProgress?: (percent: number) => void
   ): Promise<{ data: ProductInsightData[] }> {
-    // Retry logic for 503 errors (Facebook CDN not ready)
-    const maxRetries = 3;
-    const retryDelays = [5000, 10000, 15000]; // 5s, 10s, 15s
-    
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        // Use backend proxy to download CSV (avoids CORS)
-        // tRPC batch format: input is a JSON object with "0" key containing the query params
+    try {
+      const allData: ProductInsightData[] = [];
+      let after: string | undefined = undefined;
+      let pageCount = 0;
+      const maxPages = 50; // Limit to prevent infinite loops
+      
+      if (onDownloadProgress) {
+        onDownloadProgress(10); // Starting
+      }
+      
+      // Fetch paginated data
+      while (pageCount < maxPages) {
+        // Build tRPC batch request
         const input = {
           "0": {
             json: {
               reportRunId,
-              accessToken
+              accessToken,
+              limit: 100,
+              after
             }
           }
         };
         
-        // Track download progress
-        if (onDownloadProgress) {
-          onDownloadProgress(10); // Starting download
-        }
+        console.log(`[Insights Fetch] Fetching page ${pageCount + 1}...`);
         
-        const response = await fetch(`/api/trpc/facebook.downloadReportCSV?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`);
+        const response: Response = await fetch(`/api/trpc/facebook.getInsightsData?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`);
         
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('[CSV Download] Server error:', errorText);
-          
-          // Check if it's a 503 and we have retries left
-          if (response.status === 503 && attempt < maxRetries) {
-            const delay = retryDelays[attempt];
-            console.log(`[CSV Download] 503 error, retrying in ${delay/1000}s (attempt ${attempt + 1}/${maxRetries})...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue; // Retry
-          }
-          
-          throw new Error(`Failed to download report via proxy. Status: ${response.status}`);
+          console.error('[Insights Fetch] Server error:', errorText);
+          throw new Error(`Failed to fetch insights. Status: ${response.status}`);
         }
+        
+        const result: any = await response.json();
+        const backendResult: any = result[0].result.data;
+        
+        if (!backendResult.success || !backendResult.data) {
+          throw new Error('Invalid response from backend');
+        }
+        
+        // Map the JSON data to our ProductInsightData structure
+        const mappedPage = backendResult.data.map(mapJsonRowToProductInsightData);
+        allData.push(...mappedPage);
+        
+        console.log(`[Insights Fetch] Page ${pageCount + 1}: ${mappedPage.length} records (total: ${allData.length})`);
+        
+        // Update progress
+        if (onDownloadProgress) {
+          const progress = 10 + (pageCount / maxPages) * 80;
+          onDownloadProgress(Math.min(progress, 90));
+        }
+        
+        // Call onProgress callback with accumulated data
+        if (onProgress) {
+          onProgress(allData);
+        }
+        
+        // Check if there's more data
+        if (backendResult.paging && backendResult.paging.next && backendResult.paging.cursors?.after) {
+          after = backendResult.paging.cursors.after;
+          pageCount++;
+        } else {
+          // No more pages
+          break;
+        }
+      }
+      
+      console.log(`[Insights Fetch] Complete: ${allData.length} total records`);
       
       if (onDownloadProgress) {
-        onDownloadProgress(50); // Download complete, parsing...
+        onDownloadProgress(100);
       }
       
-      const result = await response.json();
-      // tRPC batch response format: array with result at index 0
-      const backendResult = result[0].result.data;
+      return { data: allData };
       
-      if (onDownloadProgress) {
-        onDownloadProgress(70); // Received data, parsing preview...
-      }
-      
-      console.log('[CSV Download] File saved to:', backendResult.filePath);
-      console.log('[CSV Download] Total rows:', backendResult.totalRows);
-      console.log('[CSV Download] Preview rows:', backendResult.previewRows);
-      
-      // Map preview data (first 100 rows) to our data structure
-      const mappedData = backendResult.previewData.map(mapCsvRowToProductInsightData);
-      console.log('[CSV Parse] Mapped preview data:', mappedData.length, 'records');
-      console.log('[CSV Parse] First mapped record:', mappedData[0]);
-      
-      if (onDownloadProgress) {
-        onDownloadProgress(90); // Mapping complete
-      }
-      
-      // Filter out rows with no product name/id if necessary (cleanup)
-      const validData = mappedData.filter((item: ProductInsightData) => item.product_retailer_id !== 'N/A' && item.product_name !== 'N/A');
-      console.log('[CSV Parse] Valid data after filtering:', validData.length, 'records');
-
-      if (onProgress) {
-        onProgress(validData);
-      }
-      
-      if (onDownloadProgress) {
-        onDownloadProgress(100); // Complete
-      }
-      
-      return { data: validData };
-
     } catch (error) {
-        console.error("Error downloading/parsing report CSV:", error);
-        // If this is the last attempt, throw the error
-        if (attempt === maxRetries) {
-          throw error;
-        }
-        // Otherwise, continue to next retry
-      }
+      console.error("Error fetching insights data:", error);
+      throw error;
     }
-    
-    // Should never reach here, but TypeScript needs a return
-    throw new Error('Failed to download CSV after all retries');
   }
 };
