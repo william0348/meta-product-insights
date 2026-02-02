@@ -40,10 +40,11 @@ export const appRouter = router({
         const { reportRunId, accessToken } = input;
         
         try {
-          // Call Python script to download and save CSV
+          // Call Python script to download and save CSV using wrapper script
           const scriptPath = path.join(__dirname, 'download_facebook_csv.py');
+          const wrapperPath = path.join(__dirname, 'run_python311.sh');
           const { stdout, stderr} = await execAsync(
-            `/usr/bin/python3.11 "${scriptPath}" "${reportRunId}" "${accessToken}"`,
+            `"${wrapperPath}" "${scriptPath}" "${reportRunId}" "${accessToken}"`,
             { maxBuffer: 50 * 1024 * 1024 } // 50MB buffer for JSON output
           );
           
@@ -82,10 +83,11 @@ export const appRouter = router({
         const { filePath, offset, limit } = input;
         
         try {
-          // Read and parse CSV file with pandas
+          // Read and parse CSV file with pandas using wrapper script
           const scriptPath = path.join(__dirname, 'read_csv_chunk.py');
+          const wrapperPath = path.join(__dirname, 'run_python311.sh');
           const { stdout } = await execAsync(
-            `/usr/bin/python3.11 "${scriptPath}" "${filePath}" ${offset} ${limit}`,
+            `"${wrapperPath}" "${scriptPath}" "${filePath}" ${offset} ${limit}`,
             { maxBuffer: 50 * 1024 * 1024 }
           );
           

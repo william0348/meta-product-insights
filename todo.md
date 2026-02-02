@@ -36,3 +36,6 @@
 - [x] Fix Python SRE module mismatch by using python3.11 instead of python3
 - [x] Add shebang to Python scripts to force Python 3.11 interpreter
 - [x] Use absolute path /usr/bin/python3.11 in backend to avoid environment issues
+- [x] Create shell wrapper script to clear Python environment variables
+- [x] Add Python isolated mode flags (-I -s -E) to wrapper script
+- [x] Test wrapper script solution - Python 3.11 now runs without SRE module mismatch
