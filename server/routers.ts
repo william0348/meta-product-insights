@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import axios from "axios";
+import { fetchProductsByRetailerIds, batchUpdateProducts, BatchRequestItem } from "./catalog";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -17,6 +18,80 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+  }),
+
+  // Facebook Catalog Batch API
+  catalog: router({ 
+    // Fetch products by retailer IDs (for merge logic)
+    fetchProducts: publicProcedure
+      .input(z.object({
+        catalogId: z.string(),
+        retailerIds: z.array(z.string()),
+        accessToken: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { catalogId, retailerIds, accessToken } = input;
+        
+        try {
+          const products = await fetchProductsByRetailerIds(catalogId, retailerIds, accessToken);
+          return { success: true, products };
+        } catch (error: any) {
+          console.error('[Catalog Fetch] Error:', error.message);
+          throw new Error(`Failed to fetch products: ${error.message}`);
+        }
+      }),
+    
+    // Batch update products
+    batchUpdate: publicProcedure
+      .input(z.object({
+        catalogId: z.string(),
+        requests: z.array(z.object({
+          method: z.enum(['UPDATE', 'DELETE', 'CREATE']),
+          retailer_id: z.string(),
+          data: z.record(z.string(), z.any()),
+        })),
+        accessToken: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const { catalogId, requests, accessToken } = input;
+        
+        try {
+          console.log(`[Catalog Batch] Updating ${requests.length} products...`);
+          const response = await batchUpdateProducts(catalogId, requests as BatchRequestItem[], accessToken);
+          
+          // Log validation errors/warnings
+          if (response.validation_status) {
+            let errorCount = 0;
+            let warningCount = 0;
+            
+            response.validation_status.forEach(status => {
+              if (status.errors && status.errors.length > 0) {
+                status.errors.forEach(err => {
+                  console.error(`[Catalog Batch Error] ID ${status.retailer_id}: ${err.message}`);
+                  errorCount++;
+                });
+              }
+              if (status.warnings && status.warnings.length > 0) {
+                status.warnings.forEach(warn => {
+                  console.warn(`[Catalog Batch Warning] ID ${status.retailer_id}: ${warn.message}`);
+                  warningCount++;
+                });
+              }
+            });
+            
+            console.log(`[Catalog Batch] Validation: ${errorCount} errors, ${warningCount} warnings`);
+          }
+          
+          return {
+            success: true,
+            handles: response.handles,
+            validation_status: response.validation_status || [],
+          };
+        } catch (error: any) {
+          console.error('[Catalog Batch] Error:', error.message);
+          throw new Error(`Failed to batch update: ${error.message}`);
+        }
+      }),
   }),
 
   // Facebook Insights API Proxy

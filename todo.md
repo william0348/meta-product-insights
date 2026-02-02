@@ -66,3 +66,9 @@
 - [x] Fix table display for CPM - now uses cpm field
 - [x] Fix table display for Cost Per Link Click - now uses cost_per_inline_link_click
 - [x] Fix catalog_purchases to use converted_product_omni_purchase field instead of actions:omni_purchase
+- [x] Extract and analyze catalog batch API implementation from uploaded file
+- [x] Create backend endpoint for catalog batch API integration (catalog.fetchProducts, catalog.batchUpdate)
+- [x] Add UI button/modal for uploading selected items to catalog
+- [x] Add CatalogUploadModal component with catalog ID, access token, and tag inputs
+- [x] Implement batch upload handler with merge logic for labels and tags
+- [ ] Test catalog batch upload with real data

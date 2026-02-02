@@ -7,8 +7,10 @@ import { InsightsCharts } from '@/components/InsightsCharts';
 import { ProductTable } from '@/components/ProductTable';
 import { FilterBar } from '@/components/FilterBar';
 import { SummaryMetrics } from '@/components/SummaryMetrics';
+import { CatalogUploadModal, CatalogUploadConfig } from '@/components/CatalogUploadModal';
+import { trpc } from '@/lib/trpc';
 
-import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload } from 'lucide-react';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -31,6 +33,11 @@ export default function Home() {
 
   // Store the access token used for the current job so we can use it during polling
   const [activeAccessToken, setActiveAccessToken] = useState<string | undefined>(undefined);
+  
+  // Catalog Upload State
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false);
+  const [catalogUploading, setCatalogUploading] = useState(false);
+  const trpcUtils = trpc.useUtils();
 
   // Poll Ref to clear intervals
   const pollInterval = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -229,6 +236,118 @@ export default function Home() {
     toast.success("Excel file downloaded");
   };
 
+  // Catalog Upload Handler
+  const handleCatalogUpload = async (config: CatalogUploadConfig) => {
+    if (!filteredData || filteredData.length === 0) return;
+    
+    setCatalogUploading(true);
+    
+    try {
+      const FETCH_CHUNK_SIZE = 50;
+      const BATCH_SIZE = 2500;
+      
+      // Extract retailer IDs from filtered data
+      const retailerIds = filteredData
+        .map(item => item.product_retailer_id)
+        .filter(Boolean);
+      
+      if (retailerIds.length === 0) {
+        throw new Error('No valid product IDs found');
+      }
+      
+      toast.info(`Preparing to upload ${retailerIds.length} products...`);
+      
+      // Process in batches
+      for (let i = 0; i < retailerIds.length; i += BATCH_SIZE) {
+        const batchIds = retailerIds.slice(i, i + BATCH_SIZE);
+        
+        toast.info(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batchIds.length} items...`);
+        
+        // Fetch existing products in chunks to avoid URL length limit
+        let currentProducts: any[] = [];
+        for (let j = 0; j < batchIds.length; j += FETCH_CHUNK_SIZE) {
+          const chunk = batchIds.slice(j, j + FETCH_CHUNK_SIZE);
+          const result = await trpcUtils.catalog.fetchProducts.fetch({
+            catalogId: config.catalogId,
+            retailerIds: chunk,
+            accessToken: config.accessToken,
+          });
+          currentProducts = currentProducts.concat(result.products);
+        }
+        
+        // Build update requests with merge logic
+        const productMap = new Map(currentProducts.map((p: any) => [p.retailer_id, p]));
+        const requests = batchIds.map(id => {
+          const product = productMap.get(id);
+          const dataPayload: Record<string, any> = {};
+          
+          // Custom Label 4 (Merge)
+          if (config.customLabel4) {
+            let finalVal = config.customLabel4;
+            if (product && product.custom_label_4) {
+              const existing = product.custom_label_4.split(',').map((s: string) => s.trim()).filter(Boolean);
+              if (!existing.includes(config.customLabel4)) {
+                existing.push(config.customLabel4);
+                finalVal = existing.join(', ');
+              } else {
+                finalVal = product.custom_label_4;
+              }
+            }
+            dataPayload.custom_label_4 = finalVal;
+          }
+          
+          // Tags (Merge)
+          if (config.tags) {
+            const newTags = config.tags.split(',').map(t => t.trim()).filter(Boolean);
+            let finalTags = newTags;
+            if (product && product.tags && Array.isArray(product.tags)) {
+              const combined = [...product.tags, ...newTags];
+              finalTags = Array.from(new Set(combined));
+            }
+            dataPayload.tags = finalTags;
+          }
+          
+          // Custom Number 0 (Overwrite)
+          if (config.customNumber0) {
+            dataPayload.custom_number_0 = parseInt(config.customNumber0);
+          }
+          
+          return {
+            method: 'UPDATE' as const,
+            retailer_id: id,
+            data: dataPayload,
+          };
+        });
+        
+        // Send batch update
+        const response = await trpcUtils.client.catalog.batchUpdate.mutate({
+          catalogId: config.catalogId,
+          requests,
+          accessToken: config.accessToken,
+        });
+        
+        // Check for errors
+        if (response.validation_status && response.validation_status.length > 0) {
+          const errors = response.validation_status.filter((s: any) => s.errors && s.errors.length > 0);
+          if (errors.length > 0) {
+            const errorMsg = errors[0].errors![0].message;
+            throw new Error(`Batch validation error: ${errorMsg}`);
+          }
+        }
+        
+        toast.success(`Batch ${Math.floor(i / BATCH_SIZE) + 1} uploaded successfully`);
+      }
+      
+      toast.success(`All ${retailerIds.length} products uploaded to catalog!`);
+    } catch (error: any) {
+      console.error('[Catalog Upload] Error:', error);
+      toast.error(error.message || 'Failed to upload to catalog');
+      throw error;
+    } finally {
+      setCatalogUploading(false);
+    }
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -239,6 +358,14 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
       <Toaster position="top-right" />
+      
+      {/* Catalog Upload Modal */}
+      <CatalogUploadModal
+        open={catalogModalOpen}
+        onOpenChange={setCatalogModalOpen}
+        productCount={filteredData ? filteredData.length : 0}
+        onUpload={handleCatalogUpload}
+      />
       
       {/* Swiss Style Header: Clean, minimal, authoritative */}
       <header className="border-b border-border bg-background sticky top-0 z-20">
@@ -381,6 +508,16 @@ export default function Home() {
                     >
                       <FileSpreadsheet className="w-3 h-3 mr-2" />
                       Download Excel
+                    </Button>
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={() => setCatalogModalOpen(true)}
+                      disabled={!filteredData || filteredData.length === 0}
+                      className="h-8 text-xs uppercase font-bold tracking-wide rounded-none"
+                    >
+                      <Upload className="w-3 h-3 mr-2" />
+                      Upload to Catalog
                     </Button>
                   </div>
                 </div>
