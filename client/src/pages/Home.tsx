@@ -296,20 +296,10 @@ export default function Home() {
             dataPayload.custom_label_4 = finalVal;
           }
           
-          // Tags (Merge)
-          if (config.tags) {
-            const newTags = config.tags.split(',').map(t => t.trim()).filter(Boolean);
-            let finalTags = newTags;
-            if (product && product.tags && Array.isArray(product.tags)) {
-              const combined = [...product.tags, ...newTags];
-              finalTags = Array.from(new Set(combined));
-            }
-            dataPayload.tags = finalTags;
-          }
-          
-          // Custom Number 0 (Overwrite)
-          if (config.customNumber0) {
-            dataPayload.custom_number_0 = parseInt(config.customNumber0);
+          // Custom Number (Overwrite)
+          if (config.customNumberValue) {
+            const numValue = parseInt(config.customNumberValue);
+            dataPayload[config.customNumberField] = numValue;
           }
           
           return {

@@ -75,3 +75,7 @@
 - [x] Verify catalog token and ads report token are completely separate
 - [x] Update modal description to clarify different token requirements
 - [x] Update access token label to "Catalog Access Token" for clarity
+- [x] Fix pagination to fetch all items beyond 5000 limit - removed maxPages restriction
+- [x] Replace tags input with Custom Number 0-4 dropdown
+- [x] Remove tags field from catalog update logic
+- [x] Update backend to handle custom number field selection

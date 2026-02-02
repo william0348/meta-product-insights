@@ -231,14 +231,13 @@ export const facebookApiService = {
       const allData: ProductInsightData[] = [];
       let after: string | undefined = undefined;
       let pageCount = 0;
-      const maxPages = 50; // Limit to prevent infinite loops
       
       if (onDownloadProgress) {
         onDownloadProgress(10); // Starting
       }
       
-      // Fetch paginated data
-      while (pageCount < maxPages) {
+      // Fetch paginated data (no limit - fetch all pages)
+      while (true) {
         // Build tRPC batch request
         const input = {
           "0": {
@@ -293,10 +292,11 @@ export const facebookApiService = {
         
         console.log(`[Insights Fetch] Page ${pageCount + 1}: ${mappedPage.length} records (total: ${allData.length})`);
         
-        // Update progress
+        // Update progress (show incremental progress based on pages fetched)
         if (onDownloadProgress) {
-          const progress = 10 + (pageCount / maxPages) * 80;
-          onDownloadProgress(Math.min(progress, 90));
+          // Show progress up to 90%, leaving 10% for completion
+          const progress = Math.min(10 + (pageCount * 5), 90);
+          onDownloadProgress(progress);
         }
         
         // Call onProgress callback with accumulated data

@@ -17,16 +17,16 @@ export interface CatalogUploadConfig {
   catalogId: string;
   accessToken: string;
   customLabel4: string;
-  tags: string;
-  customNumber0: string;
+  customNumberField: 'custom_number_0' | 'custom_number_1' | 'custom_number_2' | 'custom_number_3' | 'custom_number_4';
+  customNumberValue: string;
 }
 
 export const CatalogUploadModal: React.FC<Props> = ({ open, onOpenChange, productCount, onUpload }) => {
   const [catalogId, setCatalogId] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [customLabel4, setCustomLabel4] = useState('');
-  const [tags, setTags] = useState('');
-  const [customNumber0, setCustomNumber0] = useState('');
+  const [customNumberField, setCustomNumberField] = useState<'custom_number_0' | 'custom_number_1' | 'custom_number_2' | 'custom_number_3' | 'custom_number_4'>('custom_number_0');
+  const [customNumberValue, setCustomNumberValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,8 +42,8 @@ export const CatalogUploadModal: React.FC<Props> = ({ open, onOpenChange, produc
       setError('Access Token is required');
       return;
     }
-    if (!customLabel4.trim() && !tags.trim() && !customNumber0.trim()) {
-      setError('Please enter at least one tag or custom number');
+    if (!customLabel4.trim() && !customNumberValue.trim()) {
+      setError('Please enter at least one value (Custom Label 4 or Custom Number)');
       return;
     }
 
@@ -53,16 +53,16 @@ export const CatalogUploadModal: React.FC<Props> = ({ open, onOpenChange, produc
         catalogId: catalogId.trim(),
         accessToken: accessToken.trim(),
         customLabel4: customLabel4.trim(),
-        tags: tags.trim(),
-        customNumber0: customNumber0.trim(),
+        customNumberField,
+        customNumberValue: customNumberValue.trim(),
       });
       
       // Reset form on success
       setCatalogId('');
       setAccessToken('');
       setCustomLabel4('');
-      setTags('');
-      setCustomNumber0('');
+      setCustomNumberField('custom_number_0');
+      setCustomNumberValue('');
       onOpenChange(false);
     } catch (err: any) {
       setError(err.message || 'Upload failed');
@@ -136,25 +136,31 @@ export const CatalogUploadModal: React.FC<Props> = ({ open, onOpenChange, produc
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="tags">Tags</Label>
-              <Input
-                id="tags"
-                placeholder="e.g., Summer, Sale"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
+              <Label htmlFor="customNumberField">Custom Number Field</Label>
+              <select
+                id="customNumberField"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={customNumberField}
+                onChange={(e) => setCustomNumberField(e.target.value as any)}
                 disabled={isUploading}
-              />
-              <p className="text-xs text-muted-foreground">Comma-separated. Only for Commerce Catalogs.</p>
+              >
+                <option value="custom_number_0">Custom Number 0</option>
+                <option value="custom_number_1">Custom Number 1</option>
+                <option value="custom_number_2">Custom Number 2</option>
+                <option value="custom_number_3">Custom Number 3</option>
+                <option value="custom_number_4">Custom Number 4</option>
+              </select>
+              <p className="text-xs text-muted-foreground">Select which custom number field to update</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="customNumber0">Custom Number 0</Label>
+              <Label htmlFor="customNumberValue">Custom Number Value</Label>
               <Input
-                id="customNumber0"
+                id="customNumberValue"
                 type="number"
                 placeholder="e.g., 100"
-                value={customNumber0}
-                onChange={(e) => setCustomNumber0(e.target.value)}
+                value={customNumberValue}
+                onChange={(e) => setCustomNumberValue(e.target.value)}
                 disabled={isUploading}
               />
               <p className="text-xs text-muted-foreground">Integer value (overwrite mode)</p>
