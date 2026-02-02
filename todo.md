@@ -53,3 +53,15 @@
 - [x] Update backend to fetch paginated JSON data from Facebook /insights endpoint
 - [x] Update frontend to parse JSON response directly
 - [x] Create mapJsonRowToProductInsightData for JSON data mapping
+- [x] Fix "Invalid response from backend" error - added comprehensive error handling
+- [x] Add better error logging to see actual backend response
+- [x] Fix tRPC superjson wrapper - handle backendResult.json.data structure
+- [x] Fix product name field mapping - use row.product_name
+- [x] Fix content ID field mapping - use row.product_content_id
+- [x] Fix brand field mapping - use row.product_brand
+- [x] Fix category field mapping - use row.product_category
+- [x] Verify correct field names from Facebook API response
+- [x] Fix table display for Link Click CTR (%) - now uses inline_link_click_ctr
+- [x] Fix table display for CVR (%) - now uses cvr field
+- [x] Fix table display for CPM - now uses cpm field
+- [x] Fix table display for Cost Per Link Click - now uses cost_per_inline_link_click

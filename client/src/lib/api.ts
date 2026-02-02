@@ -262,14 +262,33 @@ export const facebookApiService = {
         }
         
         const result: any = await response.json();
-        const backendResult: any = result[0].result.data;
+        console.log('[Insights Fetch] Raw result:', JSON.stringify(result).substring(0, 1000));
         
-        if (!backendResult.success || !backendResult.data) {
-          throw new Error('Invalid response from backend');
+        // Check if tRPC returned an error
+        if (!result || !Array.isArray(result) || result.length === 0) {
+          console.error('[Insights Fetch] Invalid tRPC response structure:', result);
+          throw new Error('Invalid tRPC response structure');
+        }
+        
+        const firstResult = result[0];
+        if (firstResult.error) {
+          console.error('[Insights Fetch] tRPC error:', firstResult.error);
+          throw new Error(`Backend error: ${firstResult.error.message || JSON.stringify(firstResult.error)}`);
+        }
+        
+        const backendResult: any = firstResult.result?.data;
+        console.log('[Insights Fetch] Backend result:', JSON.stringify(backendResult).substring(0, 1000));
+        
+        // tRPC wraps the response in a "json" key when using superjson
+        const actualData = backendResult.json || backendResult;
+        
+        if (!actualData || !actualData.success || !actualData.data || !Array.isArray(actualData.data)) {
+          console.error('[Insights Fetch] Invalid response. actualData:', actualData);
+          throw new Error(`Invalid response from backend. success: ${actualData?.success}, has data array: ${Array.isArray(actualData?.data)}`);
         }
         
         // Map the JSON data to our ProductInsightData structure
-        const mappedPage = backendResult.data.map(mapJsonRowToProductInsightData);
+        const mappedPage = actualData.data.map(mapJsonRowToProductInsightData);
         allData.push(...mappedPage);
         
         console.log(`[Insights Fetch] Page ${pageCount + 1}: ${mappedPage.length} records (total: ${allData.length})`);
@@ -286,8 +305,8 @@ export const facebookApiService = {
         }
         
         // Check if there's more data
-        if (backendResult.paging && backendResult.paging.next && backendResult.paging.cursors?.after) {
-          after = backendResult.paging.cursors.after;
+        if (actualData.paging && actualData.paging.next && actualData.paging.cursors?.after) {
+          after = actualData.paging.cursors.after;
           pageCount++;
         } else {
           // No more pages

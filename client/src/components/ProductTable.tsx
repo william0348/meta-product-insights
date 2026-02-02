@@ -43,8 +43,10 @@ export const ProductTable: React.FC<Props> = ({ data, totalCount }) => {
                 <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">Spend</TableHead>
                 <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">Impr.</TableHead>
                 <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">Link Clicks</TableHead>
-                <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">CTR</TableHead>
-                <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">CPC</TableHead>
+                <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">Link CTR %</TableHead>
+                <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">CVR %</TableHead>
+                <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">CPM</TableHead>
+                <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">Cost/Click</TableHead>
                 <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">Ad Purchases</TableHead>
                 <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">Cat. Purchases</TableHead>
                 <TableHead className="text-right font-bold text-xs uppercase tracking-wide text-muted-foreground">ROAS</TableHead>
@@ -67,11 +69,17 @@ export const ProductTable: React.FC<Props> = ({ data, totalCount }) => {
                   <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatNumber(row.impressions)}</TableCell>
                   <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatNumber(row.link_clicks)}</TableCell>
                   <TableCell className="text-right font-mono text-sm">
-                    <span className={row.ctr > 1 ? "text-emerald-600 font-bold" : "text-muted-foreground"}>
-                      {formatPercent(row.ctr)}
+                    <span className={row.inline_link_click_ctr > 1 ? "text-emerald-600 font-bold" : "text-muted-foreground"}>
+                      {formatPercent(row.inline_link_click_ctr)}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatCurrency(row.cpc)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    <span className={row.cvr > 1 ? "text-emerald-600 font-bold" : "text-muted-foreground"}>
+                      {formatPercent(row.cvr)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatCurrency(row.cpm)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatCurrency(row.cost_per_inline_link_click)}</TableCell>
                   <TableCell className="text-right font-mono text-sm font-bold">{formatNumber(row.purchases)}</TableCell>
                   <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatNumber(row.catalog_purchases || 0)}</TableCell>
                   <TableCell className="text-right font-mono text-sm">
@@ -87,7 +95,7 @@ export const ProductTable: React.FC<Props> = ({ data, totalCount }) => {
               ))}
               {data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center text-muted-foreground text-sm italic">
+                  <TableCell colSpan={11} className="h-24 text-center text-muted-foreground text-sm italic">
                     No data available for current filters
                   </TableCell>
                 </TableRow>

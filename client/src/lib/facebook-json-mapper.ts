@@ -31,8 +31,13 @@ export const mapJsonRowToProductInsightData = (row: any): ProductInsightData => 
     return actionValue ? pFloat(actionValue.value) : 0;
   };
 
-  // Extract product info from product_id breakdown
-  const productId = row.product_id || 'N/A';
+  // Extract product info from Facebook API response
+  // The API returns: product_name, product_content_id, product_retailer_id, product_brand, product_category
+  const productName = row.product_name || 'N/A';
+  const productContentId = row.product_content_id || row.product_retailer_id || 'N/A';
+  const productRetailerId = row.product_retailer_id || row.product_content_id || 'N/A';
+  const productBrand = row.product_brand || undefined;
+  const productCategory = row.product_category || undefined;
   
   // Extract metrics
   const impressions = pInt(row.impressions);
@@ -64,10 +69,10 @@ export const mapJsonRowToProductInsightData = (row: any): ProductInsightData => 
   const purchaseRoas = spend > 0 ? purchaseValue / spend : 0;
 
   return {
-    product_name: productId, // API doesn't return product name, only ID
-    product_retailer_id: productId,
-    product_brand: undefined,
-    product_category: undefined,
+    product_name: productName,
+    product_retailer_id: productRetailerId,
+    product_brand: productBrand,
+    product_category: productCategory,
     
     impressions,
     spend,
