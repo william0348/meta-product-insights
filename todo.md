@@ -32,3 +32,4 @@
 - [x] Create backend endpoint to stream/paginate data from saved CSV file
 - [x] Update frontend to fetch data in chunks from file instead of loading all at once
 - [x] Test implementation - all tests passing (4/4)
+- [x] Fix __dirname is not defined error in ES modules
