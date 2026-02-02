@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.11
 """
 CSV Chunk Reader
 Reads a specific chunk of rows from a CSV file for pagination

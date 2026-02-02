@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.11
 """
 Facebook CSV Download and Parser
 Downloads CSV from Facebook's lookaside URL and returns parsed JSON data

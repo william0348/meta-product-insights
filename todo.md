@@ -34,3 +34,5 @@
 - [x] Test implementation - all tests passing (4/4)
 - [x] Fix __dirname is not defined error in ES modules
 - [x] Fix Python SRE module mismatch by using python3.11 instead of python3
+- [x] Add shebang to Python scripts to force Python 3.11 interpreter
+- [x] Use absolute path /usr/bin/python3.11 in backend to avoid environment issues
