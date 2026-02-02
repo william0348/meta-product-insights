@@ -1,11 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
-import axios from "axios";
+import { exec } from "child_process";
 
-// Mock axios
-vi.mock("axios");
-const mockedAxios = vi.mocked(axios);
+// Mock child_process exec
+vi.mock("child_process", () => ({
+  exec: vi.fn(),
+}));
+
+const mockedExec = vi.mocked(exec);
 
 function createTestContext(): TrpcContext {
   return {
@@ -21,19 +24,29 @@ function createTestContext(): TrpcContext {
 }
 
 describe("facebook.downloadReportCSV", () => {
-  it("successfully downloads CSV from Facebook via proxy", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("successfully downloads CSV and saves to file via Python script", async () => {
     const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
-    const mockCsvData = `Product Name,Impressions,Spend
-Test Product,1000,50.00`;
+    const mockPythonResponse = JSON.stringify({
+      success: true,
+      file_path: "/home/ubuntu/meta-product-insights/storage/csv_cache/report_test_20260202.csv",
+      preview_data: [
+        { "Product Name": "Test Product", "Impressions": "1000", "Spend": "50.00" }
+      ],
+      total_rows: 100,
+      preview_rows: 1,
+      columns: ["Product Name", "Impressions", "Spend"]
+    });
 
-    mockedAxios.get.mockResolvedValueOnce({
-      data: mockCsvData,
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config: {} as any,
+    // Mock exec to call callback with success
+    mockedExec.mockImplementation((cmd: any, options: any, callback: any) => {
+      callback(null, { stdout: mockPythonResponse, stderr: "" });
+      return {} as any;
     });
 
     const result = await caller.facebook.downloadReportCSV({
@@ -42,42 +55,55 @@ Test Product,1000,50.00`;
     });
 
     expect(result.success).toBe(true);
-    expect(result.csvData).toBe(mockCsvData);
-    expect(mockedAxios.get).toHaveBeenCalledWith(
-      expect.stringContaining("lookaside.facebook.com"),
-      expect.objectContaining({
-        responseType: "text",
-        timeout: 120000,
-        maxContentLength: 500 * 1024 * 1024,
-        maxBodyLength: 500 * 1024 * 1024,
-      })
+    expect(result.filePath).toContain("/storage/csv_cache/");
+    expect(result.previewData).toHaveLength(1);
+    expect(result.totalRows).toBe(100);
+    expect(result.previewRows).toBe(1);
+    expect(mockedExec).toHaveBeenCalledWith(
+      expect.stringContaining("download_facebook_csv.py"),
+      expect.objectContaining({ maxBuffer: 50 * 1024 * 1024 }),
+      expect.any(Function)
     );
   });
 
-  it("throws error when CSV download fails", async () => {
+  it("throws error when Python script fails", async () => {
     const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
-    mockedAxios.get.mockRejectedValueOnce(new Error("Network error"));
+    const mockPythonError = JSON.stringify({
+      success: false,
+      error: "HTTP Error 503: Service Unavailable"
+    });
+
+    mockedExec.mockImplementation((cmd: any, options: any, callback: any) => {
+      callback(null, { stdout: mockPythonError, stderr: "" });
+      return {} as any;
+    });
 
     await expect(
       caller.facebook.downloadReportCSV({
         reportRunId: "test_report_123",
         accessToken: "test_token",
       })
-    ).rejects.toThrow("Network error");
+    ).rejects.toThrow("HTTP Error 503");
   });
 
-  it("constructs correct Facebook lookaside URL", async () => {
+  it("passes correct parameters to Python script", async () => {
     const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
-    mockedAxios.get.mockResolvedValueOnce({
-      data: "test",
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config: {} as any,
+    const mockPythonResponse = JSON.stringify({
+      success: true,
+      file_path: "/test/path.csv",
+      preview_data: [],
+      total_rows: 0,
+      preview_rows: 0,
+      columns: []
+    });
+
+    mockedExec.mockImplementation((cmd: any, options: any, callback: any) => {
+      callback(null, { stdout: mockPythonResponse, stderr: "" });
+      return {} as any;
     });
 
     await caller.facebook.downloadReportCSV({
@@ -85,9 +111,10 @@ Test Product,1000,50.00`;
       accessToken: "token_789",
     });
 
-    expect(mockedAxios.get).toHaveBeenCalledWith(
-      "https://lookaside.facebook.com/ads/ads_insights/download_report/business/?report_run_id=report_456&access_token=token_789",
-      expect.any(Object)
+    expect(mockedExec).toHaveBeenCalledWith(
+      expect.stringContaining('"report_456" "token_789"'),
+      expect.any(Object),
+      expect.any(Function)
     );
   });
 });

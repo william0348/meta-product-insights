@@ -28,3 +28,7 @@
 - [x] Update backend to call Python script instead of axios  
 - [x] Test Python implementation - all tests passing (4/4)
 - [x] Update CSV field mapping to match Facebook's actual headers (Product Name, Content ID, Link Click CTR (%), etc.)
+- [x] Update Python script to save CSV to file storage instead of returning full content
+- [x] Create backend endpoint to stream/paginate data from saved CSV file
+- [x] Update frontend to fetch data in chunks from file instead of loading all at once
+- [x] Test implementation - all tests passing (4/4)

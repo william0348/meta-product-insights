@@ -2,7 +2,12 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import axios from "axios";
+import { exec } from "child_process";
+import { promisify } from "util";
+import fs from "fs/promises";
+import path from "path";
+
+const execAsync = promisify(exec);
 import { z } from "zod";
 
 export const appRouter = router({
@@ -29,44 +34,70 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const { reportRunId, accessToken } = input;
         
-        // Download CSV from Facebook's lookaside URL server-side (no CORS)
-        const downloadUrl = `https://lookaside.facebook.com/ads/ads_insights/download_report/business/?report_run_id=${reportRunId}&access_token=${accessToken}`;
-        
         try {
-          const response = await axios.get(downloadUrl, {
-            responseType: 'text',
-            timeout: 120000, // 120 second timeout for large files (398MB can take 10-15s)
-            maxContentLength: 500 * 1024 * 1024, // 500MB max
-            maxBodyLength: 500 * 1024 * 1024, // 500MB max
-          });
+          // Call Python script to download and save CSV
+          const scriptPath = path.join(__dirname, 'download_facebook_csv.py');
+          const { stdout, stderr } = await execAsync(
+            `python3 "${scriptPath}" "${reportRunId}" "${accessToken}"`,
+            { maxBuffer: 50 * 1024 * 1024 } // 50MB buffer for JSON output
+          );
+          
+          if (stderr) {
+            console.error('[Facebook CSV] Python stderr:', stderr);
+          }
+          
+          const result = JSON.parse(stdout);
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Unknown error from Python script');
+          }
           
           return {
             success: true,
-            csvData: response.data,
+            filePath: result.file_path,
+            previewData: result.preview_data,
+            totalRows: result.total_rows,
+            previewRows: result.preview_rows,
+            columns: result.columns,
           };
         } catch (error: any) {
-          console.error('[Facebook CSV Proxy] Error downloading CSV:', error.message);
-          console.error('[Facebook CSV Proxy] Error details:', {
-            status: error.response?.status,
-            statusText: error.response?.statusText,
-            data: error.response?.data,
-            reportRunId,
-          });
+          console.error('[Facebook CSV Proxy] Error:', error.message);
+          throw new Error(`Failed to download CSV: ${error.message}`);
+        }
+      }),
+
+    // Get more data from saved CSV file (pagination)
+    getCSVData: publicProcedure
+      .input(z.object({
+        filePath: z.string(),
+        offset: z.number().default(0),
+        limit: z.number().default(100),
+      }))
+      .query(async ({ input }) => {
+        const { filePath, offset, limit } = input;
+        
+        try {
+          // Read and parse CSV file with pandas
+          const scriptPath = path.join(__dirname, 'read_csv_chunk.py');
+          const { stdout } = await execAsync(
+            `python3 "${scriptPath}" "${filePath}" ${offset} ${limit}`,
+            { maxBuffer: 50 * 1024 * 1024 }
+          );
           
-          // Provide more specific error messages
-          if (error.response) {
-            const status = error.response.status;
-            if (status === 503) {
-              throw new Error(`Facebook API temporarily unavailable (503). The report may still be processing. Please wait a moment and try again.`);
-            } else if (status === 400) {
-              throw new Error(`Invalid report request (400). Check that the report run ID and access token are correct.`);
-            } else if (status === 404) {
-              throw new Error(`Report not found (404). The report may have expired or the ID is incorrect.`);
-            }
-            throw new Error(`Facebook API error (${status}): ${error.response.statusText}`);
+          const result = JSON.parse(stdout);
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to read CSV chunk');
           }
           
-          throw new Error(`Network error: ${error.message}`);
+          return {
+            success: true,
+            data: result.data,
+            hasMore: result.has_more,
+          };
+        } catch (error: any) {
+          console.error('[CSV Chunk Reader] Error:', error.message);
+          throw new Error(`Failed to read CSV data: ${error.message}`);
         }
       }),
   }),

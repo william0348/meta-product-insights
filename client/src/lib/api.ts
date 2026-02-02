@@ -272,53 +272,39 @@ export const facebookApiService = {
       
       const result = await response.json();
       // tRPC batch response format: array with result at index 0
-      const csvText = result[0].result.data.csvData;
+      const backendResult = result[0].result.data;
       
       if (onDownloadProgress) {
-        onDownloadProgress(70); // Received data, parsing CSV...
+        onDownloadProgress(70); // Received data, parsing preview...
       }
+      
+      console.log('[CSV Download] File saved to:', backendResult.filePath);
+      console.log('[CSV Download] Total rows:', backendResult.totalRows);
+      console.log('[CSV Download] Preview rows:', backendResult.previewRows);
+      
+      // Map preview data (first 100 rows) to our data structure
+      const mappedData = backendResult.previewData.map(mapCsvRowToProductInsightData);
+      console.log('[CSV Parse] Mapped preview data:', mappedData.length, 'records');
+      console.log('[CSV Parse] First mapped record:', mappedData[0]);
+      
+      if (onDownloadProgress) {
+        onDownloadProgress(90); // Mapping complete
+      }
+      
+      // Filter out rows with no product name/id if necessary (cleanup)
+      const validData = mappedData.filter((item: ProductInsightData) => item.product_retailer_id !== 'N/A' && item.product_name !== 'N/A');
+      console.log('[CSV Parse] Valid data after filtering:', validData.length, 'records');
 
-      // Parse CSV using PapaParse
-      return new Promise((resolve, reject) => {
-        Papa.parse(csvText, {
-          header: true,
-          skipEmptyLines: true,
-          download: false, // Explicitly tell Papa we're parsing a string, not downloading
-          complete: (results) => {
-            if (results.errors && results.errors.length > 0) {
-              console.warn("CSV Parsing Warnings:", results.errors);
-            }
-            
-            // Map raw CSV rows to our data structure
-            console.log('[CSV Parse] Raw CSV rows:', results.data.length);
-            console.log('[CSV Parse] First raw row:', results.data[0]);
-            const mappedData = results.data.map(mapCsvRowToProductInsightData);
-            console.log('[CSV Parse] Mapped data:', mappedData.length, 'records');
-            console.log('[CSV Parse] First mapped record:', mappedData[0]);
-            
-            if (onDownloadProgress) {
-              onDownloadProgress(90); // Mapping complete
-            }
-            
-            // Filter out rows with no product name/id if necessary (cleanup)
-            const validData = mappedData.filter(item => item.product_retailer_id !== 'N/A' && item.product_name !== 'N/A');
-            console.log('[CSV Parse] Valid data after filtering:', validData.length, 'records');
+      if (onProgress) {
+        onProgress(validData);
+      }
+      
+      if (onDownloadProgress) {
+        onDownloadProgress(100); // Complete
+      }
+      
+      return { data: validData };
 
-            if (onProgress) {
-              onProgress(validData);
-            }
-            
-            if (onDownloadProgress) {
-              onDownloadProgress(100); // Complete
-            }
-            
-            resolve({ data: validData });
-          },
-          error: (error: any) => {
-            reject(new Error(`CSV Parsing Error: ${error.message}`));
-          }
-        });
-      });
     } catch (error) {
         console.error("Error downloading/parsing report CSV:", error);
         // If this is the last attempt, throw the error
