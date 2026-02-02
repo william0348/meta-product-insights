@@ -49,9 +49,14 @@ export const mapJsonRowToProductInsightData = (row: any): ProductInsightData => 
   
   // Extract purchase metrics from actions
   const omniPurchases = getActionValue(row.actions, 'omni_purchase');
-  const catalogPurchases = getActionValue(row.actions, 'omni_purchase'); // Same as omni_purchase
   const addsToCart = getActionValue(row.actions, 'omni_add_to_cart');
   const productViews = getActionValue(row.actions, 'omni_view_content');
+  
+  // Extract catalog purchases from converted_product_omni_purchase (top-level field, not in actions)
+  // This field is an array with a single object: [{"value": "123"}]
+  const catalogPurchases = row.converted_product_omni_purchase && Array.isArray(row.converted_product_omni_purchase) && row.converted_product_omni_purchase[0]
+    ? pInt(row.converted_product_omni_purchase[0].value)
+    : 0;
   
   // Extract purchase values
   const purchaseValue = getActionValueAmount(row.action_values, 'omni_purchase');

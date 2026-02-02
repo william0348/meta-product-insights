@@ -65,3 +65,4 @@
 - [x] Fix table display for CVR (%) - now uses cvr field
 - [x] Fix table display for CPM - now uses cpm field
 - [x] Fix table display for Cost Per Link Click - now uses cost_per_inline_link_click
+- [x] Fix catalog_purchases to use converted_product_omni_purchase field instead of actions:omni_purchase
