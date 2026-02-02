@@ -2,18 +2,26 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { exec } from "child_process";
-import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
-
-const execAsync = promisify(exec);
 import { z } from "zod";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import axios from "axios";
+import { createReadStream, createWriteStream } from "fs";
+import csvParser from "csv-parser";
+import { pipeline } from "stream/promises";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Ensure storage directory exists
+const STORAGE_DIR = path.join(__dirname, '../storage/csv_cache');
+
+// Initialize storage directory
+(async () => {
+  await fs.mkdir(STORAGE_DIR, { recursive: true });
+})();
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -40,34 +48,109 @@ export const appRouter = router({
         const { reportRunId, accessToken } = input;
         
         try {
-          // Call Python script to download and save CSV using wrapper script
-          const scriptPath = path.join(__dirname, 'download_facebook_csv.py');
-          const wrapperPath = path.join(__dirname, 'run_python311.sh');
-          const { stdout, stderr} = await execAsync(
-            `"${wrapperPath}" "${scriptPath}" "${reportRunId}" "${accessToken}"`,
-            { maxBuffer: 50 * 1024 * 1024 } // 50MB buffer for JSON output
-          );
+          // Build Facebook CSV download URL
+          const downloadUrl = `https://www.facebook.com/${reportRunId}?access_token=${accessToken}&format=csv`;
           
-          if (stderr) {
-            console.error('[Facebook CSV] Python stderr:', stderr);
+          console.log('[Facebook CSV] Downloading from:', downloadUrl.replace(accessToken, 'TOKEN_HIDDEN'));
+          
+          // Download CSV file with retry logic for 503 errors
+          let response;
+          let retryCount = 0;
+          const maxRetries = 3;
+          const retryDelays = [5000, 10000, 15000]; // 5s, 10s, 15s
+          
+          while (retryCount <= maxRetries) {
+            try {
+              // Add initial delay after report completion
+              if (retryCount === 0) {
+                console.log('[Facebook CSV] Waiting 3 seconds for CDN to prepare file...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+              }
+              
+              response = await axios.get(downloadUrl, {
+                responseType: 'stream',
+                timeout: 120000, // 120 second timeout
+                maxContentLength: 500 * 1024 * 1024, // 500MB
+                maxBodyLength: 500 * 1024 * 1024,
+              });
+              
+              console.log('[Facebook CSV] Download successful, status:', response.status);
+              break; // Success, exit retry loop
+              
+            } catch (error: any) {
+              if (error.response?.status === 503 && retryCount < maxRetries) {
+                const delay = retryDelays[retryCount];
+                console.log(`[Facebook CSV] Got 503, retrying in ${delay/1000}s (attempt ${retryCount + 1}/${maxRetries})...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                retryCount++;
+              } else {
+                throw error; // Non-503 error or max retries reached
+              }
+            }
           }
           
-          const result = JSON.parse(stdout);
-          
-          if (!result.success) {
-            throw new Error(result.error || 'Unknown error from Python script');
+          if (!response) {
+            throw new Error('Failed to download CSV after all retries');
           }
+          
+          // Save CSV to file
+          const fileName = `${reportRunId}_${Date.now()}.csv`;
+          const filePath = path.join(STORAGE_DIR, fileName);
+          const writeStream = createWriteStream(filePath);
+          
+          await pipeline(response.data, writeStream);
+          
+          console.log('[Facebook CSV] File saved to:', filePath);
+          
+          // Parse first 100 rows for preview
+          const previewData: any[] = [];
+          const columns: string[] = [];
+          let totalRows = 0;
+          
+          await new Promise<void>((resolve, reject) => {
+            createReadStream(filePath)
+              .pipe(csvParser())
+              .on('headers', (headers) => {
+                columns.push(...headers);
+                console.log('[Facebook CSV] Detected columns:', headers);
+              })
+              .on('data', (row) => {
+                totalRows++;
+                if (previewData.length < 100) {
+                  // Convert numeric strings to numbers
+                  const processedRow: any = {};
+                  for (const [key, value] of Object.entries(row)) {
+                    if (typeof value === 'string' && value.trim() !== '') {
+                      const numValue = parseFloat(value);
+                      processedRow[key] = isNaN(numValue) ? value : numValue;
+                    } else {
+                      processedRow[key] = value || null;
+                    }
+                  }
+                  previewData.push(processedRow);
+                }
+              })
+              .on('end', () => {
+                console.log(`[Facebook CSV] Parsed ${totalRows} total rows, returning ${previewData.length} preview rows`);
+                resolve();
+              })
+              .on('error', reject);
+          });
           
           return {
             success: true,
-            filePath: result.file_path,
-            previewData: result.preview_data,
-            totalRows: result.total_rows,
-            previewRows: result.preview_rows,
-            columns: result.columns,
+            filePath: fileName, // Return relative filename only
+            previewData,
+            totalRows,
+            previewRows: previewData.length,
+            columns,
           };
         } catch (error: any) {
           console.error('[Facebook CSV Proxy] Error:', error.message);
+          if (error.response) {
+            console.error('[Facebook CSV Proxy] Response status:', error.response.status);
+            console.error('[Facebook CSV Proxy] Response data:', error.response.data);
+          }
           throw new Error(`Failed to download CSV: ${error.message}`);
         }
       }),
@@ -83,24 +166,43 @@ export const appRouter = router({
         const { filePath, offset, limit } = input;
         
         try {
-          // Read and parse CSV file with pandas using wrapper script
-          const scriptPath = path.join(__dirname, 'read_csv_chunk.py');
-          const wrapperPath = path.join(__dirname, 'run_python311.sh');
-          const { stdout } = await execAsync(
-            `"${wrapperPath}" "${scriptPath}" "${filePath}" ${offset} ${limit}`,
-            { maxBuffer: 50 * 1024 * 1024 }
-          );
+          // Construct full path
+          const fullPath = path.join(STORAGE_DIR, filePath);
           
-          const result = JSON.parse(stdout);
+          // Check if file exists
+          await fs.access(fullPath);
           
-          if (!result.success) {
-            throw new Error(result.error || 'Failed to read CSV chunk');
-          }
+          // Read CSV with offset and limit
+          const data: any[] = [];
+          let currentRow = 0;
+          
+          await new Promise<void>((resolve, reject) => {
+            createReadStream(fullPath)
+              .pipe(csvParser())
+              .on('data', (row) => {
+                currentRow++;
+                if (currentRow > offset && data.length < limit) {
+                  // Convert numeric strings to numbers
+                  const processedRow: any = {};
+                  for (const [key, value] of Object.entries(row)) {
+                    if (typeof value === 'string' && value.trim() !== '') {
+                      const numValue = parseFloat(value);
+                      processedRow[key] = isNaN(numValue) ? value : numValue;
+                    } else {
+                      processedRow[key] = value || null;
+                    }
+                  }
+                  data.push(processedRow);
+                }
+              })
+              .on('end', resolve)
+              .on('error', reject);
+          });
           
           return {
             success: true,
-            data: result.data,
-            hasMore: result.has_more,
+            data,
+            hasMore: data.length === limit, // If we got full limit, there might be more
           };
         } catch (error: any) {
           console.error('[CSV Chunk Reader] Error:', error.message);

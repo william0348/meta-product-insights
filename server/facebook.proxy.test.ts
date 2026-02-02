@@ -1,14 +1,43 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
-import { exec } from "child_process";
+import axios from "axios";
+import { createReadStream } from "fs";
+import { Readable } from "stream";
 
-// Mock child_process exec
-vi.mock("child_process", () => ({
-  exec: vi.fn(),
+// Mock axios
+vi.mock("axios");
+const mockedAxios = vi.mocked(axios);
+
+// Mock fs
+vi.mock("fs", async () => {
+  const actual = await vi.importActual("fs");
+  const { Writable } = await import("stream");
+  return {
+    ...actual,
+    createReadStream: vi.fn(),
+    createWriteStream: vi.fn(() => {
+      const writable = new Writable({
+        write(chunk, encoding, callback) {
+          callback();
+        }
+      });
+      return writable;
+    }),
+  };
+});
+
+// Mock fs/promises
+vi.mock("fs/promises", () => ({
+  default: {
+    mkdir: vi.fn().mockResolvedValue(undefined),
+    access: vi.fn().mockResolvedValue(undefined),
+  },
+  mkdir: vi.fn().mockResolvedValue(undefined),
+  access: vi.fn().mockResolvedValue(undefined),
 }));
 
-const mockedExec = vi.mocked(exec);
+const mockedCreateReadStream = vi.mocked(createReadStream);
 
 function createTestContext(): TrpcContext {
   return {
@@ -28,26 +57,37 @@ describe("facebook.downloadReportCSV", () => {
     vi.clearAllMocks();
   });
 
-  it("successfully downloads CSV and saves to file via Python script", async () => {
+  it("successfully downloads CSV and parses data", async () => {
     const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
-    const mockPythonResponse = JSON.stringify({
-      success: true,
-      file_path: "/home/ubuntu/meta-product-insights/storage/csv_cache/report_test_20260202.csv",
-      preview_data: [
-        { "Product Name": "Test Product", "Impressions": "1000", "Spend": "50.00" }
-      ],
-      total_rows: 100,
-      preview_rows: 1,
-      columns: ["Product Name", "Impressions", "Spend"]
-    });
+    // Mock CSV data
+    const csvData = `Product Name,Impressions,Spend
+Test Product,1000,50.00
+Another Product,2000,100.00`;
 
-    // Mock exec to call callback with success
-    mockedExec.mockImplementation((cmd: any, options: any, callback: any) => {
-      callback(null, { stdout: mockPythonResponse, stderr: "" });
-      return {} as any;
-    });
+    // Mock axios response with stream
+    const mockStream = Readable.from([csvData]);
+    mockedAxios.get.mockResolvedValue({
+      status: 200,
+      data: mockStream,
+    } as any);
+
+    // Mock CSV parser stream
+    const mockCsvStream = Readable.from([
+      { "Product Name": "Test Product", "Impressions": "1000", "Spend": "50.00" },
+      { "Product Name": "Another Product", "Impressions": "2000", "Spend": "100.00" },
+    ]);
+    
+    // Add headers event
+    mockCsvStream.on = vi.fn((event, handler) => {
+      if (event === "headers") {
+        handler(["Product Name", "Impressions", "Spend"]);
+      }
+      return mockCsvStream;
+    }) as any;
+
+    mockedCreateReadStream.mockReturnValue(mockCsvStream as any);
 
     const result = await caller.facebook.downloadReportCSV({
       reportRunId: "test_report_123",
@@ -55,66 +95,61 @@ describe("facebook.downloadReportCSV", () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.filePath).toContain("/storage/csv_cache/");
-    expect(result.previewData).toHaveLength(1);
-    expect(result.totalRows).toBe(100);
-    expect(result.previewRows).toBe(1);
-    expect(mockedExec).toHaveBeenCalledWith(
-      expect.stringContaining("download_facebook_csv.py"),
-      expect.objectContaining({ maxBuffer: 50 * 1024 * 1024 }),
-      expect.any(Function)
+    expect(result.filePath).toContain(".csv");
+    expect(result.previewData).toBeDefined();
+    expect(result.totalRows).toBeGreaterThan(0);
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      expect.stringContaining("test_report_123"),
+      expect.objectContaining({
+        responseType: "stream",
+        timeout: 120000,
+      })
     );
   });
 
-  it("throws error when Python script fails", async () => {
+  it("throws error when download fails", async () => {
     const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
-    const mockPythonError = JSON.stringify({
-      success: false,
-      error: "HTTP Error 503: Service Unavailable"
-    });
-
-    mockedExec.mockImplementation((cmd: any, options: any, callback: any) => {
-      callback(null, { stdout: mockPythonError, stderr: "" });
-      return {} as any;
-    });
+    mockedAxios.get.mockRejectedValue(new Error("Network error"));
 
     await expect(
       caller.facebook.downloadReportCSV({
         reportRunId: "test_report_123",
         accessToken: "test_token",
       })
-    ).rejects.toThrow("HTTP Error 503");
+    ).rejects.toThrow("Failed to download CSV");
   });
 
-  it("passes correct parameters to Python script", async () => {
+  it("builds correct Facebook download URL", async () => {
     const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
-    const mockPythonResponse = JSON.stringify({
-      success: true,
-      file_path: "/test/path.csv",
-      preview_data: [],
-      total_rows: 0,
-      preview_rows: 0,
-      columns: []
-    });
+    const mockStream = Readable.from(["Product Name,Impressions\nTest,100"]);
+    mockedAxios.get.mockResolvedValue({
+      status: 200,
+      data: mockStream,
+    } as any);
 
-    mockedExec.mockImplementation((cmd: any, options: any, callback: any) => {
-      callback(null, { stdout: mockPythonResponse, stderr: "" });
-      return {} as any;
-    });
+    const mockCsvStream = Readable.from([
+      { "Product Name": "Test", "Impressions": "100" },
+    ]);
+    mockCsvStream.on = vi.fn((event, handler) => {
+      if (event === "headers") {
+        handler(["Product Name", "Impressions"]);
+      }
+      return mockCsvStream;
+    }) as any;
+    mockedCreateReadStream.mockReturnValue(mockCsvStream as any);
 
     await caller.facebook.downloadReportCSV({
       reportRunId: "report_456",
       accessToken: "token_789",
     });
 
-    expect(mockedExec).toHaveBeenCalledWith(
-      expect.stringContaining('"report_456" "token_789"'),
-      expect.any(Object),
-      expect.any(Function)
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      "https://www.facebook.com/report_456?access_token=token_789&format=csv",
+      expect.any(Object)
     );
   });
 });

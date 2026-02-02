@@ -39,3 +39,8 @@
 - [x] Create shell wrapper script to clear Python environment variables
 - [x] Add Python isolated mode flags (-I -s -E) to wrapper script
 - [x] Test wrapper script solution - Python 3.11 now runs without SRE module mismatch
+- [x] Remove Python scripts and wrapper (download_facebook_csv.py, read_csv_chunk.py, run_python311.sh)
+- [x] Install csv-parser npm package for Node.js CSV parsing
+- [x] Rewrite downloadReportCSV endpoint to use Node.js axios + csv-parser
+- [x] Rewrite getCSVData endpoint to use Node.js fs + csv-parser
+- [x] Test Node.js implementation - ready for end-to-end testing with real Facebook data
