@@ -33,3 +33,4 @@
 - [x] Update frontend to fetch data in chunks from file instead of loading all at once
 - [x] Test implementation - all tests passing (4/4)
 - [x] Fix __dirname is not defined error in ES modules
+- [x] Fix Python SRE module mismatch by using python3.11 instead of python3
