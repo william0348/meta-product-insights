@@ -48,8 +48,20 @@ export const appRouter = router({
         const { reportRunId, accessToken } = input;
         
         try {
-          // Build Facebook CSV download URL
-          const downloadUrl = `https://www.facebook.com/${reportRunId}?access_token=${accessToken}&format=csv`;
+          // First, get the report status to extract the CSV download URL
+          const statusUrl = `https://graph.facebook.com/v22.0/${reportRunId}?access_token=${accessToken}`;
+          console.log('[Facebook CSV] Fetching report status from:', statusUrl.replace(accessToken, 'TOKEN_HIDDEN'));
+          
+          const statusResponse = await axios.get(statusUrl);
+          const reportData = statusResponse.data;
+          
+          if (!reportData.async_status || reportData.async_status !== 'Job Completed') {
+            throw new Error(`Report not ready. Status: ${reportData.async_status || 'unknown'}`);
+          }
+          
+          // For async reports with CSV format, use the /insights endpoint
+          // This returns the CSV data directly
+          const downloadUrl = `https://graph.facebook.com/v22.0/${reportRunId}/insights?access_token=${accessToken}`;
           
           console.log('[Facebook CSV] Downloading from:', downloadUrl.replace(accessToken, 'TOKEN_HIDDEN'));
           

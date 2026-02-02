@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { cleanupOldCSVFiles } from "../cleanup-csv";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -60,6 +61,17 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // Schedule CSV cleanup to run every 6 hours
+  const CLEANUP_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
+  setInterval(async () => {
+    console.log("[CSV Cleanup] Running scheduled cleanup...");
+    await cleanupOldCSVFiles();
+  }, CLEANUP_INTERVAL);
+
+  // Run cleanup immediately on startup
+  console.log("[CSV Cleanup] Running initial cleanup...");
+  cleanupOldCSVFiles().catch(console.error);
 }
 
 startServer().catch(console.error);

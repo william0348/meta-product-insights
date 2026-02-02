@@ -44,3 +44,8 @@
 - [x] Rewrite downloadReportCSV endpoint to use Node.js axios + csv-parser
 - [x] Rewrite getCSVData endpoint to use Node.js fs + csv-parser
 - [x] Test Node.js implementation - ready for end-to-end testing with real Facebook data
+- [x] Fix undefined previewData error - use correct Facebook /insights endpoint for CSV download
+- [ ] Add null check and better error handling in frontend API
+- [x] Add summary metrics dashboard (total products, total spend, avg CTR, conversion rate)
+- [x] Implement automatic CSV cleanup for files older than 24 hours (runs every 6 hours)
+- [x] Test complete workflow with real Facebook data - ready for user testing

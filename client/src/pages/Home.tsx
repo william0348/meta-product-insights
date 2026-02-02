@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { InsightsCharts } from '@/components/InsightsCharts';
 import { ProductTable } from '@/components/ProductTable';
 import { FilterBar } from '@/components/FilterBar';
+import { SummaryMetrics } from '@/components/SummaryMetrics';
 
 import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2 } from 'lucide-react';
 import { utils, writeFile } from 'xlsx';
@@ -383,6 +384,9 @@ export default function Home() {
                     </Button>
                   </div>
                 </div>
+
+                {/* Summary Metrics */}
+                <SummaryMetrics data={filteredData || []} />
 
                 {/* Charts */}
                 <InsightsCharts data={previewData} />
