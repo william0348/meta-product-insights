@@ -26,6 +26,8 @@ export default function Home() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [loadedRowCount, setLoadedRowCount] = useState<number>(0);
+  const [isLoadingComplete, setIsLoadingComplete] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   
   // Filtering
@@ -146,12 +148,28 @@ export default function Home() {
     try {
       setIsFetchingMore(true);
       setDownloadProgress(0);
+      setLoadedRowCount(0);
+      setIsLoadingComplete(false);
+      
+      let hasShownInitialResults = false;
+      
       // 3. Download and Parse CSV with progress tracking
       const results = await facebookApiService.downloadReportCSV(
         id, 
         token, 
         (parsedData) => {
-          setReportData(parsedData); 
+          // Show results immediately after first 1000 rows
+          if (!hasShownInitialResults && parsedData.length >= 1000) {
+            setReportData(parsedData);
+            setLoadedRowCount(parsedData.length);
+            setIsFetchingMore(false); // Stop showing "preparing" state
+            toast.success(`Loaded first ${parsedData.length} rows. Continuing to load more...`);
+            hasShownInitialResults = true;
+          } else if (hasShownInitialResults) {
+            // Update data and count as more rows come in
+            setReportData(parsedData);
+            setLoadedRowCount(parsedData.length);
+          }
         },
         (progress) => {
           setDownloadProgress(progress);
@@ -162,14 +180,16 @@ export default function Home() {
       console.log('[fetchResults] CSV parsed successfully:', results.data.length, 'records');
       console.log('[fetchResults] First 3 records:', results.data.slice(0, 3));
       setReportData(results.data);
+      setLoadedRowCount(results.data.length);
       setDownloadProgress(100);
+      setIsLoadingComplete(true);
       toast.success(`Loaded all ${results.data.length} records`);
     } catch (err: any) {
       setApiError(err.message || "Failed to fetch final report results.");
       toast.error("Failed to fetch results");
     } finally {
       setIsFetchingMore(false);
-      setDownloadProgress(0);
+      setIsLoadingComplete(true);
       setJobStatus(AsyncJobStatus.COMPLETED);
     }
   };
@@ -478,6 +498,29 @@ export default function Home() {
                   activeFilters={activeFilters} 
                   onFiltersChange={setActiveFilters} 
                 />
+
+                {/* Background Loading Progress */}
+                {!isLoadingComplete && loadedRowCount > 0 && (
+                  <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4 rounded-md">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                        <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                          Loading more data... {loadedRowCount.toLocaleString()} rows loaded
+                        </span>
+                      </div>
+                      <span className="text-xs text-blue-700 dark:text-blue-300">
+                        {downloadProgress}% complete
+                      </span>
+                    </div>
+                    <div className="h-2 w-full bg-blue-100 dark:bg-blue-900 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-600 transition-all duration-300 ease-out" 
+                        style={{ width: `${downloadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Filter Summary & Actions */}
                 <div className="flex items-center justify-between">

@@ -79,3 +79,7 @@
 - [x] Replace tags input with Custom Number 0-4 dropdown
 - [x] Remove tags field from catalog update logic
 - [x] Update backend to handle custom number field selection
+- [x] Show initial results after first 1000 rows are loaded
+- [x] Continue fetching remaining data in background
+- [x] Track loaded row count with state variable
+- [x] Add progress bar UI component showing current row count and percentage
