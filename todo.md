@@ -72,3 +72,6 @@
 - [x] Add CatalogUploadModal component with catalog ID, access token, and tag inputs
 - [x] Implement batch upload handler with merge logic for labels and tags
 - [ ] Test catalog batch upload with real data
+- [x] Verify catalog token and ads report token are completely separate
+- [x] Update modal description to clarify different token requirements
+- [x] Update access token label to "Catalog Access Token" for clarity

@@ -81,6 +81,8 @@ export const CatalogUploadModal: React.FC<Props> = ({ open, onOpenChange, produc
           </DialogTitle>
           <DialogDescription>
             Upload {productCount} product{productCount !== 1 ? 's' : ''} to your Facebook Product Catalog with custom labels and tags.
+            <br /><br />
+            <strong>Note:</strong> This requires a separate access token with <code className="bg-secondary px-1 py-0.5 rounded text-xs">catalog_management</code> permission (different from the Ads Insights token).
           </DialogDescription>
         </DialogHeader>
 
@@ -104,17 +106,17 @@ export const CatalogUploadModal: React.FC<Props> = ({ open, onOpenChange, produc
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="accessToken">Access Token *</Label>
+            <Label htmlFor="accessToken">Catalog Access Token *</Label>
             <Input
               id="accessToken"
               type="password"
-              placeholder="Your Facebook API access token"
+              placeholder="Separate token for catalog management"
               value={accessToken}
               onChange={(e) => setAccessToken(e.target.value)}
               disabled={isUploading}
             />
             <p className="text-xs text-muted-foreground">
-              Requires <code className="bg-secondary px-1 py-0.5 rounded">catalog_management</code> permission
+              Requires <code className="bg-secondary px-1 py-0.5 rounded">catalog_management</code> permission (not the same as Ads Insights token)
             </p>
           </div>
 
