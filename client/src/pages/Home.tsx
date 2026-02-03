@@ -49,6 +49,8 @@ export default function Home() {
   const [savedCatalogToken, setSavedCatalogToken] = useState<string | null>(null);
   const [savedCatalogId, setSavedCatalogId] = useState<string | null>(null);
   const [savedAdAccountId, setSavedAdAccountId] = useState<string | null>(null);
+  const [savedMinSpend, setSavedMinSpend] = useState<string | null>(null);
+  const [savedMinCTR, setSavedMinCTR] = useState<string | null>(null);
   
   // Token mutations
   const saveTokenMutation = trpc.tokens.save.useMutation();
@@ -68,6 +70,8 @@ export default function Home() {
     if (adsTokenData?.found) {
       setSavedAdsToken(adsTokenData.accessToken);
       setSavedAdAccountId(adsTokenData.adAccountId);
+      setSavedMinSpend(adsTokenData.minSpend);
+      setSavedMinCTR(adsTokenData.minCTR);
     }
   }, [adsTokenData]);
   
@@ -506,6 +510,8 @@ export default function Home() {
               isProcessing={isRequesting || (jobStatus !== AsyncJobStatus.NOT_STARTED && jobStatus !== AsyncJobStatus.COMPLETED && jobStatus !== AsyncJobStatus.FAILED)} 
               defaultToken={savedAdsToken || undefined}
               defaultAccountId={savedAdAccountId || undefined}
+              defaultMinSpend={savedMinSpend || undefined}
+              defaultMinCTR={savedMinCTR || undefined}
             />
             
             {/* Job Status Card */}

@@ -33,6 +33,8 @@ export const userTokens = mysqlTable("user_tokens", {
   accessToken: text("accessToken").notNull(),
   catalogId: varchar("catalogId", { length: 64 }), // Only for catalog tokens
   adAccountId: varchar("adAccountId", { length: 64 }), // Only for ads tokens
+  minSpend: varchar("minSpend", { length: 32 }), // Default min spend filter
+  minCTR: varchar("minCTR", { length: 32 }), // Default min CTR filter
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

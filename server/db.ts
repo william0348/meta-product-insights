@@ -95,7 +95,7 @@ export async function saveUserToken(
   userId: number,
   tokenType: "ads_management" | "catalog_management",
   accessToken: string,
-  options?: { catalogId?: string; adAccountId?: string }
+  options?: { catalogId?: string; adAccountId?: string; minSpend?: string; minCTR?: string }
 ): Promise<void> {
   const db = await getDb();
   if (!db) {
@@ -119,6 +119,8 @@ export async function saveUserToken(
           accessToken,
           catalogId: options?.catalogId || null,
           adAccountId: options?.adAccountId || null,
+          minSpend: options?.minSpend || null,
+          minCTR: options?.minCTR || null,
         })
         .where(and(eq(userTokens.userId, userId), eq(userTokens.tokenType, tokenType)));
     } else {
@@ -129,6 +131,8 @@ export async function saveUserToken(
         accessToken,
         catalogId: options?.catalogId || null,
         adAccountId: options?.adAccountId || null,
+        minSpend: options?.minSpend || null,
+        minCTR: options?.minCTR || null,
       });
     }
   } catch (error) {

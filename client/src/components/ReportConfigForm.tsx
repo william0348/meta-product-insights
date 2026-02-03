@@ -26,9 +26,11 @@ interface Props {
   isProcessing: boolean;
   defaultToken?: string;
   defaultAccountId?: string;
+  defaultMinSpend?: string;
+  defaultMinCTR?: string;
 }
 
-export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defaultToken, defaultAccountId }) => {
+export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defaultToken, defaultAccountId, defaultMinSpend, defaultMinCTR }) => {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -56,6 +58,19 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
       form.setValue('accountId', defaultAccountId);
     }
   }, [defaultAccountId, form]);
+
+  // Update filter preferences when loaded from database
+  useEffect(() => {
+    if (defaultMinSpend) {
+      form.setValue('minSpend', defaultMinSpend);
+    }
+  }, [defaultMinSpend, form]);
+
+  useEffect(() => {
+    if (defaultMinCTR) {
+      form.setValue('minCTR', defaultMinCTR);
+    }
+  }, [defaultMinCTR, form]);
 
   return (
     <Card className="border-0 shadow-none bg-secondary/30 rounded-none">

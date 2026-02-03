@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Trash2, Key, ShoppingBag, Loader2, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Key, ShoppingBag, Loader2, Eye, EyeOff, Filter } from 'lucide-react';
 
 export default function Settings() {
   const [, setLocation] = useLocation();
@@ -18,13 +18,19 @@ export default function Settings() {
   const [catalogToken, setCatalogToken] = useState('');
   const [catalogId, setCatalogId] = useState('');
   
+  // Filter preferences state
+  const [minSpend, setMinSpend] = useState('');
+  const [minCTR, setMinCTR] = useState('');
+  
   // UI state
   const [showAdsToken, setShowAdsToken] = useState(false);
   const [showCatalogToken, setShowCatalogToken] = useState(false);
   const [isSavingAds, setIsSavingAds] = useState(false);
   const [isSavingCatalog, setIsSavingCatalog] = useState(false);
+  const [isSavingFilters, setIsSavingFilters] = useState(false);
   const [isDeletingAds, setIsDeletingAds] = useState(false);
   const [isDeletingCatalog, setIsDeletingCatalog] = useState(false);
+  const [isDeletingFilters, setIsDeletingFilters] = useState(false);
   
   // tRPC hooks
   const saveTokenMutation = trpc.tokens.save.useMutation();
@@ -45,6 +51,8 @@ export default function Settings() {
     if (adsTokenData?.found) {
       setAdsToken(adsTokenData.accessToken || '');
       setAdsAccountId(adsTokenData.adAccountId || '');
+      setMinSpend(adsTokenData.minSpend || '');
+      setMinCTR(adsTokenData.minCTR || '');
     }
   }, [adsTokenData]);
   
@@ -68,6 +76,8 @@ export default function Settings() {
         tokenType: "ads_management",
         accessToken: adsToken,
         adAccountId: adsAccountId || undefined,
+        minSpend: minSpend || undefined,
+        minCTR: minCTR || undefined,
       });
       toast.success('Ads Report Token saved successfully');
       refetchAdsToken();
@@ -101,6 +111,37 @@ export default function Settings() {
     }
   };
   
+  // Save Filter Preferences
+  const handleSaveFilters = async () => {
+    // Validate inputs
+    if (minSpend && isNaN(parseFloat(minSpend))) {
+      toast.error('Min Spend must be a valid number');
+      return;
+    }
+    if (minCTR && isNaN(parseFloat(minCTR))) {
+      toast.error('Min CTR must be a valid number');
+      return;
+    }
+    
+    setIsSavingFilters(true);
+    try {
+      // Save filter preferences with the ads token (or create a placeholder if no token exists)
+      await saveTokenMutation.mutateAsync({
+        tokenType: "ads_management",
+        accessToken: adsToken || "placeholder",
+        adAccountId: adsAccountId || undefined,
+        minSpend: minSpend || undefined,
+        minCTR: minCTR || undefined,
+      });
+      toast.success('Filter preferences saved successfully');
+      refetchAdsToken();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save filter preferences');
+    } finally {
+      setIsSavingFilters(false);
+    }
+  };
+  
   // Delete Ads Token
   const handleDeleteAdsToken = async () => {
     setIsDeletingAds(true);
@@ -108,6 +149,8 @@ export default function Settings() {
       await deleteTokenMutation.mutateAsync({ tokenType: "ads_management" });
       setAdsToken('');
       setAdsAccountId('');
+      setMinSpend('');
+      setMinCTR('');
       toast.success('Ads Report Token deleted');
       refetchAdsToken();
     } catch (error: any) {
@@ -130,6 +173,29 @@ export default function Settings() {
       toast.error(error.message || 'Failed to delete token');
     } finally {
       setIsDeletingCatalog(false);
+    }
+  };
+  
+  // Clear Filter Preferences
+  const handleClearFilters = async () => {
+    setIsDeletingFilters(true);
+    try {
+      // Save with empty filter values
+      await saveTokenMutation.mutateAsync({
+        tokenType: "ads_management",
+        accessToken: adsToken || "placeholder",
+        adAccountId: adsAccountId || undefined,
+        minSpend: undefined,
+        minCTR: undefined,
+      });
+      setMinSpend('');
+      setMinCTR('');
+      toast.success('Filter preferences cleared');
+      refetchAdsToken();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to clear filter preferences');
+    } finally {
+      setIsDeletingFilters(false);
     }
   };
 
@@ -228,6 +294,81 @@ export default function Settings() {
               {adsTokenData?.found && (
                 <p className="text-xs text-muted-foreground">
                   ✓ Token saved. Last updated: stored in database.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          
+          {/* Filter Preferences Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Filter className="w-5 h-5 text-primary" />
+                <CardTitle>Default Filter Preferences</CardTitle>
+              </div>
+              <CardDescription>
+                Set default minimum values for filtering report data. These values will be auto-loaded when generating reports.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="min-spend">Min Spend ($)</Label>
+                  <Input
+                    id="min-spend"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g., 10.00"
+                    value={minSpend}
+                    onChange={(e) => setMinSpend(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Only show products with spend ≥ this value
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="min-ctr">Min CTR (%)</Label>
+                  <Input
+                    id="min-ctr"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder="e.g., 0.50"
+                    value={minCTR}
+                    onChange={(e) => setMinCTR(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Only show products with CTR ≥ this value
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleSaveFilters} 
+                  disabled={isSavingFilters}
+                  className="gap-2"
+                >
+                  {isSavingFilters ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Preferences
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={handleClearFilters}
+                  disabled={isDeletingFilters || (!minSpend && !minCTR)}
+                  className="gap-2"
+                >
+                  {isDeletingFilters ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Clear
+                </Button>
+              </div>
+              
+              {(adsTokenData?.minSpend || adsTokenData?.minCTR) && (
+                <p className="text-xs text-muted-foreground">
+                  ✓ Filter preferences saved: Min Spend = {adsTokenData.minSpend || '0'}, Min CTR = {adsTokenData.minCTR || '0'}%
                 </p>
               )}
             </CardContent>

@@ -30,12 +30,16 @@ export const appRouter = router({
         accessToken: z.string(),
         catalogId: z.string().optional(),
         adAccountId: z.string().optional(),
+        minSpend: z.string().optional(),
+        minCTR: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
         await saveUserToken(userId, input.tokenType, input.accessToken, {
           catalogId: input.catalogId,
           adAccountId: input.adAccountId,
+          minSpend: input.minSpend,
+          minCTR: input.minCTR,
         });
         return { success: true };
       }),
@@ -49,13 +53,15 @@ export const appRouter = router({
         const userId = ctx.user.id;
         const token = await getUserToken(userId, input.tokenType);
         if (!token) {
-          return { found: false, accessToken: null, catalogId: null, adAccountId: null };
+          return { found: false, accessToken: null, catalogId: null, adAccountId: null, minSpend: null, minCTR: null };
         }
         return {
           found: true,
           accessToken: token.accessToken,
           catalogId: token.catalogId,
           adAccountId: token.adAccountId,
+          minSpend: token.minSpend,
+          minCTR: token.minCTR,
         };
       }),
     

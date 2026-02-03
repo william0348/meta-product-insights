@@ -106,3 +106,9 @@
 - [x] Fix tokens saved in Settings not appearing in Home page forms
 - [x] Ensure ReportConfigForm receives saved token and account ID (added useEffect to update form)
 - [x] Ensure CatalogUploadModal receives saved catalog token and ID (fixed useEffect to always update)
+
+## Filter Defaults in Settings
+- [x] Add minSpend and minCTR columns to user_tokens table
+- [x] Update backend to save/retrieve filter defaults
+- [x] Add Min Spend and Min CTR inputs to Settings page
+- [x] Update Home page to load and apply saved filter defaults
