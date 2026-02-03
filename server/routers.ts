@@ -32,6 +32,7 @@ export const appRouter = router({
         adAccountId: z.string().optional(),
         minSpend: z.string().optional(),
         minCTR: z.string().optional(),
+        batchSize: z.number().min(1000).max(2000).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
@@ -40,6 +41,7 @@ export const appRouter = router({
           adAccountId: input.adAccountId,
           minSpend: input.minSpend,
           minCTR: input.minCTR,
+          batchSize: input.batchSize,
         });
         return { success: true };
       }),
@@ -53,7 +55,7 @@ export const appRouter = router({
         const userId = ctx.user.id;
         const token = await getUserToken(userId, input.tokenType);
         if (!token) {
-          return { found: false, accessToken: null, catalogId: null, adAccountId: null, minSpend: null, minCTR: null };
+          return { found: false, accessToken: null, catalogId: null, adAccountId: null, minSpend: null, minCTR: null, batchSize: null };
         }
         return {
           found: true,
@@ -62,6 +64,7 @@ export const appRouter = router({
           adAccountId: token.adAccountId,
           minSpend: token.minSpend,
           minCTR: token.minCTR,
+          batchSize: token.batchSize,
         };
       }),
     

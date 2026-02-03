@@ -140,3 +140,9 @@
 
 ## Bug Fixes - Catalog Batch Update
 - [x] Fix 400 error by reducing batch size from 3000 to 2000 items (more stable for Facebook API)
+
+## Batch Size Configuration
+- [x] Add batchSize column to user_tokens table
+- [x] Update backend to save/retrieve batch size preference
+- [x] Add batch size input (1000-2000) to Settings page
+- [x] Update Home page to use saved batch size preference

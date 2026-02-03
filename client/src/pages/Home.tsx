@@ -51,6 +51,7 @@ export default function Home() {
   const [savedAdAccountId, setSavedAdAccountId] = useState<string | null>(null);
   const [savedMinSpend, setSavedMinSpend] = useState<string | null>(null);
   const [savedMinCTR, setSavedMinCTR] = useState<string | null>(null);
+  const [savedBatchSize, setSavedBatchSize] = useState<number>(2000); // Default 2000
   
   // Token mutations
   const saveTokenMutation = trpc.tokens.save.useMutation();
@@ -79,6 +80,7 @@ export default function Home() {
     if (catalogTokenData?.found) {
       setSavedCatalogToken(catalogTokenData.accessToken);
       setSavedCatalogId(catalogTokenData.catalogId);
+      setSavedBatchSize(catalogTokenData.batchSize || 2000);
     }
   }, [catalogTokenData]);
 
@@ -318,7 +320,7 @@ export default function Home() {
     
     try {
       const FETCH_CHUNK_SIZE = 50;
-      const BATCH_SIZE = 2000; // Optimal batch size for Facebook API reliability
+      const BATCH_SIZE = savedBatchSize; // Use saved batch size from settings
       
       // Extract retailer IDs from filtered data
       const retailerIds = filteredData

@@ -35,6 +35,7 @@ export const userTokens = mysqlTable("user_tokens", {
   adAccountId: varchar("adAccountId", { length: 64 }), // Only for ads tokens
   minSpend: varchar("minSpend", { length: 32 }), // Default min spend filter
   minCTR: varchar("minCTR", { length: 32 }), // Default min CTR filter
+  batchSize: int("batchSize"), // Catalog batch upload size (1000-2000)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
