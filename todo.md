@@ -136,4 +136,7 @@
 
 ## Catalog Upload Changes
 - [x] Change batch uploads from parallel to sequential processing (one batch at a time)
-- [x] Increase batch size from 2500 to 3000 items per batch
+- [x] Optimize batch size to 2000 items per batch (balanced for reliability)
+
+## Bug Fixes - Catalog Batch Update
+- [x] Fix 400 error by reducing batch size from 3000 to 2000 items (more stable for Facebook API)

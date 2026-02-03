@@ -318,7 +318,7 @@ export default function Home() {
     
     try {
       const FETCH_CHUNK_SIZE = 50;
-      const BATCH_SIZE = 3000; // Facebook API supports up to 3000 items per batch
+      const BATCH_SIZE = 2000; // Optimal batch size for Facebook API reliability
       
       // Extract retailer IDs from filtered data
       const retailerIds = filteredData
