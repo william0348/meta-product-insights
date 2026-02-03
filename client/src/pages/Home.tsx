@@ -318,7 +318,7 @@ export default function Home() {
     
     try {
       const FETCH_CHUNK_SIZE = 50;
-      const BATCH_SIZE = 2500;
+      const BATCH_SIZE = 3000; // Facebook API supports up to 3000 items per batch
       
       // Extract retailer IDs from filtered data
       const retailerIds = filteredData
@@ -337,92 +337,83 @@ export default function Home() {
         batches.push(retailerIds.slice(i, i + BATCH_SIZE));
       }
       
-      toast.info(`Uploading ${retailerIds.length} products in ${batches.length} parallel batches...`);
+      toast.info(`Uploading ${retailerIds.length} products in ${batches.length} sequential batches...`);
       
-      // Process batches in parallel (max 5 concurrent)
-      const MAX_CONCURRENT = 5;
+      // Process batches sequentially (one at a time)
       const handles: string[] = [];
       
-      for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
-        const concurrentBatches = batches.slice(i, i + MAX_CONCURRENT);
-        
-        const batchPromises = concurrentBatches.map(async (batchIds, batchIndex) => {
-          const actualBatchNum = i + batchIndex + 1;
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batchIds = batches[batchIndex];
+        const actualBatchNum = batchIndex + 1;
           
-          // Fetch existing products in chunks to avoid URL length limit
-          let currentProducts: any[] = [];
-          for (let j = 0; j < batchIds.length; j += FETCH_CHUNK_SIZE) {
-            const chunk = batchIds.slice(j, j + FETCH_CHUNK_SIZE);
-            const result = await trpcUtils.catalog.fetchProducts.fetch({
-              catalogId: config.catalogId,
-              retailerIds: chunk,
-              accessToken: config.accessToken,
-            });
-            currentProducts = currentProducts.concat(result.products);
-          }
-          
-          // Build update requests with merge logic
-          const productMap = new Map(currentProducts.map((p: any) => [p.retailer_id, p]));
-          const requests = batchIds.map(id => {
-            const product = productMap.get(id);
-            const dataPayload: Record<string, any> = {};
-            
-            // Custom Label 4 (Merge)
-            if (config.customLabel4) {
-              let finalVal = config.customLabel4;
-              if (product && product.custom_label_4) {
-                const existing = product.custom_label_4.split(',').map((s: string) => s.trim()).filter(Boolean);
-                if (!existing.includes(config.customLabel4)) {
-                  existing.push(config.customLabel4);
-                  finalVal = existing.join(', ');
-                } else {
-                  finalVal = product.custom_label_4;
-                }
-              }
-              dataPayload.custom_label_4 = finalVal;
-            }
-            
-            // Custom Number (Overwrite)
-            if (config.customNumberValue) {
-              const numValue = parseInt(config.customNumberValue);
-              dataPayload[config.customNumberField] = numValue;
-            }
-            
-            return {
-              method: 'UPDATE' as const,
-              retailer_id: id,
-              data: dataPayload,
-            };
-          });
-          
-          // Send batch update
-          const response = await trpcUtils.client.catalog.batchUpdate.mutate({
+        // Fetch existing products in chunks to avoid URL length limit
+        let currentProducts: any[] = [];
+        for (let j = 0; j < batchIds.length; j += FETCH_CHUNK_SIZE) {
+          const chunk = batchIds.slice(j, j + FETCH_CHUNK_SIZE);
+          const result = await trpcUtils.catalog.fetchProducts.fetch({
             catalogId: config.catalogId,
-            requests,
+            retailerIds: chunk,
             accessToken: config.accessToken,
           });
+          currentProducts = currentProducts.concat(result.products);
+        }
+        
+        // Build update requests with merge logic
+        const productMap = new Map(currentProducts.map((p: any) => [p.retailer_id, p]));
+        const requests = batchIds.map(id => {
+          const product = productMap.get(id);
+          const dataPayload: Record<string, any> = {};
           
-          // Check for errors
-          if (response.validation_status && response.validation_status.length > 0) {
-            const errors = response.validation_status.filter((s: any) => s.errors && s.errors.length > 0);
-            if (errors.length > 0) {
-              const errorMsg = errors[0].errors![0].message;
-              throw new Error(`Batch ${actualBatchNum} validation error: ${errorMsg}`);
+          // Custom Label 4 (Merge)
+          if (config.customLabel4) {
+            let finalVal = config.customLabel4;
+            if (product && product.custom_label_4) {
+              const existing = product.custom_label_4.split(',').map((s: string) => s.trim()).filter(Boolean);
+              if (!existing.includes(config.customLabel4)) {
+                existing.push(config.customLabel4);
+                finalVal = existing.join(', ');
+              } else {
+                finalVal = product.custom_label_4;
+              }
             }
+            dataPayload.custom_label_4 = finalVal;
           }
           
-          toast.success(`Batch ${actualBatchNum}/${batches.length} uploaded successfully`);
-          
-          // Store handles for status tracking
-          if (response.handles && response.handles.length > 0) {
-            return response.handles;
+          // Custom Number (Overwrite)
+          if (config.customNumberValue) {
+            const numValue = parseInt(config.customNumberValue);
+            dataPayload[config.customNumberField] = numValue;
           }
-          return [];
+          
+          return {
+            method: 'UPDATE' as const,
+            retailer_id: id,
+            data: dataPayload,
+          };
         });
         
-        // Wait for this set of concurrent batches to complete
-        const batchHandles = await Promise.all(batchPromises);
-        handles.push(...batchHandles.flat());
+        // Send batch update
+        const response = await trpcUtils.client.catalog.batchUpdate.mutate({
+          catalogId: config.catalogId,
+          requests,
+          accessToken: config.accessToken,
+        });
+        
+        // Check for errors
+        if (response.validation_status && response.validation_status.length > 0) {
+          const errors = response.validation_status.filter((s: any) => s.errors && s.errors.length > 0);
+          if (errors.length > 0) {
+            const errorMsg = errors[0].errors![0].message;
+            throw new Error(`Batch ${actualBatchNum} validation error: ${errorMsg}`);
+          }
+        }
+        
+        toast.success(`Batch ${actualBatchNum}/${batches.length} uploaded successfully`);
+        
+        // Store handles for status tracking
+        if (response.handles && response.handles.length > 0) {
+          handles.push(...response.handles);
+        }
       }
       
       toast.success(`All ${retailerIds.length} products uploaded to catalog!`);

@@ -133,3 +133,7 @@
 
 ## Bug Fixes - Catalog Upload
 - [x] Fix socket hang up error during catalog product fetching by adding retry logic (3 retries with 1s, 2s, 4s delays + 30s timeout)
+
+## Catalog Upload Changes
+- [x] Change batch uploads from parallel to sequential processing (one batch at a time)
+- [x] Increase batch size from 2500 to 3000 items per batch
