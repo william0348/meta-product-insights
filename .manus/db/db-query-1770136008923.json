@@ -1,0 +1,50 @@
+{
+  "query": "SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'user_tokens' AND TABLE_SCHEMA = DATABASE();",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'user_tokens' AND TABLE_SCHEMA = DATABASE();",
+  "rows": [
+    {
+      "COLUMN_NAME": "id",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "userId",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "tokenType",
+      "DATA_TYPE": "enum"
+    },
+    {
+      "COLUMN_NAME": "accessToken",
+      "DATA_TYPE": "text"
+    },
+    {
+      "COLUMN_NAME": "catalogId",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "adAccountId",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "createdAt",
+      "DATA_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "updatedAt",
+      "DATA_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "minSpend",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "minCTR",
+      "DATA_TYPE": "varchar"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tDATA_TYPE\nid\tint\nuserId\tint\ntokenType\tenum\naccessToken\ttext\ncatalogId\tvarchar\nadAccountId\tvarchar\ncreatedAt\ttimestamp\nupdatedAt\ttimestamp\nminSpend\tvarchar\nminCTR\tvarchar\n",
+  "stderr": "",
+  "execution_time_ms": 1509
+}

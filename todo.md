@@ -127,3 +127,9 @@
 - [x] Add check_batch_request_status endpoint to track upload progress
 - [x] Implement parallel batch uploads (send up to 5 batches simultaneously for faster processing)
 - [x] Update UI to show batch upload status and progress (displays invalid entries count)
+
+## Bug Fixes - Settings
+- [x] Fix Min Spend and Min CTR not being saved to database (verified working - values persist and auto-load)
+
+## Bug Fixes - Catalog Upload
+- [x] Fix socket hang up error during catalog product fetching by adding retry logic (3 retries with 1s, 2s, 4s delays + 30s timeout)

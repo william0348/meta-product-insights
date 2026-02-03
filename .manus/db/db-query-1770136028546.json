@@ -1,0 +1,26 @@
+{
+  "query": "SHOW COLUMNS FROM user_tokens LIKE 'min%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SHOW COLUMNS FROM user_tokens LIKE 'min%';",
+  "rows": [
+    {
+      "Field": "minSpend",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "minCTR",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nminSpend\tvarchar(32)\tYES\t\tNULL\t\nminCTR\tvarchar(32)\tYES\t\tNULL\t\n",
+  "stderr": "",
+  "execution_time_ms": 1591
+}

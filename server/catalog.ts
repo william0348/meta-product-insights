@@ -34,11 +34,13 @@ export interface BatchResponse {
 /**
  * Fetches specific products by their retailer IDs from the catalog
  * Used to get existing data before merging
+ * Includes retry logic with exponential backoff for network failures
  */
 export const fetchProductsByRetailerIds = async (
   catalogId: string,
   retailerIds: string[],
-  accessToken: string
+  accessToken: string,
+  maxRetries: number = 3
 ): Promise<FBProduct[]> => {
   if (retailerIds.length === 0) return [];
 
@@ -52,11 +54,36 @@ export const fetchProductsByRetailerIds = async (
   const fields =
     'id,retailer_id,name,custom_label_4,tags,custom_number_0,custom_number_1,custom_number_2,custom_number_3,custom_number_4';
 
-  const response = await axios.get(
-    `${BASE_URL}/${catalogId}/products?filter=${encodedFilter}&fields=${fields}&access_token=${accessToken}&limit=${retailerIds.length}`
-  );
+  let lastError: any;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await axios.get(
+        `${BASE_URL}/${catalogId}/products?filter=${encodedFilter}&fields=${fields}&access_token=${accessToken}&limit=${retailerIds.length}`,
+        {
+          timeout: 30000, // 30 second timeout
+        }
+      );
 
-  return response.data.data || [];
+      return response.data.data || [];
+    } catch (error: any) {
+      lastError = error;
+      const isNetworkError = error.code === 'ECONNRESET' || 
+                            error.code === 'ETIMEDOUT' ||
+                            error.message?.includes('socket hang up') ||
+                            error.message?.includes('network');
+      
+      if (isNetworkError && attempt < maxRetries - 1) {
+        const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        console.log(`[Catalog Fetch] Network error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      throw error;
+    }
+  }
+  
+  throw lastError;
 };
 
 /**
