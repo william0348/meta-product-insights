@@ -114,4 +114,7 @@
 - [x] Update Home page to load and apply saved filter defaults
 
 ## Performance Optimization
-- [x] Increase Facebook API batch size from 500 to 3000 items per request for faster data fetching
+- [x] Increase Facebook API batch size from 500 to 1000 items per request for faster data fetching (2x improvement)
+
+## Bug Fixes
+- [x] Fix 500 error when requesting 3000 items per batch - reduced to 1000 items (Facebook's safe limit)
