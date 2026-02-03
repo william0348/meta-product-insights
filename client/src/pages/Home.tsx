@@ -364,7 +364,10 @@ export default function Home() {
         const productMap = new Map(currentProducts.map((p: any) => [p.retailer_id, p]));
         const requests = batchIds.map(id => {
           const product = productMap.get(id);
-          const dataPayload: Record<string, any> = {};
+          // Facebook API requires 'id' field in data payload (same as retailer_id)
+          const dataPayload: Record<string, any> = {
+            id: id,  // Required by Facebook Catalog Batch API
+          };
           
           // Custom Label 4 (Merge)
           if (config.customLabel4) {

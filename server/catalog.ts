@@ -112,22 +112,26 @@ export const checkBatchRequestStatus = async (
 /**
  * Sends a batch update request to the Facebook Catalog
  * Sets allow_upsert to false to only update existing products
+ * Uses form data format as per Facebook API documentation
  */
 export const batchUpdateProducts = async (
   catalogId: string,
   requests: BatchRequestItem[],
   accessToken: string
 ): Promise<BatchResponse> => {
+  // Facebook Catalog Batch API requires form data format
+  const formData = new URLSearchParams();
+  formData.append('access_token', accessToken);
+  formData.append('requests', JSON.stringify(requests));
+  formData.append('item_type', 'PRODUCT_ITEM');
+  formData.append('allow_upsert', 'false'); // Only update existing products
+
   const response = await axios.post(
     `${BASE_URL}/${catalogId}/items_batch`,
-    { 
-      requests,
-      allow_upsert: false  // Only update existing products, don't create new ones
-    },
+    formData.toString(),
     {
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
     }
   );

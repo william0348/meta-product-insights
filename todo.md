@@ -146,3 +146,6 @@
 - [x] Update backend to save/retrieve batch size preference
 - [x] Add batch size input (1000-2000) to Settings page
 - [x] Update Home page to use saved batch size preference
+
+## Bug Fixes - Catalog Batch Update Format
+- [x] Fix 400 error by correcting batch update request format to match Facebook API spec (form data + id field)
