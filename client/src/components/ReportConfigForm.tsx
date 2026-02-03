@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -43,6 +43,19 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
       minCTR: ''
     }
   });
+
+  // Update form when props change (tokens loaded from database)
+  useEffect(() => {
+    if (defaultToken) {
+      form.setValue('accessToken', defaultToken);
+    }
+  }, [defaultToken, form]);
+
+  useEffect(() => {
+    if (defaultAccountId) {
+      form.setValue('accountId', defaultAccountId);
+    }
+  }, [defaultAccountId, form]);
 
   return (
     <Card className="border-0 shadow-none bg-secondary/30 rounded-none">

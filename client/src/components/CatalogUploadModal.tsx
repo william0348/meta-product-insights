@@ -27,13 +27,13 @@ export const CatalogUploadModal: React.FC<Props> = ({ open, onOpenChange, produc
   const [catalogId, setCatalogId] = useState(defaultCatalogId || '');
   const [accessToken, setAccessToken] = useState(defaultAccessToken || '');
   
-  // Update state when defaults change
+  // Update state when defaults change (always update if default is provided)
   useEffect(() => {
-    if (defaultCatalogId && !catalogId) setCatalogId(defaultCatalogId);
+    if (defaultCatalogId) setCatalogId(defaultCatalogId);
   }, [defaultCatalogId]);
   
   useEffect(() => {
-    if (defaultAccessToken && !accessToken) setAccessToken(defaultAccessToken);
+    if (defaultAccessToken) setAccessToken(defaultAccessToken);
   }, [defaultAccessToken]);
   const [customLabel4, setCustomLabel4] = useState('');
   const [customNumberField, setCustomNumberField] = useState<'custom_number_0' | 'custom_number_1' | 'custom_number_2' | 'custom_number_3' | 'custom_number_4'>('custom_number_0');

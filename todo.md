@@ -101,3 +101,8 @@
 - [x] Add navigation menu to header with Settings button
 - [x] Add routing for /settings in App.tsx
 - [x] Add "Back to Home" button on Settings page
+
+## Token Loading Fix
+- [x] Fix tokens saved in Settings not appearing in Home page forms
+- [x] Ensure ReportConfigForm receives saved token and account ID (added useEffect to update form)
+- [x] Ensure CatalogUploadModal receives saved catalog token and ID (fixed useEffect to always update)
