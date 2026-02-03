@@ -244,7 +244,7 @@ export const facebookApiService = {
             json: {
               reportRunId,
               accessToken,
-              limit: 500,
+              limit: 3000,
               after
             }
           }

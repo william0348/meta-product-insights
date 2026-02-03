@@ -112,3 +112,6 @@
 - [x] Update backend to save/retrieve filter defaults
 - [x] Add Min Spend and Min CTR inputs to Settings page
 - [x] Update Home page to load and apply saved filter defaults
+
+## Performance Optimization
+- [x] Increase Facebook API batch size from 500 to 3000 items per request for faster data fetching
