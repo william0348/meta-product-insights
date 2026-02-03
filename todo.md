@@ -93,3 +93,11 @@
 - [x] Pre-fill forms with saved tokens on page load
 - [x] Show catalog update verification results after batch API completes (fetches sample products)
 - [x] Set up weekly scheduled task for automatic report generation (every Monday at 9 AM)
+
+## Settings Page
+- [x] Create Settings page component with token management forms
+- [x] Add Ads Report Token input with save/delete functionality
+- [x] Add Catalog Token input with save/delete functionality
+- [x] Add navigation menu to header with Settings button
+- [x] Add routing for /settings in App.tsx
+- [x] Add "Back to Home" button on Settings page

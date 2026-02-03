@@ -10,7 +10,8 @@ import { SummaryMetrics } from '@/components/SummaryMetrics';
 import { CatalogUploadModal, CatalogUploadConfig } from '@/components/CatalogUploadModal';
 import { trpc } from '@/lib/trpc';
 
-import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload } from 'lucide-react';
+import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings } from 'lucide-react';
+import { useLocation } from 'wouter';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,6 +19,8 @@ import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 
 export default function Home() {
+  const [, setLocation] = useLocation();
+  
   // State for the Async Job Flow
   const [reportId, setReportId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<AsyncJobStatus>(AsyncJobStatus.NOT_STARTED);
@@ -479,6 +482,15 @@ export default function Home() {
               <ShieldCheck className="w-3 h-3 mr-1.5" />
               Secure API Connection
             </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setLocation('/settings')}
+              className="gap-2"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Settings</span>
+            </Button>
           </div>
         </div>
       </header>
