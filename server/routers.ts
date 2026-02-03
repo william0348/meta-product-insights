@@ -164,37 +164,67 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const { reportRunId, accessToken, limit, after } = input;
         
-        try {
-          // Build the insights URL with pagination
-          let insightsUrl = `https://graph.facebook.com/v22.0/${reportRunId}/insights?access_token=${accessToken}&limit=${limit}`;
-          
-          if (after) {
-            insightsUrl += `&after=${after}`;
+        // Retry logic with exponential backoff
+        const maxRetries = 3;
+        const baseDelay = 2000; // 2 seconds
+        
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            // Build the insights URL with pagination
+            let insightsUrl = `https://graph.facebook.com/v22.0/${reportRunId}/insights?access_token=${accessToken}&limit=${limit}`;
+            
+            if (after) {
+              insightsUrl += `&after=${after}`;
+            }
+            
+            if (attempt > 0) {
+              console.log(`[Facebook Insights] Retry attempt ${attempt}/${maxRetries}`);
+            }
+            console.log('[Facebook Insights] Fetching from:', insightsUrl.replace(accessToken, 'TOKEN_HIDDEN'));
+            
+            const response = await axios.get(insightsUrl, {
+              timeout: 60000, // 60 second timeout
+            });
+            
+            const data = response.data;
+            
+            console.log('[Facebook Insights] Received', data.data?.length || 0, 'records');
+            
+            return {
+              success: true,
+              data: data.data || [],
+              paging: data.paging || null,
+            };
+          } catch (error: any) {
+            const isLastAttempt = attempt === maxRetries;
+            const isRetryableError = 
+              error.code === 'ECONNRESET' ||
+              error.code === 'ETIMEDOUT' ||
+              error.code === 'ENOTFOUND' ||
+              error.message?.includes('socket') ||
+              error.message?.includes('timeout') ||
+              (error.response?.status >= 500 && error.response?.status < 600);
+            
+            console.error(`[Facebook Insights] Error (attempt ${attempt + 1}/${maxRetries + 1}):`, error.message);
+            if (error.response) {
+              console.error('[Facebook Insights] Response status:', error.response.status);
+              console.error('[Facebook Insights] Response data:', error.response.data);
+            }
+            
+            // If it's the last attempt or not a retryable error, throw
+            if (isLastAttempt || !isRetryableError) {
+              throw new Error(`Failed to fetch insights: ${error.message}`);
+            }
+            
+            // Wait before retrying (exponential backoff)
+            const delay = baseDelay * Math.pow(2, attempt);
+            console.log(`[Facebook Insights] Waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
-          
-          console.log('[Facebook Insights] Fetching from:', insightsUrl.replace(accessToken, 'TOKEN_HIDDEN'));
-          
-          const response = await axios.get(insightsUrl, {
-            timeout: 60000, // 60 second timeout
-          });
-          
-          const data = response.data;
-          
-          console.log('[Facebook Insights] Received', data.data?.length || 0, 'records');
-          
-          return {
-            success: true,
-            data: data.data || [],
-            paging: data.paging || null,
-          };
-        } catch (error: any) {
-          console.error('[Facebook Insights] Error:', error.message);
-          if (error.response) {
-            console.error('[Facebook Insights] Response status:', error.response.status);
-            console.error('[Facebook Insights] Response data:', error.response.data);
-          }
-          throw new Error(`Failed to fetch insights: ${error.message}`);
         }
+        
+        // This should never be reached, but TypeScript needs it
+        throw new Error('Failed to fetch insights after all retries');
       }),
   }),
 });

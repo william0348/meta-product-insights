@@ -118,3 +118,6 @@
 
 ## Bug Fixes
 - [x] Fix 500 error when requesting 3000 items per batch - reduced to 1000 items (Facebook's safe limit)
+
+## Reliability Improvements
+- [x] Add retry logic with exponential backoff to handle network timeouts and temporary Facebook API failures (3 retries with 2s, 4s, 8s delays)
