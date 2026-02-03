@@ -25,14 +25,15 @@ interface Props {
   onSubmit: (data: ReportConfig) => void;
   isProcessing: boolean;
   defaultToken?: string;
+  defaultAccountId?: string;
 }
 
-export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defaultToken }) => {
+export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defaultToken, defaultAccountId }) => {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       accessToken: defaultToken || '',
-      accountId: '',
+      accountId: defaultAccountId || '',
       // Set default start date to 60 days ago
       dateStart: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       dateEnd: new Date().toISOString().split('T')[0],

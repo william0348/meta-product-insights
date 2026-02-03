@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   productCount: number;
   onUpload: (config: CatalogUploadConfig) => Promise<void>;
+  defaultCatalogId?: string;
+  defaultAccessToken?: string;
 }
 
 export interface CatalogUploadConfig {
@@ -21,9 +23,18 @@ export interface CatalogUploadConfig {
   customNumberValue: string;
 }
 
-export const CatalogUploadModal: React.FC<Props> = ({ open, onOpenChange, productCount, onUpload }) => {
-  const [catalogId, setCatalogId] = useState('');
-  const [accessToken, setAccessToken] = useState('');
+export const CatalogUploadModal: React.FC<Props> = ({ open, onOpenChange, productCount, onUpload, defaultCatalogId, defaultAccessToken }) => {
+  const [catalogId, setCatalogId] = useState(defaultCatalogId || '');
+  const [accessToken, setAccessToken] = useState(defaultAccessToken || '');
+  
+  // Update state when defaults change
+  useEffect(() => {
+    if (defaultCatalogId && !catalogId) setCatalogId(defaultCatalogId);
+  }, [defaultCatalogId]);
+  
+  useEffect(() => {
+    if (defaultAccessToken && !accessToken) setAccessToken(defaultAccessToken);
+  }, [defaultAccessToken]);
   const [customLabel4, setCustomLabel4] = useState('');
   const [customNumberField, setCustomNumberField] = useState<'custom_number_0' | 'custom_number_1' | 'custom_number_2' | 'custom_number_3' | 'custom_number_4'>('custom_number_0');
   const [customNumberValue, setCustomNumberValue] = useState('');

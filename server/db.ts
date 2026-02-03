@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, userTokens, InsertUserToken, UserToken } from "../drizzle/schema";
+import { and } from "drizzle-orm";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +90,93 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Token management functions
+export async function saveUserToken(
+  userId: number,
+  tokenType: "ads_management" | "catalog_management",
+  accessToken: string,
+  options?: { catalogId?: string; adAccountId?: string }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot save token: database not available");
+    return;
+  }
+
+  try {
+    // Check if token already exists for this user and type
+    const existing = await db
+      .select()
+      .from(userTokens)
+      .where(and(eq(userTokens.userId, userId), eq(userTokens.tokenType, tokenType)))
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Update existing token
+      await db
+        .update(userTokens)
+        .set({
+          accessToken,
+          catalogId: options?.catalogId || null,
+          adAccountId: options?.adAccountId || null,
+        })
+        .where(and(eq(userTokens.userId, userId), eq(userTokens.tokenType, tokenType)));
+    } else {
+      // Insert new token
+      await db.insert(userTokens).values({
+        userId,
+        tokenType,
+        accessToken,
+        catalogId: options?.catalogId || null,
+        adAccountId: options?.adAccountId || null,
+      });
+    }
+  } catch (error) {
+    console.error("[Database] Failed to save token:", error);
+    throw error;
+  }
+}
+
+export async function getUserToken(
+  userId: number,
+  tokenType: "ads_management" | "catalog_management"
+): Promise<UserToken | undefined> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get token: database not available");
+    return undefined;
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(userTokens)
+      .where(and(eq(userTokens.userId, userId), eq(userTokens.tokenType, tokenType)))
+      .limit(1);
+
+    return result.length > 0 ? result[0] : undefined;
+  } catch (error) {
+    console.error("[Database] Failed to get token:", error);
+    return undefined;
+  }
+}
+
+export async function deleteUserToken(
+  userId: number,
+  tokenType: "ads_management" | "catalog_management"
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete token: database not available");
+    return;
+  }
+
+  try {
+    await db
+      .delete(userTokens)
+      .where(and(eq(userTokens.userId, userId), eq(userTokens.tokenType, tokenType)));
+  } catch (error) {
+    console.error("[Database] Failed to delete token:", error);
+    throw error;
+  }
+}

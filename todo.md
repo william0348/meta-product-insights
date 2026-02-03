@@ -83,3 +83,13 @@
 - [x] Continue fetching remaining data in background
 - [x] Track loaded row count with state variable
 - [x] Add progress bar UI component showing current row count and percentage
+
+## New Enhancements
+- [x] Optimize product level reporting for faster data fetching (increased batch size from 100 to 500)
+- [x] Add user_tokens table to database schema for storing access tokens
+- [x] Create backend endpoints to save/retrieve user tokens (tokens.save, tokens.get, tokens.delete)
+- [x] Update frontend to save Ads Management access token to database
+- [x] Update frontend to save Facebook Catalog access token to database
+- [x] Pre-fill forms with saved tokens on page load
+- [x] Show catalog update verification results after batch API completes (fetches sample products)
+- [x] Set up weekly scheduled task for automatic report generation (every Monday at 9 AM)

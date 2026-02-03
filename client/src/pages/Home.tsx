@@ -40,6 +40,40 @@ export default function Home() {
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
   const [catalogUploading, setCatalogUploading] = useState(false);
   const trpcUtils = trpc.useUtils();
+  
+  // Saved token state
+  const [savedAdsToken, setSavedAdsToken] = useState<string | null>(null);
+  const [savedCatalogToken, setSavedCatalogToken] = useState<string | null>(null);
+  const [savedCatalogId, setSavedCatalogId] = useState<string | null>(null);
+  const [savedAdAccountId, setSavedAdAccountId] = useState<string | null>(null);
+  
+  // Token mutations
+  const saveTokenMutation = trpc.tokens.save.useMutation();
+  
+  // Load saved tokens on mount
+  const { data: adsTokenData } = trpc.tokens.get.useQuery(
+    { tokenType: "ads_management" },
+    { refetchOnWindowFocus: false }
+  );
+  const { data: catalogTokenData } = trpc.tokens.get.useQuery(
+    { tokenType: "catalog_management" },
+    { refetchOnWindowFocus: false }
+  );
+  
+  // Update local state when token data loads
+  useEffect(() => {
+    if (adsTokenData?.found) {
+      setSavedAdsToken(adsTokenData.accessToken);
+      setSavedAdAccountId(adsTokenData.adAccountId);
+    }
+  }, [adsTokenData]);
+  
+  useEffect(() => {
+    if (catalogTokenData?.found) {
+      setSavedCatalogToken(catalogTokenData.accessToken);
+      setSavedCatalogId(catalogTokenData.catalogId);
+    }
+  }, [catalogTokenData]);
 
   // Poll Ref to clear intervals
   const pollInterval = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -91,6 +125,19 @@ export default function Home() {
       setReportId(response.report_run_id);
       setIsRequesting(false);
       toast.success("Report run initiated successfully");
+      
+      // Save ads token to database for future use
+      try {
+        await saveTokenMutation.mutateAsync({
+          tokenType: "ads_management",
+          accessToken: config.accessToken,
+          adAccountId: config.accountId,
+        });
+        setSavedAdsToken(config.accessToken);
+        setSavedAdAccountId(config.accountId);
+      } catch (e) {
+        console.warn("[Token Save] Could not save ads token:", e);
+      }
 
       // Start Polling
       startPolling(response.report_run_id, config.accessToken);
@@ -349,6 +396,41 @@ export default function Home() {
       }
       
       toast.success(`All ${retailerIds.length} products uploaded to catalog!`);
+      
+      // Verify by fetching a sample of updated products
+      try {
+        const sampleIds = retailerIds.slice(0, 5); // Get first 5 for verification
+        const verifyResponse = await trpcUtils.client.catalog.fetchProducts.query({
+          catalogId: config.catalogId,
+          retailerIds: sampleIds,
+          accessToken: config.accessToken,
+        });
+        
+        if (verifyResponse.products && verifyResponse.products.length > 0) {
+          const sample = verifyResponse.products[0];
+          const customLabel = sample.custom_label_4 || 'N/A';
+          const customNum = sample[config.customNumberField] || 'N/A';
+          toast.info(
+            `Verification: Sample product "${sample.name || sample.retailer_id}" - Label: ${customLabel}, ${config.customNumberField}: ${customNum}`,
+            { duration: 10000 }
+          );
+        }
+      } catch (verifyError) {
+        console.warn('[Catalog Verify] Could not verify update:', verifyError);
+      }
+      
+      // Save catalog token to database for future use
+      try {
+        await saveTokenMutation.mutateAsync({
+          tokenType: "catalog_management",
+          accessToken: config.accessToken,
+          catalogId: config.catalogId,
+        });
+        setSavedCatalogToken(config.accessToken);
+        setSavedCatalogId(config.catalogId);
+      } catch (e) {
+        console.warn("[Token Save] Could not save catalog token:", e);
+      }
     } catch (error: any) {
       console.error('[Catalog Upload] Error:', error);
       toast.error(error.message || 'Failed to upload to catalog');
@@ -375,6 +457,8 @@ export default function Home() {
         onOpenChange={setCatalogModalOpen}
         productCount={filteredData ? filteredData.length : 0}
         onUpload={handleCatalogUpload}
+        defaultCatalogId={savedCatalogId || undefined}
+        defaultAccessToken={savedCatalogToken || undefined}
       />
       
       {/* Swiss Style Header: Clean, minimal, authoritative */}
@@ -408,7 +492,8 @@ export default function Home() {
             <ReportConfigForm 
               onSubmit={handleStartReport} 
               isProcessing={isRequesting || (jobStatus !== AsyncJobStatus.NOT_STARTED && jobStatus !== AsyncJobStatus.COMPLETED && jobStatus !== AsyncJobStatus.FAILED)} 
-              defaultToken="EAANLrF5ZBRkEBPJSaKYUM1MOEUfxzNNkC7YiEauZCJNZBdTHMlh6BrAfOR0dY6O3kchrrMnCDHHo6E8K6R3s3abZBIFEwxS6TeuQo4g0g3kIVGYi4LIbwb4olq9NgyvZAeotDnwNxX0i4R6nTq3c477HkvTEsJu7B3IZChjYZCjiZAYW9L1dAOqK7tTjUaeDsaoZAqMfxBDKv1EfNO4id"
+              defaultToken={savedAdsToken || undefined}
+              defaultAccountId={savedAdAccountId || undefined}
             />
             
             {/* Job Status Card */}

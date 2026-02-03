@@ -25,4 +25,17 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+// User tokens table for storing Facebook access tokens
+export const userTokens = mysqlTable("user_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  tokenType: mysqlEnum("tokenType", ["ads_management", "catalog_management"]).notNull(),
+  accessToken: text("accessToken").notNull(),
+  catalogId: varchar("catalogId", { length: 64 }), // Only for catalog tokens
+  adAccountId: varchar("adAccountId", { length: 64 }), // Only for ads tokens
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserToken = typeof userTokens.$inferSelect;
+export type InsertUserToken = typeof userTokens.$inferInsert;

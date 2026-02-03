@@ -1,7 +1,8 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { saveUserToken, getUserToken, deleteUserToken } from "./db";
 import { z } from "zod";
 import axios from "axios";
 import { fetchProductsByRetailerIds, batchUpdateProducts, BatchRequestItem } from "./catalog";
@@ -18,6 +19,56 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+  }),
+
+  // User token management
+  tokens: router({
+    // Save a token (ads or catalog)
+    save: protectedProcedure
+      .input(z.object({
+        tokenType: z.enum(["ads_management", "catalog_management"]),
+        accessToken: z.string(),
+        catalogId: z.string().optional(),
+        adAccountId: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = ctx.user.id;
+        await saveUserToken(userId, input.tokenType, input.accessToken, {
+          catalogId: input.catalogId,
+          adAccountId: input.adAccountId,
+        });
+        return { success: true };
+      }),
+    
+    // Get a token
+    get: protectedProcedure
+      .input(z.object({
+        tokenType: z.enum(["ads_management", "catalog_management"]),
+      }))
+      .query(async ({ ctx, input }) => {
+        const userId = ctx.user.id;
+        const token = await getUserToken(userId, input.tokenType);
+        if (!token) {
+          return { found: false, accessToken: null, catalogId: null, adAccountId: null };
+        }
+        return {
+          found: true,
+          accessToken: token.accessToken,
+          catalogId: token.catalogId,
+          adAccountId: token.adAccountId,
+        };
+      }),
+    
+    // Delete a token
+    delete: protectedProcedure
+      .input(z.object({
+        tokenType: z.enum(["ads_management", "catalog_management"]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = ctx.user.id;
+        await deleteUserToken(userId, input.tokenType);
+        return { success: true };
+      }),
   }),
 
   // Facebook Catalog Batch API
@@ -101,7 +152,7 @@ export const appRouter = router({
       .input(z.object({
         reportRunId: z.string(),
         accessToken: z.string(),
-        limit: z.number().default(100),
+        limit: z.number().default(500),
         after: z.string().optional(),
       }))
       .query(async ({ input }) => {
