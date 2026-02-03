@@ -60,7 +60,31 @@ export const fetchProductsByRetailerIds = async (
 };
 
 /**
+ * Checks the status of a batch request using the handle returned from items_batch
+ */
+export const checkBatchRequestStatus = async (
+  catalogId: string,
+  handle: string,
+  accessToken: string,
+  loadInvalidIds: boolean = false
+): Promise<any> => {
+  const response = await axios.get(
+    `${BASE_URL}/${catalogId}/check_batch_request_status`,
+    {
+      params: {
+        handle,
+        load_ids_of_invalid_requests: loadInvalidIds,
+        access_token: accessToken,
+      },
+    }
+  );
+
+  return response.data;
+};
+
+/**
  * Sends a batch update request to the Facebook Catalog
+ * Sets allow_upsert to false to only update existing products
  */
 export const batchUpdateProducts = async (
   catalogId: string,
@@ -68,8 +92,11 @@ export const batchUpdateProducts = async (
   accessToken: string
 ): Promise<BatchResponse> => {
   const response = await axios.post(
-    `${BASE_URL}/${catalogId}/batch`,
-    { requests },
+    `${BASE_URL}/${catalogId}/items_batch`,
+    { 
+      requests,
+      allow_upsert: false  // Only update existing products, don't create new ones
+    },
     {
       headers: {
         'Content-Type': 'application/json',

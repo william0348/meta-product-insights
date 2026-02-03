@@ -5,7 +5,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { saveUserToken, getUserToken, deleteUserToken } from "./db";
 import { z } from "zod";
 import axios from "axios";
-import { fetchProductsByRetailerIds, batchUpdateProducts, BatchRequestItem } from "./catalog";
+import { fetchProductsByRetailerIds, batchUpdateProducts, checkBatchRequestStatus, BatchRequestItem } from "./catalog";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -147,6 +147,33 @@ export const appRouter = router({
         } catch (error: any) {
           console.error('[Catalog Batch] Error:', error.message);
           throw new Error(`Failed to batch update: ${error.message}`);
+        }
+      }),
+    
+    // Check batch request status
+    checkBatchStatus: publicProcedure
+      .input(z.object({
+        catalogId: z.string(),
+        handle: z.string(),
+        accessToken: z.string(),
+        loadInvalidIds: z.boolean().optional().default(false),
+      }))
+      .query(async ({ input }) => {
+        const { catalogId, handle, accessToken, loadInvalidIds } = input;
+        
+        try {
+          console.log(`[Catalog Batch Status] Checking status for handle: ${handle}`);
+          const response = await checkBatchRequestStatus(catalogId, handle, accessToken, loadInvalidIds);
+          
+          console.log(`[Catalog Batch Status] Response:`, JSON.stringify(response, null, 2));
+          
+          return {
+            success: true,
+            data: response.data || [],
+          };
+        } catch (error: any) {
+          console.error('[Catalog Batch Status] Error:', error.message);
+          throw new Error(`Failed to check batch status: ${error.message}`);
         }
       }),
   }),

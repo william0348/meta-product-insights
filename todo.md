@@ -121,3 +121,9 @@
 
 ## Reliability Improvements
 - [x] Add retry logic with exponential backoff to handle network timeouts and temporary Facebook API failures (3 retries with 2s, 4s, 8s delays)
+
+## Catalog Batch API Improvements
+- [x] Set allow_upsert to false in catalog batch API calls
+- [x] Add check_batch_request_status endpoint to track upload progress
+- [x] Implement parallel batch uploads (send up to 5 batches simultaneously for faster processing)
+- [x] Update UI to show batch upload status and progress (displays invalid entries count)
