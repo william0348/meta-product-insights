@@ -442,11 +442,16 @@ export default function Home() {
               console.log('[Batch Status]', status);
               
               // Show status info
-              if (status.num_invalid_entries > 0) {
+              if (status.errors_total_count && status.errors_total_count > 0) {
                 toast.warning(
-                  `Batch ${handle.substring(0, 8)}... has ${status.num_invalid_entries} invalid entries`,
+                  `Batch ${handle.substring(0, 8)}... has ${status.errors_total_count} invalid entries`,
                   { duration: 8000 }
                 );
+              }
+              
+              // Show invalid request IDs if available
+              if (status.ids_of_invalid_requests && status.ids_of_invalid_requests.length > 0) {
+                console.log('[Batch Status] Invalid IDs:', status.ids_of_invalid_requests.slice(0, 10));
               }
             }
           } catch (error) {

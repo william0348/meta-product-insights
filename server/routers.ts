@@ -117,7 +117,18 @@ export const appRouter = router({
         
         try {
           console.log(`[Catalog Batch] Updating ${requests.length} products...`);
-          const response = await batchUpdateProducts(catalogId, requests as BatchRequestItem[], accessToken);
+          
+          // Transform requests to match Facebook API format
+          // The 'id' field in data is required and should be the retailer_id
+          const formattedRequests: BatchRequestItem[] = requests.map(req => ({
+            method: req.method,
+            data: {
+              id: req.retailer_id,  // Required by Facebook API
+              ...req.data,
+            },
+          }));
+          
+          const response = await batchUpdateProducts(catalogId, formattedRequests, accessToken);
           
           // Log validation errors/warnings
           if (response.validation_status) {
