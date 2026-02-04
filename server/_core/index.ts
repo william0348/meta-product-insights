@@ -51,15 +51,21 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  const port = parseInt(process.env.PORT || "3000");
+  
+  // In production, use the PORT env directly without port scanning
+  // In development, find an available port if needed
+  const finalPort = process.env.NODE_ENV === "production" 
+    ? port 
+    : await findAvailablePort(port);
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  if (finalPort !== port && process.env.NODE_ENV !== "production") {
+    console.log(`Port ${port} is busy, using port ${finalPort} instead`);
   }
 
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+  // Bind to 0.0.0.0 to accept connections from outside the container
+  server.listen(finalPort, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${finalPort}/`);
   });
 
   // Schedule CSV cleanup to run every 6 hours

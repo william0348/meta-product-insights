@@ -167,3 +167,6 @@
 - [x] Remove batch size limit (1000-2000) from Settings page to allow any value
 
 - [x] Completely remove batch size input field from Settings page
+
+## Bug Fixes - Deployment
+- [x] Fix deployment failure - bind to 0.0.0.0 and use PORT env directly in production
