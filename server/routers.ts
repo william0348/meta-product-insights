@@ -32,7 +32,7 @@ export const appRouter = router({
         adAccountId: z.string().optional(),
         minSpend: z.string().optional(),
         minCTR: z.string().optional(),
-        batchSize: z.number().min(1000).max(2000).optional(),
+        batchSize: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;

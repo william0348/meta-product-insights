@@ -176,3 +176,6 @@
 - [x] Add backend endpoint for polling batch status with handle (already exists at catalog.checkBatchStatus)
 - [x] Update frontend to poll batch status and display real-time progress during uploads
 - [x] Show batch processing status (pending/processing/finished) with error details
+
+## Bug Fixes - Published Site Database
+- [x] Fix 500 error on published website - removed batchSize validation constraint and synced database schema
