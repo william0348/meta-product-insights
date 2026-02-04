@@ -425,26 +425,18 @@ export default function Settings() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="batch-size">Batch Size (1000-2000)</Label>
+                <Label htmlFor="batch-size">Batch Size</Label>
                 <Input
                   id="batch-size"
                   type="number"
-                  min="1000"
-                  max="2000"
+                  min="1"
                   step="100"
                   placeholder="2000"
                   value={batchSize}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    if (val >= 1000 && val <= 2000) {
-                      setBatchSize(e.target.value);
-                    } else if (e.target.value === '') {
-                      setBatchSize('');
-                    }
-                  }}
+                  onChange={(e) => setBatchSize(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Number of products per batch when uploading to catalog (recommended: 2000)
+                  Number of products per batch when uploading to catalog (Facebook max: 5000, recommended: 2000-3000)
                 </p>
               </div>
               

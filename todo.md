@@ -159,3 +159,9 @@
 
 ## Bug Fixes - Database Schema
 - [x] Fix 500 error: batchSize column missing in user_tokens table - added column manually
+
+## Bug Fixes - Published Site
+- [ ] Fix "Service Unavailable" error when saving user settings on published website (works on preview but not published)
+
+## Settings Page Changes
+- [x] Remove batch size limit (1000-2000) from Settings page to allow any value
