@@ -156,3 +156,6 @@
 - [x] Verify batch size limits (max 5000, recommended 3000)
 - [x] Add helper functions for creating UPDATE/DELETE/CREATE requests
 - [x] Improve error logging and response handling
+
+## Bug Fixes - Database Schema
+- [x] Fix 500 error: batchSize column missing in user_tokens table - added column manually
