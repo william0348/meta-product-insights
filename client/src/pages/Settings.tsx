@@ -21,7 +21,6 @@ export default function Settings() {
   // Filter preferences state
   const [minSpend, setMinSpend] = useState('');
   const [minCTR, setMinCTR] = useState('');
-  const [batchSize, setBatchSize] = useState('2000'); // Default 2000
   
   // UI state
   const [showAdsToken, setShowAdsToken] = useState(false);
@@ -61,7 +60,6 @@ export default function Settings() {
     if (catalogTokenData?.found) {
       setCatalogToken(catalogTokenData.accessToken || '');
       setCatalogId(catalogTokenData.catalogId || '');
-      setBatchSize(catalogTokenData.batchSize?.toString() || '2000');
     }
   }, [catalogTokenData]);
   
@@ -103,7 +101,6 @@ export default function Settings() {
         tokenType: "catalog_management",
         accessToken: catalogToken,
         catalogId: catalogId || undefined,
-        batchSize: batchSize ? parseInt(batchSize) : undefined,
       });
       toast.success('Catalog Token saved successfully');
       refetchCatalogToken();
@@ -170,7 +167,6 @@ export default function Settings() {
       await deleteTokenMutation.mutateAsync({ tokenType: "catalog_management" });
       setCatalogToken('');
       setCatalogId('');
-      setBatchSize('2000');
       toast.success('Catalog Token deleted');
       refetchCatalogToken();
     } catch (error: any) {
@@ -422,22 +418,6 @@ export default function Settings() {
                     {showCatalogToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </Button>
                 </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="batch-size">Batch Size</Label>
-                <Input
-                  id="batch-size"
-                  type="number"
-                  min="1"
-                  step="100"
-                  placeholder="2000"
-                  value={batchSize}
-                  onChange={(e) => setBatchSize(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Number of products per batch when uploading to catalog (Facebook max: 5000, recommended: 2000-3000)
-                </p>
               </div>
               
               <div className="flex gap-2">
