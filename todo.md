@@ -179,3 +179,6 @@
 
 ## Bug Fixes - Published Site Database
 - [x] Fix 500 error on published website - removed batchSize validation constraint and synced database schema
+
+## Bug Fixes - Truncated Response
+- [ ] Fix "Unexpected end of JSON input" error on published website - server response being truncated or empty

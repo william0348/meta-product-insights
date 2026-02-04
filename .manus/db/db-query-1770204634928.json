@@ -1,0 +1,36 @@
+{
+  "query": "SELECT * FROM user_tokens LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SELECT * FROM user_tokens LIMIT 5;",
+  "rows": [
+    {
+      "id": "1",
+      "userId": "1",
+      "tokenType": "ads_management",
+      "accessToken": "EAANLrF5ZBRkEBQnwDYGrxIWH8diWZCTPawyGHrjjEatcUJfCzQ6z0yC9ySNszvPV1pTEzf0YNCn72UZAnZAokiJZAXGIyVjRwuNGqaSyEeka3Ged2bzZA1lWAC56vX4l0WeS8wI9DJFzloUcnWcKSZBFdfVEWVgihogxypM077trVcHkCpWUfg5k0pLCma20GeFRX5ObxYgAFFaasvQ",
+      "catalogId": "NULL",
+      "adAccountId": "10153679704478431",
+      "createdAt": "2026-02-03 15:33:08",
+      "updatedAt": "2026-02-03 17:07:09",
+      "minSpend": "NULL",
+      "minCTR": "NULL",
+      "batchSize": "NULL"
+    },
+    {
+      "id": "2",
+      "userId": "1",
+      "tokenType": "catalog_management",
+      "accessToken": "EAAMZCejKQdBABP7KUht8ouNtJIBPGSwbQddwL1kBLWOeVqwgcBzTYUWiNERi872ZAiw2UnOFh5yk4uHKhFEpKp5gYDdCIjLCOQ96sCozZBDz5inuAKO9ZAngoG2qZCx3MSZA6UJXRSuWFxkLGGSHWVX6BUAWgp1YbtHAZAO4y8iR7rGTYFA54Ne8PtWQo5fRAZDZD",
+      "catalogId": "1018344599336327",
+      "adAccountId": "NULL",
+      "createdAt": "2026-02-03 15:33:09",
+      "updatedAt": "2026-02-03 15:33:09",
+      "minSpend": "NULL",
+      "minCTR": "NULL",
+      "batchSize": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tuserId\ttokenType\taccessToken\tcatalogId\tadAccountId\tcreatedAt\tupdatedAt\tminSpend\tminCTR\tbatchSize\n1\t1\tads_management\tEAANLrF5ZBRkEBQnwDYGrxIWH8diWZCTPawyGHrjjEatcUJfCzQ6z0yC9ySNszvPV1pTEzf0YNCn72UZAnZAokiJZAXGIyVjRwuNGqaSyEeka3Ged2bzZA1lWAC56vX4l0WeS8wI9DJFzloUcnWcKSZBFdfVEWVgihogxypM077trVcHkCpWUfg5k0pLCma20GeFRX5ObxYgAFFaasvQ\tNULL\t10153679704478431\t2026-02-03 15:33:08\t2026-02-03 17:07:09\tNULL\tNULL\tNULL\n2\t1\tcatalog_management\tEAAMZCejKQdBABP7KUht8ouNtJIBPGSwbQddwL1kBLWOeVqwgcBzTYUWiNERi872ZAiw2UnOFh5yk4uHKhFEpKp5gYDdCIjLCOQ96sCozZBDz5inuAKO9ZAngoG2qZCx3MSZA6UJXRSuWFxkLGGSHWVX6BUAWgp1YbtHAZAO4y8iR7rGTYFA54Ne8PtWQo5fRAZDZD\t1018344599336327\tNULL\t2026-02-03 15:33:09\t2026-02-03 15:33:09\tNULL\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1622
+}
