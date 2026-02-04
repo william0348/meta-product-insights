@@ -423,43 +423,75 @@ export default function Home() {
       
       toast.success(`All ${retailerIds.length} products uploaded to catalog!`);
       
-      // Track batch status for all handles
+      // Track batch status for all handles with polling until finished
       if (handles.length > 0) {
         toast.info(`Tracking ${handles.length} batch request(s) status...`, { duration: 5000 });
         
-        // Check status for each handle
-        const statusPromises = handles.map(async (handle) => {
-          try {
-            const statusResponse = await trpcUtils.client.catalog.checkBatchStatus.query({
-              catalogId: config.catalogId,
-              handle,
-              accessToken: config.accessToken,
-              loadInvalidIds: true,
-            });
-            
-            if (statusResponse.data && statusResponse.data.length > 0) {
-              const status = statusResponse.data[0];
-              console.log('[Batch Status]', status);
+        // Poll status for each handle until finished
+        const pollBatchStatus = async (handle: string, handleIndex: number): Promise<void> => {
+          const maxPolls = 60; // Max 60 polls (5 minutes with 5s interval)
+          const pollInterval = 5000; // 5 seconds between polls
+          
+          for (let pollCount = 0; pollCount < maxPolls; pollCount++) {
+            try {
+              const statusResponse = await trpcUtils.client.catalog.checkBatchStatus.query({
+                catalogId: config.catalogId,
+                handle,
+                accessToken: config.accessToken,
+                loadInvalidIds: true,
+              });
               
-              // Show status info
-              if (status.errors_total_count && status.errors_total_count > 0) {
-                toast.warning(
-                  `Batch ${handle.substring(0, 8)}... has ${status.errors_total_count} invalid entries`,
-                  { duration: 8000 }
-                );
+              if (statusResponse.data && statusResponse.data.length > 0) {
+                const status = statusResponse.data[0];
+                const handleShort = handle.substring(0, 8);
+                
+                console.log(`[Batch Status ${handleIndex + 1}] Poll ${pollCount + 1}:`, status);
+                
+                // Check if finished
+                if (status.status === 'finished') {
+                  // Show final status
+                  if (status.errors_total_count && status.errors_total_count > 0) {
+                    toast.warning(
+                      `Batch ${handleShort}... completed with ${status.errors_total_count} invalid entries`,
+                      { duration: 8000 }
+                    );
+                    
+                    // Log invalid IDs for debugging
+                    if (status.ids_of_invalid_requests && status.ids_of_invalid_requests.length > 0) {
+                      console.log(`[Batch ${handleShort}] Invalid IDs:`, status.ids_of_invalid_requests.slice(0, 20));
+                    }
+                  } else {
+                    toast.success(`Batch ${handleShort}... processed successfully`, { duration: 5000 });
+                  }
+                  return; // Exit polling loop
+                }
+                
+                // Show progress for in_progress status
+                if (status.status === 'in_progress' || !status.status) {
+                  if (pollCount % 3 === 0) { // Show update every 15 seconds
+                    toast.info(`Batch ${handleShort}... still processing (${pollCount * 5}s elapsed)`, { duration: 3000 });
+                  }
+                }
               }
               
-              // Show invalid request IDs if available
-              if (status.ids_of_invalid_requests && status.ids_of_invalid_requests.length > 0) {
-                console.log('[Batch Status] Invalid IDs:', status.ids_of_invalid_requests.slice(0, 10));
-              }
+              // Wait before next poll
+              await new Promise(resolve => setTimeout(resolve, pollInterval));
+              
+            } catch (error) {
+              console.warn(`[Batch Status ${handleIndex + 1}] Poll error:`, error);
+              // Continue polling on error, might be temporary
+              await new Promise(resolve => setTimeout(resolve, pollInterval));
             }
-          } catch (error) {
-            console.warn('[Batch Status] Could not check status for handle:', handle, error);
           }
-        });
+          
+          // Max polls reached
+          toast.warning(`Batch ${handle.substring(0, 8)}... status check timed out after 5 minutes`, { duration: 8000 });
+        };
         
-        await Promise.all(statusPromises);
+        // Poll all handles in parallel
+        await Promise.all(handles.map((handle, index) => pollBatchStatus(handle, index)));
+        
+        toast.success('All batch status checks completed!');
       }
       
       // Verify by fetching a sample of updated products

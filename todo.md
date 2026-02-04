@@ -170,3 +170,9 @@
 
 ## Bug Fixes - Deployment
 - [x] Fix deployment failure - bind to 0.0.0.0 and use PORT env directly in production
+
+## Batch Status Polling Feature
+- [x] Add checkBatchStatus function to catalog.ts using check_batch_request_status API (already exists)
+- [x] Add backend endpoint for polling batch status with handle (already exists at catalog.checkBatchStatus)
+- [x] Update frontend to poll batch status and display real-time progress during uploads
+- [x] Show batch processing status (pending/processing/finished) with error details
