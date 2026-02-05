@@ -334,3 +334,66 @@ The ScheduledJobs page now includes a multi-account configuration section. Users
 ---
 
 *Last updated: 2026-02-05*
+
+
+---
+
+## Combined Report + Catalog Update Workflow (2026-02-05)
+
+### Overview
+The system now supports a combined workflow that automatically:
+1. Fetches Product Level Insights from Facebook Ads API
+2. Updates the Facebook Catalog with the results
+
+This can be triggered manually or scheduled to run weekly.
+
+### Job Types
+- `report_generation` - Only generates and saves the report
+- `catalog_update` - Only updates the catalog (requires existing data)
+- `report_and_catalog` - **Combined workflow**: Generates report AND updates catalog
+
+### How It Works
+
+1. **Schedule Creation**: User selects "Report + Catalog Update" job type in Schedules page
+2. **Configuration**: User provides:
+   - Ad Account ID(s) with filter parameters
+   - Catalog ID (from saved settings)
+   - Custom Label 4 value (e.g., "high_performer")
+3. **Execution Flow**:
+   - Scheduler triggers the job at scheduled time
+   - Report generator fetches data from Facebook Ads API
+   - Report is saved to `saved_reports` table
+   - If `updateToCatalog` is true, automatically:
+     - Extracts retailer IDs from report data
+     - Creates batch update requests with custom_label_4 value
+     - Sends to Facebook Catalog Batch API
+     - Records results in `catalog_batch_history`
+
+### Key Files
+- `server/scheduler.ts` - Handles scheduled job execution
+- `server/report-generator.ts` - Processes report generation and catalog updates
+- `server/job-processor.ts` - Background job queue processor
+- `client/src/pages/ScheduledJobs.tsx` - UI for creating schedules
+
+### Configuration Options
+```typescript
+config: {
+  // Report settings
+  adAccountId: string;
+  dateRangeType: 'last_7_days' | 'last_week' | 'last_14_days' | 'last_30_days';
+  minSpend?: string;
+  minCTR?: string;
+  
+  // Catalog update settings (for combined workflow)
+  updateToCatalog: boolean;
+  catalogId: string;
+  catalogAccessToken: string;
+  customLabel4: string;  // Value to set for custom_label_4 field
+}
+```
+
+### Best Practices
+1. **Use saved tokens** - The system automatically uses saved catalog tokens from Settings
+2. **Set meaningful labels** - Use descriptive customLabel4 values like "top_performer_week_1"
+3. **Monitor history** - Check Batch History page to verify catalog updates completed successfully
+4. **Test manually first** - Run a manual report + catalog update before scheduling weekly automation

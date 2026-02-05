@@ -231,7 +231,10 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
   description: text("description"),
   
   // Job type
-  jobType: mysqlEnum("jobType", ["report_generation", "catalog_update"]).notNull(),
+  // report_generation: Only fetch report data and save to database
+  // catalog_update: Only update catalog with provided data
+  // report_and_catalog: Combined workflow - fetch report data AND update to catalog
+  jobType: mysqlEnum("jobType", ["report_generation", "catalog_update", "report_and_catalog"]).notNull(),
   
   // Schedule configuration
   cronExpression: varchar("cronExpression", { length: 64 }).notNull(), // e.g., "0 0 9 * * 1" for Monday 9 AM
@@ -253,6 +256,9 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
     customLabel4?: string;
     customNumberField?: string;
     customNumberValue?: string;
+    // For combined workflow (report_and_catalog)
+    updateToCatalog?: boolean;  // Whether to update to catalog after report generation
+    catalogAccessToken?: string; // Catalog access token (if different from report token)
   }>().notNull(),
   
   // Multi-account configurations (array of report configs)

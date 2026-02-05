@@ -38,11 +38,13 @@ export default function ScheduledJobs() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newSchedule, setNewSchedule] = useState({
     name: '',
-    jobType: 'report_generation' as 'report_generation' | 'catalog_update',
+    jobType: 'report_generation' as 'report_generation' | 'catalog_update' | 'report_and_catalog',
     dayOfWeek: '1', // Monday
     hour: '9',
     minute: '0',
     dateRangeType: 'last_7_days',
+    // For combined workflow
+    customLabel4: '',
   });
   
   // Multi-account configurations
@@ -52,6 +54,7 @@ export default function ScheduledJobs() {
   
   const { data: schedulesData, isLoading, refetch } = trpc.schedules.getMySchedules.useQuery({ limit: 50 });
   const { data: tokenData } = trpc.tokens.get.useQuery({ tokenType: 'ads_management' });
+  const { data: catalogTokenData } = trpc.tokens.get.useQuery({ tokenType: 'catalog_management' });
   
   const createMutation = trpc.schedules.create.useMutation({
     onSuccess: () => {
@@ -66,6 +69,7 @@ export default function ScheduledJobs() {
         hour: '9',
         minute: '0',
         dateRangeType: 'last_7_days',
+        customLabel4: '',
       });
       toast.success('Schedule created successfully');
     },
@@ -144,17 +148,28 @@ export default function ScheduledJobs() {
       dateRangeType: c.dateRangeType || newSchedule.dateRangeType,
     }));
     
+    // Build config object with catalog settings for combined workflow
+    const config: Record<string, any> = {
+      dateRangeType: newSchedule.dateRangeType,
+      // Legacy single config (use first config)
+      adAccountId: validConfigs[0].adAccountId,
+      minSpend: validConfigs[0].minSpend || undefined,
+      minCTR: validConfigs[0].minCTR || undefined,
+    };
+    
+    // Add catalog settings for combined workflow
+    if (newSchedule.jobType === 'report_and_catalog') {
+      config.updateToCatalog = true;
+      config.catalogId = catalogTokenData?.catalogId;
+      config.catalogAccessToken = catalogTokenData?.accessToken;
+      config.customLabel4 = newSchedule.customLabel4 || 'from_scheduled_report';
+    }
+    
     createMutation.mutate({
       name: newSchedule.name || `Weekly Report - ${getDayName(parseInt(newSchedule.dayOfWeek))}`,
       jobType: newSchedule.jobType,
       cronExpression,
-      config: {
-        dateRangeType: newSchedule.dateRangeType,
-        // Legacy single config (use first config)
-        adAccountId: validConfigs[0].adAccountId,
-        minSpend: validConfigs[0].minSpend || undefined,
-        minCTR: validConfigs[0].minCTR || undefined,
-      },
+      config,
       reportConfigs: configsWithDateRange,
     });
   };
@@ -248,8 +263,9 @@ export default function ScheduledJobs() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="report_generation">Report Generation</SelectItem>
-                      <SelectItem value="catalog_update">Catalog Update</SelectItem>
+                      <SelectItem value="report_generation">Report Generation Only</SelectItem>
+                      <SelectItem value="report_and_catalog">Report + Catalog Update</SelectItem>
+                      <SelectItem value="catalog_update">Catalog Update Only</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -329,6 +345,39 @@ export default function ScheduledJobs() {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* Catalog Settings for Combined Workflow */}
+                {newSchedule.jobType === 'report_and_catalog' && (
+                  <div className="space-y-3 pt-4 border-t">
+                    <Label className="text-base font-semibold">Catalog Update Settings</Label>
+                    <p className="text-xs text-muted-foreground">
+                      After generating the report, products will be updated in your catalog with the specified label.
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Catalog ID</Label>
+                        <Input
+                          placeholder={catalogTokenData?.catalogId || 'Enter Catalog ID'}
+                          value={catalogTokenData?.catalogId || ''}
+                          disabled
+                          className="bg-muted"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Uses your saved catalog settings</p>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <Label className="text-xs">Custom Label 4 Value</Label>
+                        <Input
+                          placeholder="e.g., high_performer"
+                          value={newSchedule.customLabel4}
+                          onChange={(e) => setNewSchedule({ ...newSchedule, customLabel4: e.target.value })}
+                        />
+                        <p className="text-[10px] text-muted-foreground">Value to set for custom_label_4</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Multi-Account Configurations */}
                 <div className="space-y-3 pt-4 border-t">

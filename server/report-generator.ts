@@ -10,9 +10,12 @@ import {
   updateBatchJob, 
   createSavedReport, 
   updateSavedReport,
-  getUserToken
+  getUserToken,
+  createBatchHistoryRecord,
+  updateBatchHistoryRecord
 } from "./db";
 import { BatchJob } from "../drizzle/schema";
+import { batchUpdateProducts } from "./catalog";
 
 const GRAPH_API_VERSION = 'v22.0';
 
@@ -67,6 +70,11 @@ interface ReportConfig {
   minSpend?: string;
   minCTR?: string;
   dateRangeType?: string;
+  // For combined workflow (report + catalog update)
+  updateToCatalog?: boolean;
+  catalogId?: string;
+  catalogAccessToken?: string;
+  customLabel4?: string;
 }
 
 interface ProductInsight {
@@ -437,7 +445,81 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
       durationMs,
     });
     
+    // Check if this is a combined workflow (report + catalog update)
+    if (config.updateToCatalog && config.catalogId && config.catalogAccessToken) {
+      console.log(`[ReportGenerator] Combined workflow: Updating catalog with ${data.length} products...`);
+      
+      await updateBatchJob(job.id, {
+        progress: 60,
+        statusMessage: `Updating catalog with ${data.length} products...`,
+      });
+      
+      try {
+        // Extract retailer IDs from report data
+        const retailerIds = data.map(item => item.product_retailer_id).filter(id => id && id !== 'N/A');
+        
+        if (retailerIds.length > 0) {
+          // Create batch history record for catalog update
+          const historyId = await createBatchHistoryRecord({
+            userId: job.userId,
+            catalogId: config.catalogId,
+            operationType: 'UPDATE',
+            totalItems: retailerIds.length,
+            batchCount: Math.ceil(retailerIds.length / 3000),
+            updatedFields: ['custom_label_4'],
+            updateCriteria: {
+              sourceField: 'scheduled_report',
+              targetField: 'custom_label_4',
+              condition: `reportId=${reportId}`,
+              description: `Scheduled report update with customLabel4=${config.customLabel4 || 'from_report'}`,
+            },
+            status: 'processing',
+          });
+          
+          // Build update requests using the helper function
+          const { createUpdateRequest } = await import('./catalog');
+          const requests = retailerIds.map(retailerId => 
+            createUpdateRequest(retailerId, {
+              custom_label_4: config.customLabel4 || 'from_report',
+            })
+          );
+          
+          // Perform batch update
+          const result = await batchUpdateProducts(
+            config.catalogId,
+            requests,
+            config.catalogAccessToken
+          );
+          
+          // Update history record
+          if (historyId) {
+            await updateBatchHistoryRecord(historyId, {
+              status: result.errors > 0 ? 'failed' : 'completed',
+              handles: result.handles,
+              successCount: result.success,
+              errorCount: result.errors,
+              durationMs: Date.now() - startTime,
+            });
+          }
+          
+          console.log(`[ReportGenerator] Catalog update completed: ${result.success} success, ${result.errors} errors`);
+          
+          await updateBatchJob(job.id, {
+            progress: 90,
+            statusMessage: `Catalog updated: ${result.success} products`,
+          });
+        }
+      } catch (catalogError: any) {
+        console.error(`[ReportGenerator] Catalog update failed:`, catalogError);
+        // Don't fail the whole job, just log the error
+        await updateBatchJob(job.id, {
+          statusMessage: `Report completed, but catalog update failed: ${catalogError.message}`,
+        });
+      }
+    }
+    
     // Update job as completed
+    const finalDurationMs = Date.now() - startTime;
     await updateBatchJob(job.id, {
       status: 'completed',
       progress: 100,
@@ -445,10 +527,12 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
       totalItems: data.length,
       successCount: data.length,
       completedAt: new Date(),
-      statusMessage: `Report completed: ${data.length} products`,
+      statusMessage: config.updateToCatalog 
+        ? `Report + Catalog update completed: ${data.length} products`
+        : `Report completed: ${data.length} products`,
     });
     
-    console.log(`[ReportGenerator] Job ${job.id} completed: ${data.length} products in ${durationMs}ms`);
+    console.log(`[ReportGenerator] Job ${job.id} completed: ${data.length} products in ${finalDurationMs}ms`);
     
   } catch (error: any) {
     console.error(`[ReportGenerator] Job ${job.id} failed:`, error);

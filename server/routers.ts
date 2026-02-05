@@ -651,7 +651,7 @@ export const appRouter = router({
       .input(z.object({
         name: z.string(),
         description: z.string().optional(),
-        jobType: z.enum(['report_generation', 'catalog_update']),
+        jobType: z.enum(['report_generation', 'catalog_update', 'report_and_catalog']),
         cronExpression: z.string(), // e.g., "0 0 9 * * 1" for Monday 9 AM
         timezone: z.string().optional().default('Asia/Taipei'),
         config: z.object({
@@ -663,6 +663,9 @@ export const appRouter = router({
           minCTR: z.string().optional(),
           catalogId: z.string().optional(),
           customLabel4: z.string().optional(),
+          // For combined workflow (report_and_catalog)
+          updateToCatalog: z.boolean().optional(),
+          catalogAccessToken: z.string().optional(),
         }),
         // Multi-account configurations
         reportConfigs: z.array(z.object({

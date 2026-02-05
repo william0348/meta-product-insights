@@ -202,10 +202,27 @@ async function processScheduledJob(schedule: ScheduledJob): Promise<void> {
           scheduleName: schedule.name,
         };
         
-        // Create a batch job for report generation
+        // Determine job type based on schedule type
+        // For combined workflow, we still create report_generation jobs
+        // but add updateToCatalog flag so job processor knows to continue with catalog update
+        const jobType = schedule.jobType === 'catalog_update' ? 'catalog_update' : 'report_generation';
+        
+        // For combined workflow, add catalog settings to the job config
+        if (schedule.jobType === 'report_and_catalog') {
+          // Get catalog token for the combined workflow
+          const catalogToken = await getUserToken(schedule.userId, 'catalog_management');
+          if (catalogToken) {
+            (jobConfig as any).updateToCatalog = true;
+            (jobConfig as any).catalogId = schedule.config?.catalogId || catalogToken.catalogId;
+            (jobConfig as any).catalogAccessToken = schedule.config?.catalogAccessToken || catalogToken.accessToken;
+            (jobConfig as any).customLabel4 = schedule.config?.customLabel4;
+          }
+        }
+        
+        // Create a batch job
         const jobId = await createBatchJob({
           userId: schedule.userId,
-          jobType: 'report_generation',
+          jobType: jobType,
           config: jobConfig,
         });
         

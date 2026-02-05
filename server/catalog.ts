@@ -80,6 +80,8 @@ export interface ParallelBatchResponse {
   }>;
   totalProcessed: number;
   batchCount: number;
+  success: number;  // Number of successful items
+  errors: number;   // Number of failed items
 }
 
 /**
@@ -287,7 +289,7 @@ export const batchUpdateProducts = async (
   allowUpsert: boolean = false
 ): Promise<ParallelBatchResponse> => {
   if (requests.length === 0) {
-    return { handles: [], validation_status: [], totalProcessed: 0, batchCount: 0 };
+    return { handles: [], validation_status: [], totalProcessed: 0, batchCount: 0, success: 0, errors: 0 };
   }
 
   // Split requests into batches of MAX_BATCH_SIZE (3000)
@@ -354,6 +356,8 @@ export const batchUpdateProducts = async (
     validation_status: allValidationStatus,
     totalProcessed,
     batchCount: batches.length,
+    success: totalProcessed - errorCount,
+    errors: errorCount,
   };
 };
 

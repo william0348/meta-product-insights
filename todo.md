@@ -235,3 +235,12 @@
 - [x] Update ScheduledJobs page to allow adding/editing multiple configurations
 - [x] Display configuration count in schedule cards
 - [x] Added "Copy from saved settings" button to quickly fill config values
+
+## Feature - Combined Report + Catalog Update Workflow
+- [x] Add new job type 'report_and_catalog' for combined workflow
+- [x] Update job processor to: 1) fetch report data, 2) automatically update to catalog
+- [x] Update scheduler to support combined workflow
+- [x] Update ScheduledJobs page to allow selecting combined workflow option
+- [x] Pass catalog settings (catalogId, customLabel4) from schedule config
+- [x] Added customLabel4 setting UI for catalog update value
+- [x] Uses saved catalog token automatically
