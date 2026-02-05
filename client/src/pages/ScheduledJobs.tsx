@@ -43,9 +43,21 @@ export default function ScheduledJobs() {
     hour: '9',
     minute: '0',
     dateRangeType: 'last_7_days',
-    // For combined workflow
+    // For combined workflow - custom_label_4 (legacy)
     customLabel4: '',
   });
+  
+  // Custom number fields state (custom_number_0 to custom_number_4)
+  const [customNumbers, setCustomNumbers] = useState<{
+    enabled: boolean;
+    value: string;
+  }[]>([
+    { enabled: false, value: '' },
+    { enabled: false, value: '' },
+    { enabled: false, value: '' },
+    { enabled: false, value: '' },
+    { enabled: false, value: '' },
+  ]);
   
   // Multi-account configurations
   const [reportConfigs, setReportConfigs] = useState<ReportConfig[]>([
@@ -71,6 +83,13 @@ export default function ScheduledJobs() {
         dateRangeType: 'last_7_days',
         customLabel4: '',
       });
+      setCustomNumbers([
+        { enabled: false, value: '' },
+        { enabled: false, value: '' },
+        { enabled: false, value: '' },
+        { enabled: false, value: '' },
+        { enabled: false, value: '' },
+      ]);
       toast.success('Schedule created successfully');
     },
     onError: (error) => {
@@ -163,6 +182,15 @@ export default function ScheduledJobs() {
       config.catalogId = catalogTokenData?.catalogId;
       config.catalogAccessToken = catalogTokenData?.accessToken;
       config.customLabel4 = newSchedule.customLabel4 || 'from_scheduled_report';
+      
+      // Add custom_number fields (0-4)
+      const customNumbersConfig: Record<string, string> = {};
+      customNumbers.forEach((cn, index) => {
+        if (cn.enabled && cn.value.trim()) {
+          customNumbersConfig[`custom_number_${index}`] = cn.value.trim();
+        }
+      });
+      config.customNumbers = customNumbersConfig;
     }
     
     createMutation.mutate({
@@ -348,32 +376,68 @@ export default function ScheduledJobs() {
                 
                 {/* Catalog Settings for Combined Workflow */}
                 {newSchedule.jobType === 'report_and_catalog' && (
-                  <div className="space-y-3 pt-4 border-t">
+                  <div className="space-y-4 pt-4 border-t">
                     <Label className="text-base font-semibold">Catalog Update Settings</Label>
                     <p className="text-xs text-muted-foreground">
-                      After generating the report, products will be updated in your catalog with the specified label.
+                      After generating the report, products will be updated in your catalog with the specified fields.
                     </p>
                     
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Catalog ID</Label>
-                        <Input
-                          placeholder={catalogTokenData?.catalogId || 'Enter Catalog ID'}
-                          value={catalogTokenData?.catalogId || ''}
-                          disabled
-                          className="bg-muted"
-                        />
-                        <p className="text-[10px] text-muted-foreground">Uses your saved catalog settings</p>
-                      </div>
+                    {/* Catalog ID */}
+                    <div className="space-y-1">
+                      <Label className="text-xs">Catalog ID</Label>
+                      <Input
+                        placeholder={catalogTokenData?.catalogId || 'Enter Catalog ID'}
+                        value={catalogTokenData?.catalogId || ''}
+                        disabled
+                        className="bg-muted"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Uses your saved catalog settings</p>
+                    </div>
+                    
+                    {/* Custom Label 4 */}
+                    <div className="space-y-1">
+                      <Label className="text-xs">Custom Label 4 Value</Label>
+                      <Input
+                        placeholder="e.g., high_performer"
+                        value={newSchedule.customLabel4}
+                        onChange={(e) => setNewSchedule({ ...newSchedule, customLabel4: e.target.value })}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Value to set for custom_label_4</p>
+                    </div>
+                    
+                    {/* Custom Number Fields 0-4 */}
+                    <div className="space-y-3 pt-2">
+                      <Label className="text-sm font-medium">Custom Number Fields</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Enable and set values for custom_number_0 through custom_number_4 fields.
+                      </p>
                       
-                      <div className="space-y-1">
-                        <Label className="text-xs">Custom Label 4 Value</Label>
-                        <Input
-                          placeholder="e.g., high_performer"
-                          value={newSchedule.customLabel4}
-                          onChange={(e) => setNewSchedule({ ...newSchedule, customLabel4: e.target.value })}
-                        />
-                        <p className="text-[10px] text-muted-foreground">Value to set for custom_label_4</p>
+                      <div className="grid grid-cols-1 gap-3">
+                        {[0, 1, 2, 3, 4].map((index) => (
+                          <div key={index} className="flex items-center gap-3 p-3 border rounded-md bg-muted/30">
+                            <Switch
+                              checked={customNumbers[index].enabled}
+                              onCheckedChange={(checked) => {
+                                const updated = [...customNumbers];
+                                updated[index] = { ...updated[index], enabled: checked };
+                                setCustomNumbers(updated);
+                              }}
+                            />
+                            <Label className="text-xs font-mono min-w-[120px]">custom_number_{index}</Label>
+                            <Input
+                              placeholder="Enter numeric value"
+                              type="number"
+                              value={customNumbers[index].value}
+                              onChange={(e) => {
+                                const updated = [...customNumbers];
+                                updated[index] = { ...updated[index], value: e.target.value };
+                                setCustomNumbers(updated);
+                              }}
+                              disabled={!customNumbers[index].enabled}
+                              className={!customNumbers[index].enabled ? 'bg-muted opacity-50' : ''}
+                            />
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>

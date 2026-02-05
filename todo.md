@@ -244,3 +244,11 @@
 - [x] Pass catalog settings (catalogId, customLabel4) from schedule config
 - [x] Added customLabel4 setting UI for catalog update value
 - [x] Uses saved catalog token automatically
+
+## Feature - Custom Number Fields for Schedule Catalog Update
+- [x] Add custom_number_0 to custom_number_4 field selection in ScheduledJobs UI
+- [x] Allow user to enable/disable each custom_number field with Switch toggle
+- [x] Allow user to set numeric value for each enabled custom_number field
+- [x] Update backend to handle multiple custom_number fields in catalog update
+- [x] Updated ReportConfig interface to include customNumbers field
+- [x] Updated report-generator.ts to include customNumbers in catalog update requests

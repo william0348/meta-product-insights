@@ -75,6 +75,8 @@ interface ReportConfig {
   catalogId?: string;
   catalogAccessToken?: string;
   customLabel4?: string;
+  // Custom number fields (0-4)
+  customNumbers?: Record<string, string>;
 }
 
 interface ProductInsight {
@@ -466,22 +468,40 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
             operationType: 'UPDATE',
             totalItems: retailerIds.length,
             batchCount: Math.ceil(retailerIds.length / 3000),
-            updatedFields: ['custom_label_4'],
+            updatedFields: [
+              ...(config.customLabel4 ? ['custom_label_4'] : []),
+              ...(config.customNumbers ? Object.keys(config.customNumbers) : []),
+            ],
             updateCriteria: {
               sourceField: 'scheduled_report',
-              targetField: 'custom_label_4',
+              targetField: 'custom_label_4, custom_number_0-4',
               condition: `reportId=${reportId}`,
-              description: `Scheduled report update with customLabel4=${config.customLabel4 || 'from_report'}`,
+              description: `Scheduled report update: customLabel4=${config.customLabel4 || 'N/A'}, customNumbers=${JSON.stringify(config.customNumbers || {})}`,
             },
             status: 'processing',
           });
           
+          // Build update data with custom_label_4 and custom_number fields
+          const updateData: Record<string, any> = {};
+          
+          // Add custom_label_4 if provided
+          if (config.customLabel4) {
+            updateData.custom_label_4 = config.customLabel4;
+          }
+          
+          // Add custom_number fields (0-4) if provided
+          if (config.customNumbers) {
+            Object.entries(config.customNumbers).forEach(([key, value]) => {
+              if (value && value.trim()) {
+                updateData[key] = parseFloat(value);
+              }
+            });
+          }
+          
           // Build update requests using the helper function
           const { createUpdateRequest } = await import('./catalog');
           const requests = retailerIds.map(retailerId => 
-            createUpdateRequest(retailerId, {
-              custom_label_4: config.customLabel4 || 'from_report',
-            })
+            createUpdateRequest(retailerId, updateData)
           );
           
           // Perform batch update
