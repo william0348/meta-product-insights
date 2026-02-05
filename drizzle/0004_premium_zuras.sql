@@ -1,0 +1,21 @@
+CREATE TABLE `catalog_batch_history` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`catalogId` varchar(64) NOT NULL,
+	`operationType` enum('UPDATE','DELETE','CREATE') NOT NULL,
+	`totalItems` int NOT NULL,
+	`batchCount` int NOT NULL,
+	`updatedFields` json,
+	`updateCriteria` json,
+	`status` enum('pending','processing','completed','failed') NOT NULL DEFAULT 'pending',
+	`successCount` int DEFAULT 0,
+	`errorCount` int DEFAULT 0,
+	`warningCount` int DEFAULT 0,
+	`handles` json,
+	`errors` json,
+	`startedAt` timestamp NOT NULL DEFAULT (now()),
+	`completedAt` timestamp,
+	`durationMs` bigint,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `catalog_batch_history_id` PRIMARY KEY(`id`)
+);

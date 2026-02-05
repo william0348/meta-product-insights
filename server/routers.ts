@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { saveUserToken, getUserToken, deleteUserToken } from "./db";
+import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory } from "./db";
 import { z } from "zod";
 import axios from "axios";
 import { fetchProductsByRetailerIds, batchUpdateProducts, checkBatchRequestStatus, BatchRequestItem } from "./catalog";
@@ -101,8 +101,8 @@ export const appRouter = router({
         }
       }),
     
-    // Batch update products
-    batchUpdate: publicProcedure
+    // Batch update products with history recording
+    batchUpdate: protectedProcedure
       .input(z.object({
         catalogId: z.string(),
         requests: z.array(z.object({
@@ -111,35 +111,73 @@ export const appRouter = router({
           data: z.record(z.string(), z.any()),
         })),
         accessToken: z.string(),
+        // Optional metadata for history recording
+        updateCriteria: z.object({
+          sourceField: z.string().optional(),
+          targetField: z.string().optional(),
+          condition: z.string().optional(),
+          description: z.string().optional(),
+        }).optional(),
       }))
-      .mutation(async ({ input }) => {
-        const { catalogId, requests, accessToken } = input;
+      .mutation(async ({ ctx, input }) => {
+        const { catalogId, requests, accessToken, updateCriteria } = input;
+        const userId = ctx.user.id;
+        const startTime = Date.now();
+        
+        // Determine operation type (use first request's method, or 'UPDATE' as default)
+        const operationType = requests.length > 0 ? requests[0].method : 'UPDATE';
+        
+        // Extract updated fields from the first request's data
+        const updatedFields = requests.length > 0 
+          ? Object.keys(requests[0].data).filter(key => key !== 'id')
+          : [];
+        
+        // Create initial history record
+        let historyId: number | null = null;
+        try {
+          historyId = await createBatchHistoryRecord({
+            userId,
+            catalogId,
+            operationType,
+            totalItems: requests.length,
+            batchCount: Math.ceil(requests.length / 3000), // Estimated based on batch size
+            updatedFields,
+            updateCriteria: updateCriteria || null,
+            status: 'processing',
+            startedAt: new Date(),
+          });
+          console.log(`[Catalog Batch] Created history record: ${historyId}`);
+        } catch (err) {
+          console.error('[Catalog Batch] Failed to create history record:', err);
+          // Continue with the batch update even if history recording fails
+        }
         
         try {
           console.log(`[Catalog Batch] Updating ${requests.length} products...`);
           
           // Transform requests to match Facebook API format
-          // The 'id' field in data is required and should be the retailer_id
           const formattedRequests: BatchRequestItem[] = requests.map(req => ({
             method: req.method,
             data: {
-              id: req.retailer_id,  // Required by Facebook API
+              id: req.retailer_id,
               ...req.data,
             },
           }));
           
           const response = await batchUpdateProducts(catalogId, formattedRequests, accessToken);
           
-          // Log validation errors/warnings
+          // Count errors and warnings
+          let errorCount = 0;
+          let warningCount = 0;
+          const errorDetails: Array<{ retailerId: string; message: string }> = [];
+          
           if (response.validation_status) {
-            let errorCount = 0;
-            let warningCount = 0;
-            
             response.validation_status.forEach(status => {
               if (status.errors && status.errors.length > 0) {
                 status.errors.forEach(err => {
                   console.error(`[Catalog Batch Error] ID ${status.retailer_id}: ${err.message}`);
                   errorCount++;
+                  errorDetails.push({ retailerId: status.retailer_id, message: err.message });
                 });
               }
               if (status.warnings && status.warnings.length > 0) {
@@ -153,15 +191,55 @@ export const appRouter = router({
             console.log(`[Catalog Batch] Validation: ${errorCount} errors, ${warningCount} warnings`);
           }
           
+          const endTime = Date.now();
+          const durationMs = endTime - startTime;
+          
+          // Update history record with results
+          if (historyId) {
+            try {
+              await updateBatchHistoryRecord(historyId, {
+                status: 'completed',
+                successCount: response.totalProcessed - errorCount,
+                errorCount,
+                warningCount,
+                handles: response.handles,
+                errors: errorDetails.length > 0 ? errorDetails : null,
+                completedAt: new Date(),
+                durationMs,
+                batchCount: response.batchCount,
+              });
+              console.log(`[Catalog Batch] Updated history record: ${historyId}`);
+            } catch (err) {
+              console.error('[Catalog Batch] Failed to update history record:', err);
+            }
+          }
+          
           return {
             success: true,
             handles: response.handles,
             validation_status: response.validation_status || [],
             totalProcessed: response.totalProcessed,
             batchCount: response.batchCount,
+            historyId,
+            durationMs,
           };
         } catch (error: any) {
           console.error('[Catalog Batch] Error:', error.message);
+          
+          // Update history record with failure
+          if (historyId) {
+            try {
+              await updateBatchHistoryRecord(historyId, {
+                status: 'failed',
+                errors: [{ retailerId: 'N/A', message: error.message }],
+                completedAt: new Date(),
+                durationMs: Date.now() - startTime,
+              });
+            } catch (err) {
+              console.error('[Catalog Batch] Failed to update history record on error:', err);
+            }
+          }
+          
           throw new Error(`Failed to batch update: ${error.message}`);
         }
       }),
@@ -191,6 +269,41 @@ export const appRouter = router({
           console.error('[Catalog Batch Status] Error:', error.message);
           throw new Error(`Failed to check batch status: ${error.message}`);
         }
+      }),
+  }),
+
+  // Batch History API
+  batchHistory: router({
+    // Get batch history for current user
+    getMyHistory: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional().default(50),
+      }))
+      .query(async ({ ctx, input }) => {
+        const userId = ctx.user.id;
+        const history = await getBatchHistoryByUser(userId, input.limit);
+        return { success: true, history };
+      }),
+    
+    // Get batch history by catalog ID
+    getByCatalog: protectedProcedure
+      .input(z.object({
+        catalogId: z.string(),
+        limit: z.number().optional().default(50),
+      }))
+      .query(async ({ input }) => {
+        const history = await getBatchHistoryByCatalog(input.catalogId, input.limit);
+        return { success: true, history };
+      }),
+    
+    // Get all batch history (admin only or for dashboard)
+    getAll: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional().default(100),
+      }))
+      .query(async ({ input }) => {
+        const history = await getAllBatchHistory(input.limit);
+        return { success: true, history };
       }),
   }),
 

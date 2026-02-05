@@ -10,7 +10,7 @@ import { SummaryMetrics } from '@/components/SummaryMetrics';
 import { CatalogUploadModal, CatalogUploadConfig } from '@/components/CatalogUploadModal';
 import { trpc } from '@/lib/trpc';
 
-import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings } from 'lucide-react';
+import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, History } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -397,11 +397,22 @@ export default function Home() {
           };
         });
         
-        // Send batch update
+        // Send batch update with history tracking
+        const updateCriteria = {
+          sourceField: config.customLabel4 ? 'custom_label_4' : undefined,
+          targetField: config.customNumberValue ? config.customNumberField : undefined,
+          condition: config.customLabel4 ? 'merge' : 'overwrite',
+          description: [
+            config.customLabel4 ? `Add label "${config.customLabel4}" to custom_label_4` : '',
+            config.customNumberValue ? `Set ${config.customNumberField} = ${config.customNumberValue}` : '',
+          ].filter(Boolean).join('; ') || 'Batch update',
+        };
+        
         const response = await trpcUtils.client.catalog.batchUpdate.mutate({
           catalogId: config.catalogId,
           requests,
           accessToken: config.accessToken,
+          updateCriteria,
         });
         
         // Check for errors
@@ -576,6 +587,15 @@ export default function Home() {
               <ShieldCheck className="w-3 h-3 mr-1.5" />
               Secure API Connection
             </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setLocation('/batch-history')}
+              className="gap-2"
+            >
+              <History className="w-4 h-4" />
+              <span className="hidden sm:inline">History</span>
+            </Button>
             <Button 
               variant="ghost" 
               size="sm" 

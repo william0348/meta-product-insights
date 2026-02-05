@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -42,3 +42,48 @@ export const userTokens = mysqlTable("user_tokens", {
 
 export type UserToken = typeof userTokens.$inferSelect;
 export type InsertUserToken = typeof userTokens.$inferInsert;
+
+// Catalog batch operation history table
+export const catalogBatchHistory = mysqlTable("catalog_batch_history", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  catalogId: varchar("catalogId", { length: 64 }).notNull(),
+  
+  // Operation details
+  operationType: mysqlEnum("operationType", ["UPDATE", "DELETE", "CREATE"]).notNull(),
+  totalItems: int("totalItems").notNull(), // Total number of items processed
+  batchCount: int("batchCount").notNull(), // Number of batches used
+  
+  // Updated fields info (JSON array of field names that were updated)
+  updatedFields: json("updatedFields").$type<string[]>(),
+  
+  // Update conditions/criteria (JSON object describing the update logic)
+  updateCriteria: json("updateCriteria").$type<{
+    sourceField?: string;      // e.g., "custom_label_4"
+    targetField?: string;      // e.g., "custom_number_0"
+    condition?: string;        // e.g., "copy value", "increment", etc.
+    description?: string;      // Human-readable description
+  }>(),
+  
+  // Status and results
+  status: mysqlEnum("status", ["pending", "processing", "completed", "failed"]).default("pending").notNull(),
+  successCount: int("successCount").default(0),
+  errorCount: int("errorCount").default(0),
+  warningCount: int("warningCount").default(0),
+  
+  // Facebook API handles for async tracking
+  handles: json("handles").$type<string[]>(),
+  
+  // Error details (JSON array of error messages)
+  errors: json("errors").$type<Array<{ retailerId: string; message: string }>>(),
+  
+  // Timing
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+  durationMs: bigint("durationMs", { mode: "number" }), // Duration in milliseconds
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CatalogBatchHistory = typeof catalogBatchHistory.$inferSelect;
+export type InsertCatalogBatchHistory = typeof catalogBatchHistory.$inferInsert;

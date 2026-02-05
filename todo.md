@@ -197,3 +197,12 @@
 - [x] Target: ~15,000 items per batch cycle
 - [x] Added automatic batch splitting and parallel processing
 - [x] Added progress logging with items/sec metrics
+
+## Feature - Catalog Batch History
+- [x] Create database table for batch operation history (catalog_batch_history)
+- [x] Fields: date, total count, updated fields, status, errors, warnings, handles, duration
+- [x] Update batchUpdate router to save records automatically
+- [x] Create frontend UI to display batch history (/batch-history page)
+- [x] Add History button to main page header
+- [x] Track updateCriteria in batch operations
+- [x] Add summary statistics (total operations, items processed, success/failed counts)

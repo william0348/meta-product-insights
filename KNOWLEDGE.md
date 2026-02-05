@@ -101,4 +101,38 @@ if (retailerIds.length > MAX_FETCH_BATCH_SIZE) {
 
 ---
 
+## Catalog Batch History Feature (2026-02-05)
+
+### Overview
+The batch history feature tracks all catalog batch operations with detailed metadata for auditing and debugging.
+
+### Database Schema (catalog_batch_history)
+- `id`: Auto-increment primary key
+- `userId`: Foreign key to users table
+- `catalogId`: Facebook Catalog ID
+- `operationType`: UPDATE, DELETE, or CREATE
+- `totalItems`: Total number of items in the batch
+- `batchCount`: Number of API batches sent
+- `updatedFields`: Array of field names that were updated
+- `updateCriteria`: JSON object with source/target fields and conditions
+- `status`: pending, processing, completed, or failed
+- `successCount`, `errorCount`, `warningCount`: Result counts
+- `handles`: Array of Facebook API handles for status tracking
+- `errors`: Array of error details with retailerId and message
+- `startedAt`, `completedAt`: Timestamps
+- `durationMs`: Total processing time in milliseconds
+
+### API Endpoints
+- `batchHistory.getMyHistory`: Get batch history for current user
+- `batchHistory.getByCatalog`: Get batch history by catalog ID
+- `batchHistory.getAll`: Get all batch history (admin dashboard)
+
+### Frontend
+- `/batch-history` page with expandable rows showing full details
+- Summary statistics: total operations, items processed, success/failed counts
+- Filter by catalog ID
+- Expandable rows showing update criteria, fields, handles, and errors
+
+---
+
 *Last updated: 2026-02-05*

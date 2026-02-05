@@ -186,3 +186,121 @@ export async function deleteUserToken(
     throw error;
   }
 }
+
+
+// Catalog Batch History functions
+import { catalogBatchHistory, InsertCatalogBatchHistory, CatalogBatchHistory } from "../drizzle/schema";
+import { desc } from "drizzle-orm";
+
+export async function createBatchHistoryRecord(
+  record: Omit<InsertCatalogBatchHistory, "id" | "createdAt">
+): Promise<number | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create batch history: database not available");
+    return null;
+  }
+
+  try {
+    const result = await db.insert(catalogBatchHistory).values(record);
+    // MySQL returns insertId for auto-increment columns
+    return (result as any)[0]?.insertId || null;
+  } catch (error) {
+    console.error("[Database] Failed to create batch history:", error);
+    throw error;
+  }
+}
+
+export async function updateBatchHistoryRecord(
+  id: number,
+  updates: Partial<Omit<CatalogBatchHistory, "id" | "createdAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update batch history: database not available");
+    return;
+  }
+
+  try {
+    await db
+      .update(catalogBatchHistory)
+      .set(updates)
+      .where(eq(catalogBatchHistory.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to update batch history:", error);
+    throw error;
+  }
+}
+
+export async function getBatchHistoryByUser(
+  userId: number,
+  limit: number = 50
+): Promise<CatalogBatchHistory[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get batch history: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(catalogBatchHistory)
+      .where(eq(catalogBatchHistory.userId, userId))
+      .orderBy(desc(catalogBatchHistory.startedAt))
+      .limit(limit);
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get batch history:", error);
+    return [];
+  }
+}
+
+export async function getBatchHistoryByCatalog(
+  catalogId: string,
+  limit: number = 50
+): Promise<CatalogBatchHistory[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get batch history: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(catalogBatchHistory)
+      .where(eq(catalogBatchHistory.catalogId, catalogId))
+      .orderBy(desc(catalogBatchHistory.startedAt))
+      .limit(limit);
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get batch history:", error);
+    return [];
+  }
+}
+
+export async function getAllBatchHistory(
+  limit: number = 100
+): Promise<CatalogBatchHistory[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get batch history: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(catalogBatchHistory)
+      .orderBy(desc(catalogBatchHistory.startedAt))
+      .limit(limit);
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get batch history:", error);
+    return [];
+  }
+}
