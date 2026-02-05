@@ -60,4 +60,45 @@ Removed the CSV cleanup scheduled task from `server/_core/index.ts`:
 
 ---
 
+### Issue: Catalog API 502 Error (2026-02-05)
+
+**Symptoms:**
+- `catalog.fetchProducts` API returns HTTP 502 error
+- Error message: "Unexpected token '<', "<!DOCTYPE "... is not valid JSON"
+- Only happens with large numbers of retailer IDs (50+)
+
+**Root Cause:**
+The `fetchProductsByRetailerIds` function was trying to fetch all retailer IDs in a single request with a 30-second timeout. When fetching 50+ products, the Facebook API response time exceeded the timeout, causing the request to fail.
+
+**Solution:**
+1. **Batch splitting**: Split large requests into smaller batches of 25 IDs each
+2. **Increased timeout**: Changed from 30s to 60s per request
+3. **Concurrency control**: Process 2 batches at a time with 500ms delay between groups
+4. **Better error handling**: Added `ECONNABORTED` to retryable errors
+
+**Code Changes in `server/catalog.ts`:**
+```typescript
+// New constant for batch size
+const MAX_FETCH_BATCH_SIZE = 25;
+
+// Split large requests into batches
+if (retailerIds.length > MAX_FETCH_BATCH_SIZE) {
+  // Process in batches with limited concurrency
+  const CONCURRENCY = 2;
+  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    const results = await Promise.all(batchPromises);
+    // Small delay between batch groups
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}
+```
+
+**Key Learnings:**
+1. Always implement batch processing for APIs that accept arrays
+2. Set appropriate timeouts based on expected response times
+3. Use concurrency limits to avoid rate limiting
+4. Add delays between batch groups for API stability
+
+---
+
 *Last updated: 2026-02-05*

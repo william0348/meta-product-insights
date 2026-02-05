@@ -6,6 +6,9 @@ const BASE_URL = `https://graph.facebook.com/${FB_API_VERSION}`;
 // Maximum items per batch request (Facebook limit is 5000, recommended 3000 for optimal performance)
 const MAX_BATCH_SIZE = 3000;
 
+// Maximum retailer IDs per fetch request (to avoid timeout)
+const MAX_FETCH_BATCH_SIZE = 25;
+
 export interface FBProduct {
   id: string;
   retailer_id: string;
@@ -62,11 +65,10 @@ export interface BatchStatusResponse {
 }
 
 /**
- * Fetches specific products by their retailer IDs from the catalog
- * Used to get existing data before merging
- * Includes retry logic with exponential backoff for network failures
+ * Fetches a single batch of products by their retailer IDs
+ * Internal helper function with retry logic
  */
-export const fetchProductsByRetailerIds = async (
+const fetchProductBatch = async (
   catalogId: string,
   retailerIds: string[],
   accessToken: string,
@@ -90,7 +92,7 @@ export const fetchProductsByRetailerIds = async (
       const response = await axios.get(
         `${BASE_URL}/${catalogId}/products?filter=${encodedFilter}&fields=${fields}&access_token=${accessToken}&limit=${retailerIds.length}`,
         {
-          timeout: 30000, // 30 second timeout
+          timeout: 60000, // 60 second timeout (increased from 30s)
         }
       );
 
@@ -99,8 +101,10 @@ export const fetchProductsByRetailerIds = async (
       lastError = error;
       const isNetworkError = error.code === 'ECONNRESET' || 
                             error.code === 'ETIMEDOUT' ||
+                            error.code === 'ECONNABORTED' ||
                             error.message?.includes('socket hang up') ||
-                            error.message?.includes('network');
+                            error.message?.includes('network') ||
+                            error.message?.includes('timeout');
       
       if (isNetworkError && attempt < maxRetries - 1) {
         const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
@@ -114,6 +118,61 @@ export const fetchProductsByRetailerIds = async (
   }
   
   throw lastError;
+};
+
+/**
+ * Fetches specific products by their retailer IDs from the catalog
+ * Used to get existing data before merging
+ * Splits large requests into smaller batches to avoid timeout
+ */
+export const fetchProductsByRetailerIds = async (
+  catalogId: string,
+  retailerIds: string[],
+  accessToken: string,
+  maxRetries: number = 3
+): Promise<FBProduct[]> => {
+  if (retailerIds.length === 0) return [];
+
+  // If the request is small enough, fetch directly
+  if (retailerIds.length <= MAX_FETCH_BATCH_SIZE) {
+    return fetchProductBatch(catalogId, retailerIds, accessToken, maxRetries);
+  }
+
+  // Split into smaller batches and fetch in parallel (with concurrency limit)
+  const batches: string[][] = [];
+  for (let i = 0; i < retailerIds.length; i += MAX_FETCH_BATCH_SIZE) {
+    batches.push(retailerIds.slice(i, i + MAX_FETCH_BATCH_SIZE));
+  }
+
+  console.log(`[Catalog Fetch] Splitting ${retailerIds.length} IDs into ${batches.length} batches of max ${MAX_FETCH_BATCH_SIZE}`);
+
+  // Process batches with limited concurrency (2 at a time to avoid rate limiting)
+  const CONCURRENCY = 2;
+  const allProducts: FBProduct[] = [];
+  
+  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    const batchGroup = batches.slice(i, i + CONCURRENCY);
+    const promises = batchGroup.map(batch => 
+      fetchProductBatch(catalogId, batch, accessToken, maxRetries)
+    );
+    
+    try {
+      const results = await Promise.all(promises);
+      results.forEach(products => allProducts.push(...products));
+      console.log(`[Catalog Fetch] Completed batches ${i + 1}-${Math.min(i + CONCURRENCY, batches.length)} of ${batches.length}`);
+    } catch (error: any) {
+      console.error(`[Catalog Fetch] Error in batch group starting at ${i}:`, error.message);
+      throw error;
+    }
+    
+    // Small delay between batch groups to avoid rate limiting
+    if (i + CONCURRENCY < batches.length) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  console.log(`[Catalog Fetch] Successfully fetched ${allProducts.length} products`);
+  return allProducts;
 };
 
 /**
@@ -139,6 +198,7 @@ export const checkBatchRequestStatus = async (
         load_ids_of_invalid_requests: loadInvalidIds,
         access_token: accessToken,
       },
+      timeout: 30000, // 30 second timeout
     }
   );
 
@@ -192,7 +252,7 @@ export const batchUpdateProducts = async (
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        timeout: 60000, // 60 second timeout for large batches
+        timeout: 120000, // 120 second timeout for large batches (increased from 60s)
       }
     );
 

@@ -185,3 +185,8 @@
 - [x] Debug production database connection issue causing 500 errors on tokens.get/tokens.save
 - [x] Root cause: CSV cleanup scheduled task with file system operations caused server crash in production
 - [x] Solution: Removed CSV cleanup from server startup (see KNOWLEDGE.md for details)
+
+## Bug Fixes - Catalog API 502 Error
+- [x] Fix catalog.fetchProducts API returning 502 error on published website
+- [x] Investigate timeout/performance issues with batch product fetching
+- [x] Solution: Split large requests into smaller batches (25 IDs per batch), increased timeout to 60s, added concurrency limit
