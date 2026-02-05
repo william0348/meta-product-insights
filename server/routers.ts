@@ -822,6 +822,31 @@ export const appRouter = router({
         
         return { success: true };
       }),
+    
+    // Run a scheduled job immediately (for testing)
+    runNow: protectedProcedure
+      .input(z.object({
+        scheduleId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const schedule = await getScheduledJob(input.scheduleId);
+        
+        if (!schedule) {
+          throw new Error('Schedule not found');
+        }
+        
+        if (schedule.userId !== ctx.user.id) {
+          throw new Error('Access denied');
+        }
+        
+        // Import and call the scheduler's processScheduledJob function
+        const { processScheduledJob } = await import('./scheduler');
+        await processScheduledJob(schedule);
+        
+        console.log(`[Schedules] Manual run triggered for schedule ${input.scheduleId}`);
+        
+        return { success: true };
+      }),
   }),
 });
 

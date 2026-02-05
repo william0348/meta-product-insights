@@ -265,3 +265,10 @@
 - [x] Include report summary in notification (success/failure, item count)
 - [x] Send notification for both success and failure cases
 - [x] Send notification when catalog batch job completes
+
+## Feature - Run Now Button
+- [x] Add schedules.runNow API endpoint to trigger immediate execution
+- [x] Update scheduler.ts to support manual trigger (exported processScheduledJob)
+- [x] Add Run Now button to ScheduledJobs UI (Play icon)
+- [x] Show loading state during execution (Loader2 spinner)
+- [x] Test Run Now functionality - working correctly

@@ -148,8 +148,9 @@ function getReportConfigs(schedule: ScheduledJob): ReportConfig[] {
 /**
  * Process a scheduled job
  * Creates multiple batch jobs if there are multiple report configurations
+ * Exported for manual triggering via Run Now feature
  */
-async function processScheduledJob(schedule: ScheduledJob): Promise<void> {
+export async function processScheduledJob(schedule: ScheduledJob): Promise<void> {
   console.log(`[Scheduler] Processing scheduled job ${schedule.id}: ${schedule.name}`);
   
   try {

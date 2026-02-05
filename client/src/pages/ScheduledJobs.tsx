@@ -21,7 +21,8 @@ import {
   AlertCircle,
   Building2,
   Copy,
-  Pencil
+  Pencil,
+  Play
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -113,6 +114,16 @@ export default function ScheduledJobs() {
     onSuccess: () => {
       refetch();
       toast.success('Schedule deleted');
+    },
+  });
+  
+  const runNowMutation = trpc.schedules.runNow.useMutation({
+    onSuccess: () => {
+      refetch();
+      toast.success('Schedule triggered! Check Reports page for results.');
+    },
+    onError: (error) => {
+      toast.error(`Failed to run schedule: ${error.message}`);
     },
   });
   
@@ -720,7 +731,25 @@ export default function ScheduledJobs() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => {
+                          if (confirm('Run this schedule now? This will create report generation jobs immediately.')) {
+                            runNowMutation.mutate({ scheduleId: schedule.id });
+                          }
+                        }}
+                        disabled={runNowMutation.isPending}
+                        title="Run Now"
+                      >
+                        {runNowMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Play className="w-4 h-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => openEditDialog(schedule)}
+                        title="Edit"
                       >
                         <Pencil className="w-4 h-4" />
                       </Button>
@@ -733,6 +762,7 @@ export default function ScheduledJobs() {
                           }
                         }}
                         disabled={deleteMutation.isPending}
+                        title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
