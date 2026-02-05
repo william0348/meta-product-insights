@@ -14,6 +14,7 @@ import {
   createBatchHistoryRecord,
   updateBatchHistoryRecord
 } from "./db";
+import { notifyOwner } from "./_core/notification";
 import { BatchJob } from "../drizzle/schema";
 import { batchUpdateProducts } from "./catalog";
 
@@ -553,6 +554,31 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
     });
     
     console.log(`[ReportGenerator] Job ${job.id} completed: ${data.length} products in ${finalDurationMs}ms`);
+    
+    // Send notification to owner
+    try {
+      const durationMinutes = Math.round(finalDurationMs / 60000);
+      const notificationTitle = config.updateToCatalog 
+        ? `✅ Report + Catalog Update Completed`
+        : `✅ Report Generation Completed`;
+      const notificationContent = [
+        `**Job ID:** ${job.id}`,
+        `**Account:** ${config.adAccountId}`,
+        `**Products:** ${data.length.toLocaleString()}`,
+        `**Duration:** ${durationMinutes} minutes`,
+        config.updateToCatalog ? `**Catalog Updated:** Yes` : '',
+        `\n[View Reports](/saved-reports)`
+      ].filter(Boolean).join('\n');
+      
+      await notifyOwner({
+        title: notificationTitle,
+        content: notificationContent,
+      });
+      console.log(`[ReportGenerator] Notification sent for job ${job.id}`);
+    } catch (notifyError) {
+      console.warn(`[ReportGenerator] Failed to send notification:`, notifyError);
+      // Don't fail the job if notification fails
+    }
     
   } catch (error: any) {
     console.error(`[ReportGenerator] Job ${job.id} failed:`, error);

@@ -745,7 +745,10 @@ export const appRouter = router({
         scheduleId: z.number(),
         enabled: z.boolean().optional(),
         name: z.string().optional(),
+        description: z.string().optional(),
+        jobType: z.enum(['report_generation', 'catalog_update', 'report_and_catalog']).optional(),
         cronExpression: z.string().optional(),
+        timezone: z.string().optional(),
         config: z.object({
           adAccountId: z.string().optional(),
           dateRangeType: z.string().optional(),
@@ -755,7 +758,21 @@ export const appRouter = router({
           minCTR: z.string().optional(),
           catalogId: z.string().optional(),
           customLabel4: z.string().optional(),
+          updateToCatalog: z.boolean().optional(),
+          catalogAccessToken: z.string().optional(),
+          customNumbers: z.record(z.string(), z.string()).optional(),
         }).optional(),
+        // Multi-account configurations
+        reportConfigs: z.array(z.object({
+          name: z.string().optional(),
+          adAccountId: z.string(),
+          accessToken: z.string().optional(),
+          dateRangeType: z.string().optional(),
+          minSpend: z.string().optional(),
+          minCTR: z.string().optional(),
+          level: z.string().optional(),
+          breakdown: z.string().optional(),
+        })).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const schedule = await getScheduledJob(input.scheduleId);
@@ -770,11 +787,17 @@ export const appRouter = router({
         
         const updates: any = {};
         if (input.enabled !== undefined) updates.enabled = input.enabled;
-        if (input.name) updates.name = input.name;
-        if (input.cronExpression) updates.cronExpression = input.cronExpression;
-        if (input.config) updates.config = { ...schedule.config, ...input.config };
+        if (input.name !== undefined) updates.name = input.name;
+        if (input.description !== undefined) updates.description = input.description;
+        if (input.jobType !== undefined) updates.jobType = input.jobType;
+        if (input.cronExpression !== undefined) updates.cronExpression = input.cronExpression;
+        if (input.timezone !== undefined) updates.timezone = input.timezone;
+        if (input.config !== undefined) updates.config = input.config;
+        if (input.reportConfigs !== undefined) updates.reportConfigs = input.reportConfigs;
         
         await updateScheduledJob(input.scheduleId, updates);
+        
+        console.log(`[Schedules] Updated schedule ${input.scheduleId}`);
         
         return { success: true };
       }),

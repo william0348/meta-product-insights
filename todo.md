@@ -252,3 +252,16 @@
 - [x] Update backend to handle multiple custom_number fields in catalog update
 - [x] Updated ReportConfig interface to include customNumbers field
 - [x] Updated report-generator.ts to include customNumbers in catalog update requests
+
+## Feature - Schedule Editing
+- [x] Add schedules.update API endpoint to update existing schedules
+- [x] Add updateScheduledJob function in db.ts
+- [x] Update ScheduledJobs UI with edit button and edit mode
+- [x] Allow editing all schedule settings (time, accounts, catalog settings)
+
+## Feature - Report Completion Notification
+- [x] Integrate Manus notification API (notifyOwner)
+- [x] Send notification when scheduled report completes
+- [x] Include report summary in notification (success/failure, item count)
+- [x] Send notification for both success and failure cases
+- [x] Send notification when catalog batch job completes

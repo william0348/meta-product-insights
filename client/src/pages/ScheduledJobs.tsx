@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,8 @@ import {
   XCircle,
   AlertCircle,
   Building2,
-  Copy
+  Copy,
+  Pencil
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -34,32 +35,46 @@ interface ReportConfig {
   dateRangeType?: string;
 }
 
+// Type for custom number field
+interface CustomNumberField {
+  enabled: boolean;
+  value: string;
+}
+
+// Type for schedule form data
+interface ScheduleFormData {
+  name: string;
+  jobType: 'report_generation' | 'catalog_update' | 'report_and_catalog';
+  dayOfWeek: string;
+  hour: string;
+  minute: string;
+  dateRangeType: string;
+  customLabel4: string;
+}
+
+const defaultFormData: ScheduleFormData = {
+  name: '',
+  jobType: 'report_generation',
+  dayOfWeek: '1',
+  hour: '9',
+  minute: '0',
+  dateRangeType: 'last_7_days',
+  customLabel4: '',
+};
+
+const defaultCustomNumbers: CustomNumberField[] = [
+  { enabled: false, value: '' },
+  { enabled: false, value: '' },
+  { enabled: false, value: '' },
+  { enabled: false, value: '' },
+  { enabled: false, value: '' },
+];
+
 export default function ScheduledJobs() {
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [newSchedule, setNewSchedule] = useState({
-    name: '',
-    jobType: 'report_generation' as 'report_generation' | 'catalog_update' | 'report_and_catalog',
-    dayOfWeek: '1', // Monday
-    hour: '9',
-    minute: '0',
-    dateRangeType: 'last_7_days',
-    // For combined workflow - custom_label_4 (legacy)
-    customLabel4: '',
-  });
-  
-  // Custom number fields state (custom_number_0 to custom_number_4)
-  const [customNumbers, setCustomNumbers] = useState<{
-    enabled: boolean;
-    value: string;
-  }[]>([
-    { enabled: false, value: '' },
-    { enabled: false, value: '' },
-    { enabled: false, value: '' },
-    { enabled: false, value: '' },
-    { enabled: false, value: '' },
-  ]);
-  
-  // Multi-account configurations
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
+  const [formData, setFormData] = useState<ScheduleFormData>(defaultFormData);
+  const [customNumbers, setCustomNumbers] = useState<CustomNumberField[]>(defaultCustomNumbers);
   const [reportConfigs, setReportConfigs] = useState<ReportConfig[]>([
     { name: '', adAccountId: '', minSpend: '', minCTR: '' }
   ]);
@@ -71,25 +86,7 @@ export default function ScheduledJobs() {
   const createMutation = trpc.schedules.create.useMutation({
     onSuccess: () => {
       refetch();
-      setIsCreateOpen(false);
-      // Reset form
-      setReportConfigs([{ name: '', adAccountId: '', minSpend: '', minCTR: '' }]);
-      setNewSchedule({
-        name: '',
-        jobType: 'report_generation',
-        dayOfWeek: '1',
-        hour: '9',
-        minute: '0',
-        dateRangeType: 'last_7_days',
-        customLabel4: '',
-      });
-      setCustomNumbers([
-        { enabled: false, value: '' },
-        { enabled: false, value: '' },
-        { enabled: false, value: '' },
-        { enabled: false, value: '' },
-        { enabled: false, value: '' },
-      ]);
+      closeDialog();
       toast.success('Schedule created successfully');
     },
     onError: (error) => {
@@ -100,7 +97,15 @@ export default function ScheduledJobs() {
   const updateMutation = trpc.schedules.update.useMutation({
     onSuccess: () => {
       refetch();
-      toast.success('Schedule updated');
+      if (editingScheduleId) {
+        closeDialog();
+        toast.success('Schedule updated successfully');
+      } else {
+        toast.success('Schedule updated');
+      }
+    },
+    onError: (error) => {
+      toast.error(`Failed to update schedule: ${error.message}`);
     },
   });
   
@@ -112,6 +117,81 @@ export default function ScheduledJobs() {
   });
   
   const schedules = schedulesData?.schedules || [];
+  
+  // Reset form to defaults
+  const resetForm = () => {
+    setFormData(defaultFormData);
+    setCustomNumbers(defaultCustomNumbers);
+    setReportConfigs([{ name: '', adAccountId: '', minSpend: '', minCTR: '' }]);
+    setEditingScheduleId(null);
+  };
+  
+  // Close dialog and reset
+  const closeDialog = () => {
+    setIsDialogOpen(false);
+    resetForm();
+  };
+  
+  // Open dialog for creating new schedule
+  const openCreateDialog = () => {
+    resetForm();
+    setIsDialogOpen(true);
+  };
+  
+  // Open dialog for editing existing schedule
+  const openEditDialog = (schedule: any) => {
+    setEditingScheduleId(schedule.id);
+    
+    // Parse cron expression to get day, hour, minute
+    const cronParts = schedule.cronExpression.split(' ');
+    const [, minute, hour, , , dayOfWeek] = cronParts;
+    
+    // Set form data
+    setFormData({
+      name: schedule.name || '',
+      jobType: schedule.jobType || 'report_generation',
+      dayOfWeek: dayOfWeek || '1',
+      hour: hour || '9',
+      minute: minute || '0',
+      dateRangeType: schedule.config?.dateRangeType || 'last_7_days',
+      customLabel4: schedule.config?.customLabel4 || '',
+    });
+    
+    // Set custom numbers
+    const configCustomNumbers = schedule.config?.customNumbers || {};
+    const newCustomNumbers = defaultCustomNumbers.map((_, index) => {
+      const key = `custom_number_${index}`;
+      const value = configCustomNumbers[key];
+      return {
+        enabled: value !== undefined && value !== '',
+        value: value?.toString() || '',
+      };
+    });
+    setCustomNumbers(newCustomNumbers);
+    
+    // Set report configs
+    if (schedule.reportConfigs && Array.isArray(schedule.reportConfigs) && schedule.reportConfigs.length > 0) {
+      setReportConfigs(schedule.reportConfigs.map((c: any) => ({
+        name: c.name || '',
+        adAccountId: c.adAccountId || '',
+        minSpend: c.minSpend || '',
+        minCTR: c.minCTR || '',
+        dateRangeType: c.dateRangeType || '',
+      })));
+    } else if (schedule.config?.adAccountId) {
+      setReportConfigs([{
+        name: '',
+        adAccountId: schedule.config.adAccountId,
+        minSpend: schedule.config.minSpend || '',
+        minCTR: schedule.config.minCTR || '',
+        dateRangeType: schedule.config.dateRangeType || '',
+      }]);
+    } else {
+      setReportConfigs([{ name: '', adAccountId: '', minSpend: '', minCTR: '' }]);
+    }
+    
+    setIsDialogOpen(true);
+  };
   
   // Add a new report configuration
   const addReportConfig = () => {
@@ -147,7 +227,7 @@ export default function ScheduledJobs() {
     }
   };
   
-  const handleCreateSchedule = () => {
+  const handleSubmit = () => {
     // Validate at least one config has adAccountId
     const validConfigs = reportConfigs.filter(c => c.adAccountId.trim());
     if (validConfigs.length === 0) {
@@ -156,7 +236,7 @@ export default function ScheduledJobs() {
     }
     
     // Build cron expression: "second minute hour dayOfMonth month dayOfWeek"
-    const cronExpression = `0 ${newSchedule.minute} ${newSchedule.hour} * * ${newSchedule.dayOfWeek}`;
+    const cronExpression = `0 ${formData.minute} ${formData.hour} * * ${formData.dayOfWeek}`;
     
     // Prepare report configs with dateRangeType
     const configsWithDateRange = validConfigs.map((c, i) => ({
@@ -164,24 +244,23 @@ export default function ScheduledJobs() {
       adAccountId: c.adAccountId.trim(),
       minSpend: c.minSpend?.trim() || undefined,
       minCTR: c.minCTR?.trim() || undefined,
-      dateRangeType: c.dateRangeType || newSchedule.dateRangeType,
+      dateRangeType: c.dateRangeType || formData.dateRangeType,
     }));
     
     // Build config object with catalog settings for combined workflow
     const config: Record<string, any> = {
-      dateRangeType: newSchedule.dateRangeType,
-      // Legacy single config (use first config)
+      dateRangeType: formData.dateRangeType,
       adAccountId: validConfigs[0].adAccountId,
       minSpend: validConfigs[0].minSpend || undefined,
       minCTR: validConfigs[0].minCTR || undefined,
     };
     
     // Add catalog settings for combined workflow
-    if (newSchedule.jobType === 'report_and_catalog') {
+    if (formData.jobType === 'report_and_catalog') {
       config.updateToCatalog = true;
       config.catalogId = catalogTokenData?.catalogId;
       config.catalogAccessToken = catalogTokenData?.accessToken;
-      config.customLabel4 = newSchedule.customLabel4 || 'from_scheduled_report';
+      config.customLabel4 = formData.customLabel4 || 'from_scheduled_report';
       
       // Add custom_number fields (0-4)
       const customNumbersConfig: Record<string, string> = {};
@@ -193,13 +272,26 @@ export default function ScheduledJobs() {
       config.customNumbers = customNumbersConfig;
     }
     
-    createMutation.mutate({
-      name: newSchedule.name || `Weekly Report - ${getDayName(parseInt(newSchedule.dayOfWeek))}`,
-      jobType: newSchedule.jobType,
-      cronExpression,
-      config,
-      reportConfigs: configsWithDateRange,
-    });
+    if (editingScheduleId) {
+      // Update existing schedule
+      updateMutation.mutate({
+        scheduleId: editingScheduleId,
+        name: formData.name || `Weekly Report - ${getDayName(parseInt(formData.dayOfWeek))}`,
+        jobType: formData.jobType,
+        cronExpression,
+        config,
+        reportConfigs: configsWithDateRange,
+      });
+    } else {
+      // Create new schedule
+      createMutation.mutate({
+        name: formData.name || `Weekly Report - ${getDayName(parseInt(formData.dayOfWeek))}`,
+        jobType: formData.jobType,
+        cronExpression,
+        config,
+        reportConfigs: configsWithDateRange,
+      });
+    }
   };
   
   const getDayName = (day: number) => {
@@ -231,13 +323,27 @@ export default function ScheduledJobs() {
     return { day, time };
   };
   
-  // Get report configs count from schedule
   const getConfigCount = (schedule: any) => {
     if (schedule.reportConfigs && Array.isArray(schedule.reportConfigs)) {
       return schedule.reportConfigs.length;
     }
     return schedule.config?.adAccountId ? 1 : 0;
   };
+  
+  const getJobTypeLabel = (jobType: string) => {
+    switch (jobType) {
+      case 'report_generation':
+        return 'Report Generation';
+      case 'catalog_update':
+        return 'Catalog Update';
+      case 'report_and_catalog':
+        return 'Report + Catalog Update';
+      default:
+        return jobType;
+    }
+  };
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="min-h-screen bg-background font-sans">
@@ -260,288 +366,282 @@ export default function ScheduledJobs() {
             </div>
           </div>
           
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="h-8">
-                <Plus className="w-4 h-4 mr-2" />
-                New Schedule
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create Scheduled Job</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Schedule Name</Label>
-                  <Input
-                    placeholder="Weekly Product Report"
-                    value={newSchedule.name}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, name: e.target.value })}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Job Type</Label>
-                  <Select
-                    value={newSchedule.jobType}
-                    onValueChange={(v) => setNewSchedule({ ...newSchedule, jobType: v as any })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="report_generation">Report Generation Only</SelectItem>
-                      <SelectItem value="report_and_catalog">Report + Catalog Update</SelectItem>
-                      <SelectItem value="catalog_update">Catalog Update Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Day of Week</Label>
-                    <Select
-                      value={newSchedule.dayOfWeek}
-                      onValueChange={(v) => setNewSchedule({ ...newSchedule, dayOfWeek: v })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">Sunday</SelectItem>
-                        <SelectItem value="1">Monday</SelectItem>
-                        <SelectItem value="2">Tuesday</SelectItem>
-                        <SelectItem value="3">Wednesday</SelectItem>
-                        <SelectItem value="4">Thursday</SelectItem>
-                        <SelectItem value="5">Friday</SelectItem>
-                        <SelectItem value="6">Saturday</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Hour</Label>
-                    <Select
-                      value={newSchedule.hour}
-                      onValueChange={(v) => setNewSchedule({ ...newSchedule, hour: v })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 24 }, (_, i) => (
-                          <SelectItem key={i} value={i.toString()}>{i.toString().padStart(2, '0')}:00</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Minute</Label>
-                    <Select
-                      value={newSchedule.minute}
-                      onValueChange={(v) => setNewSchedule({ ...newSchedule, minute: v })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">:00</SelectItem>
-                        <SelectItem value="15">:15</SelectItem>
-                        <SelectItem value="30">:30</SelectItem>
-                        <SelectItem value="45">:45</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Default Date Range</Label>
-                  <Select
-                    value={newSchedule.dateRangeType}
-                    onValueChange={(v) => setNewSchedule({ ...newSchedule, dateRangeType: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="last_7_days">Last 7 Days</SelectItem>
-                      <SelectItem value="last_week">Last Week (Mon-Sun)</SelectItem>
-                      <SelectItem value="last_14_days">Last 14 Days</SelectItem>
-                      <SelectItem value="last_30_days">Last 30 Days</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {/* Catalog Settings for Combined Workflow */}
-                {newSchedule.jobType === 'report_and_catalog' && (
-                  <div className="space-y-4 pt-4 border-t">
-                    <Label className="text-base font-semibold">Catalog Update Settings</Label>
-                    <p className="text-xs text-muted-foreground">
-                      After generating the report, products will be updated in your catalog with the specified fields.
-                    </p>
-                    
-                    {/* Catalog ID */}
-                    <div className="space-y-1">
-                      <Label className="text-xs">Catalog ID</Label>
-                      <Input
-                        placeholder={catalogTokenData?.catalogId || 'Enter Catalog ID'}
-                        value={catalogTokenData?.catalogId || ''}
-                        disabled
-                        className="bg-muted"
-                      />
-                      <p className="text-[10px] text-muted-foreground">Uses your saved catalog settings</p>
-                    </div>
-                    
-                    {/* Custom Label 4 */}
-                    <div className="space-y-1">
-                      <Label className="text-xs">Custom Label 4 Value</Label>
-                      <Input
-                        placeholder="e.g., high_performer"
-                        value={newSchedule.customLabel4}
-                        onChange={(e) => setNewSchedule({ ...newSchedule, customLabel4: e.target.value })}
-                      />
-                      <p className="text-[10px] text-muted-foreground">Value to set for custom_label_4</p>
-                    </div>
-                    
-                    {/* Custom Number Fields 0-4 */}
-                    <div className="space-y-3 pt-2">
-                      <Label className="text-sm font-medium">Custom Number Fields</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Enable and set values for custom_number_0 through custom_number_4 fields.
-                      </p>
-                      
-                      <div className="grid grid-cols-1 gap-3">
-                        {[0, 1, 2, 3, 4].map((index) => (
-                          <div key={index} className="flex items-center gap-3 p-3 border rounded-md bg-muted/30">
-                            <Switch
-                              checked={customNumbers[index].enabled}
-                              onCheckedChange={(checked) => {
-                                const updated = [...customNumbers];
-                                updated[index] = { ...updated[index], enabled: checked };
-                                setCustomNumbers(updated);
-                              }}
-                            />
-                            <Label className="text-xs font-mono min-w-[120px]">custom_number_{index}</Label>
-                            <Input
-                              placeholder="Enter numeric value"
-                              type="number"
-                              value={customNumbers[index].value}
-                              onChange={(e) => {
-                                const updated = [...customNumbers];
-                                updated[index] = { ...updated[index], value: e.target.value };
-                                setCustomNumbers(updated);
-                              }}
-                              disabled={!customNumbers[index].enabled}
-                              className={!customNumbers[index].enabled ? 'bg-muted opacity-50' : ''}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Multi-Account Configurations */}
-                <div className="space-y-3 pt-4 border-t">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base font-semibold">Account Configurations</Label>
-                    <Button variant="outline" size="sm" onClick={addReportConfig}>
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Account
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Add multiple Ad Account IDs with different filter parameters. Each account will generate a separate report.
-                  </p>
-                  
-                  {reportConfigs.map((config, index) => (
-                    <Card key={index} className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-2">
-                          <Building2 className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm font-medium">Account {index + 1}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyDefaultsToConfig(index)}
-                            title="Copy from saved settings"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </Button>
-                          {reportConfigs.length > 1 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeReportConfig(index)}
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="col-span-2 space-y-1">
-                          <Label className="text-xs">Config Name (Optional)</Label>
-                          <Input
-                            placeholder="e.g., Main Account, Brand A"
-                            value={config.name || ''}
-                            onChange={(e) => updateReportConfig(index, 'name', e.target.value)}
-                          />
-                        </div>
-                        
-                        <div className="col-span-2 space-y-1">
-                          <Label className="text-xs">Ad Account ID *</Label>
-                          <Input
-                            placeholder="act_123456789"
-                            value={config.adAccountId}
-                            onChange={(e) => updateReportConfig(index, 'adAccountId', e.target.value)}
-                          />
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <Label className="text-xs">Min Spend ($)</Label>
-                          <Input
-                            placeholder="e.g., 10"
-                            value={config.minSpend || ''}
-                            onChange={(e) => updateReportConfig(index, 'minSpend', e.target.value)}
-                          />
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <Label className="text-xs">Min CTR (%)</Label>
-                          <Input
-                            placeholder="e.g., 1.0"
-                            value={config.minCTR || ''}
-                            onChange={(e) => updateReportConfig(index, 'minCTR', e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-                
-                <Button 
-                  className="w-full" 
-                  onClick={handleCreateSchedule}
-                  disabled={createMutation.isPending}
-                >
-                  {createMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Plus className="w-4 h-4 mr-2" />
-                  )}
-                  Create Schedule ({reportConfigs.filter(c => c.adAccountId.trim()).length} account{reportConfigs.filter(c => c.adAccountId.trim()).length !== 1 ? 's' : ''})
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button size="sm" className="h-8" onClick={openCreateDialog}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Schedule
+          </Button>
         </div>
       </header>
+
+      {/* Create/Edit Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); else setIsDialogOpen(true); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingScheduleId ? 'Edit Schedule' : 'Create Scheduled Job'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Schedule Name</Label>
+              <Input
+                placeholder="Weekly Product Report"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Job Type</Label>
+              <Select
+                value={formData.jobType}
+                onValueChange={(value: 'report_generation' | 'catalog_update' | 'report_and_catalog') => 
+                  setFormData({ ...formData, jobType: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="report_generation">Report Generation Only</SelectItem>
+                  <SelectItem value="report_and_catalog">Report + Catalog Update</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Day of Week</Label>
+                <Select
+                  value={formData.dayOfWeek}
+                  onValueChange={(value) => setFormData({ ...formData, dayOfWeek: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Sunday</SelectItem>
+                    <SelectItem value="1">Monday</SelectItem>
+                    <SelectItem value="2">Tuesday</SelectItem>
+                    <SelectItem value="3">Wednesday</SelectItem>
+                    <SelectItem value="4">Thursday</SelectItem>
+                    <SelectItem value="5">Friday</SelectItem>
+                    <SelectItem value="6">Saturday</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Hour</Label>
+                <Select
+                  value={formData.hour}
+                  onValueChange={(value) => setFormData({ ...formData, hour: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <SelectItem key={i} value={i.toString()}>
+                        {i.toString().padStart(2, '0')}:00
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Minute</Label>
+                <Select
+                  value={formData.minute}
+                  onValueChange={(value) => setFormData({ ...formData, minute: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">:00</SelectItem>
+                    <SelectItem value="15">:15</SelectItem>
+                    <SelectItem value="30">:30</SelectItem>
+                    <SelectItem value="45">:45</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Date Range</Label>
+              <Select
+                value={formData.dateRangeType}
+                onValueChange={(value) => setFormData({ ...formData, dateRangeType: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="last_7_days">Last 7 Days</SelectItem>
+                  <SelectItem value="last_14_days">Last 14 Days</SelectItem>
+                  <SelectItem value="last_30_days">Last 30 Days</SelectItem>
+                  <SelectItem value="last_week">Last Week (Mon-Sun)</SelectItem>
+                  <SelectItem value="this_month">This Month</SelectItem>
+                  <SelectItem value="last_month">Last Month</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Catalog Update Settings - only show for combined workflow */}
+            {formData.jobType === 'report_and_catalog' && (
+              <div className="space-y-4 p-4 bg-secondary/30 rounded-lg border">
+                <div>
+                  <h4 className="font-medium mb-1">Catalog Update Settings</h4>
+                  <p className="text-xs text-muted-foreground">
+                    After generating the report, products will be updated in your catalog with the specified label.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Catalog ID</Label>
+                    <Input
+                      value={catalogTokenData?.catalogId || ''}
+                      disabled
+                      className="bg-muted"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Uses your saved catalog settings</p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Custom Label 4 Value</Label>
+                    <Input
+                      placeholder="e.g., high_performer"
+                      value={formData.customLabel4}
+                      onChange={(e) => setFormData({ ...formData, customLabel4: e.target.value })}
+                    />
+                    <p className="text-[10px] text-muted-foreground">Value to set for custom_label_4</p>
+                  </div>
+                </div>
+                
+                {/* Custom Number Fields */}
+                <div className="space-y-3">
+                  <Label>Custom Number Fields</Label>
+                  <p className="text-xs text-muted-foreground">Enable and set values for custom_number_0 to custom_number_4</p>
+                  
+                  <div className="grid grid-cols-1 gap-2">
+                    {customNumbers.map((cn, index) => (
+                      <div key={index} className="flex items-center gap-3 p-2 bg-background rounded border">
+                        <Switch
+                          checked={cn.enabled}
+                          onCheckedChange={(checked) => {
+                            const updated = [...customNumbers];
+                            updated[index] = { ...updated[index], enabled: checked };
+                            setCustomNumbers(updated);
+                          }}
+                        />
+                        <span className="text-sm font-mono w-32">custom_number_{index}</span>
+                        <Input
+                          type="number"
+                          placeholder="Value"
+                          value={cn.value}
+                          onChange={(e) => {
+                            const updated = [...customNumbers];
+                            updated[index] = { ...updated[index], value: e.target.value };
+                            setCustomNumbers(updated);
+                          }}
+                          disabled={!cn.enabled}
+                          className="flex-1"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Multi-Account Configurations */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Account Configurations</Label>
+                  <p className="text-xs text-muted-foreground">Add multiple accounts to generate reports for each</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={addReportConfig}>
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Account
+                </Button>
+              </div>
+              
+              {reportConfigs.map((config, index) => (
+                <Card key={index} className="p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Account {index + 1}</span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyDefaultsToConfig(index)}
+                        title="Copy from saved settings"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                      {reportConfigs.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeReportConfig(index)}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1 col-span-2">
+                      <Label className="text-xs">Ad Account ID *</Label>
+                      <Input
+                        placeholder="act_123456789"
+                        value={config.adAccountId}
+                        onChange={(e) => updateReportConfig(index, 'adAccountId', e.target.value)}
+                      />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <Label className="text-xs">Min Spend ($)</Label>
+                      <Input
+                        placeholder="e.g., 10"
+                        value={config.minSpend || ''}
+                        onChange={(e) => updateReportConfig(index, 'minSpend', e.target.value)}
+                      />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <Label className="text-xs">Min CTR (%)</Label>
+                      <Input
+                        placeholder="e.g., 1.0"
+                        value={config.minCTR || ''}
+                        onChange={(e) => updateReportConfig(index, 'minCTR', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+            
+            <Button 
+              className="w-full" 
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : editingScheduleId ? (
+                <Pencil className="w-4 h-4 mr-2" />
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
+              {editingScheduleId ? 'Update Schedule' : `Create Schedule (${reportConfigs.filter(c => c.adAccountId.trim()).length} account${reportConfigs.filter(c => c.adAccountId.trim()).length !== 1 ? 's' : ''})`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <main className="container py-8">
         {isLoading ? (
@@ -554,7 +654,7 @@ export default function ScheduledJobs() {
               <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium mb-2">No Scheduled Jobs</p>
               <p className="text-sm mb-4">Create a schedule to automatically generate reports weekly</p>
-              <Button onClick={() => setIsCreateOpen(true)}>
+              <Button onClick={openCreateDialog}>
                 <Plus className="w-4 h-4 mr-2" />
                 Create First Schedule
               </Button>
@@ -579,7 +679,7 @@ export default function ScheduledJobs() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {schedule.jobType === 'report_generation' ? 'Report Generation' : 'Catalog Update'}
+                      {getJobTypeLabel(schedule.jobType)}
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -617,6 +717,13 @@ export default function ScheduledJobs() {
                     
                     {/* Actions */}
                     <div className="flex items-center justify-end space-x-2 pt-2 border-t">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEditDialog(schedule)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"

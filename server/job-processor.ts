@@ -14,6 +14,7 @@ import {
   createBatchHistoryRecord,
   updateBatchHistoryRecord
 } from "./db";
+import { notifyOwner } from "./_core/notification";
 import { batchUpdateProducts, fetchProductsByRetailerIds, checkBatchRequestStatus } from "./catalog";
 import { processReportGenerationJob } from "./report-generator";
 import { BatchJob } from "../drizzle/schema";
@@ -371,6 +372,31 @@ async function processCatalogUpdateJob(job: BatchJob, startTime: number): Promis
   }
 
   console.log(`[JobProcessor] Job ${job.id} completed in ${durationMs}ms: ${successCount} success, ${errorCount} errors`);
+  
+  // Send notification to owner
+  try {
+    const durationMinutes = Math.round(durationMs / 60000);
+    const status = errorCount > 0 && successCount === 0 ? '❌ Failed' : '✅ Completed';
+    const notificationTitle = `${status}: Catalog Batch Update`;
+    const notificationContent = [
+      `**Job ID:** ${job.id}`,
+      `**Catalog ID:** ${config.catalogId}`,
+      `**Total Items:** ${totalItems.toLocaleString()}`,
+      `**Success:** ${successCount.toLocaleString()}`,
+      `**Errors:** ${errorCount.toLocaleString()}`,
+      `**Duration:** ${durationMinutes} minutes`,
+      `\n[View History](/batch-history)`
+    ].join('\n');
+    
+    await notifyOwner({
+      title: notificationTitle,
+      content: notificationContent,
+    });
+    console.log(`[JobProcessor] Notification sent for job ${job.id}`);
+  } catch (notifyError) {
+    console.warn(`[JobProcessor] Failed to send notification:`, notifyError);
+    // Don't fail the job if notification fails
+  }
 }
 
 /**
