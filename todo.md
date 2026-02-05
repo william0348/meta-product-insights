@@ -227,3 +227,11 @@
 - [x] Create Reports page to view historical reports (/saved-reports)
 - [x] Create Schedules page for schedule configuration (/schedules)
 - [x] Add navigation links to Home page header (Reports, Schedules)
+
+## Feature - Multi-Account Support for Scheduled Reports
+- [x] Update scheduled_jobs config to support array of report configurations (reportConfigs column)
+- [x] Each configuration includes: adAccountId, minSpend, minCTR, dateRangeType, name
+- [x] Update scheduler to generate multiple reports from a single schedule
+- [x] Update ScheduledJobs page to allow adding/editing multiple configurations
+- [x] Display configuration count in schedule cards
+- [x] Added "Copy from saved settings" button to quickly fill config values

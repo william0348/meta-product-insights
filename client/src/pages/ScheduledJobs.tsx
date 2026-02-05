@@ -15,16 +15,24 @@ import {
   Clock,
   Plus,
   Trash2,
-  Play,
-  Pause,
-  Settings,
   Loader2,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Building2,
+  Copy
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+
+// Type for report configuration
+interface ReportConfig {
+  name?: string;
+  adAccountId: string;
+  minSpend?: string;
+  minCTR?: string;
+  dateRangeType?: string;
+}
 
 export default function ScheduledJobs() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -37,6 +45,11 @@ export default function ScheduledJobs() {
     dateRangeType: 'last_7_days',
   });
   
+  // Multi-account configurations
+  const [reportConfigs, setReportConfigs] = useState<ReportConfig[]>([
+    { name: '', adAccountId: '', minSpend: '', minCTR: '' }
+  ]);
+  
   const { data: schedulesData, isLoading, refetch } = trpc.schedules.getMySchedules.useQuery({ limit: 50 });
   const { data: tokenData } = trpc.tokens.get.useQuery({ tokenType: 'ads_management' });
   
@@ -44,6 +57,16 @@ export default function ScheduledJobs() {
     onSuccess: () => {
       refetch();
       setIsCreateOpen(false);
+      // Reset form
+      setReportConfigs([{ name: '', adAccountId: '', minSpend: '', minCTR: '' }]);
+      setNewSchedule({
+        name: '',
+        jobType: 'report_generation',
+        dayOfWeek: '1',
+        hour: '9',
+        minute: '0',
+        dateRangeType: 'last_7_days',
+      });
       toast.success('Schedule created successfully');
     },
     onError: (error) => {
@@ -67,20 +90,72 @@ export default function ScheduledJobs() {
   
   const schedules = schedulesData?.schedules || [];
   
+  // Add a new report configuration
+  const addReportConfig = () => {
+    setReportConfigs([...reportConfigs, { name: '', adAccountId: '', minSpend: '', minCTR: '' }]);
+  };
+  
+  // Remove a report configuration
+  const removeReportConfig = (index: number) => {
+    if (reportConfigs.length > 1) {
+      setReportConfigs(reportConfigs.filter((_, i) => i !== index));
+    }
+  };
+  
+  // Update a report configuration
+  const updateReportConfig = (index: number, field: keyof ReportConfig, value: string) => {
+    const updated = [...reportConfigs];
+    updated[index] = { ...updated[index], [field]: value };
+    setReportConfigs(updated);
+  };
+  
+  // Copy default values from saved token to a config
+  const copyDefaultsToConfig = (index: number) => {
+    if (tokenData) {
+      const updated = [...reportConfigs];
+      updated[index] = {
+        ...updated[index],
+        adAccountId: tokenData.adAccountId || updated[index].adAccountId,
+        minSpend: tokenData.minSpend || updated[index].minSpend,
+        minCTR: tokenData.minCTR || updated[index].minCTR,
+      };
+      setReportConfigs(updated);
+      toast.success('Copied default values');
+    }
+  };
+  
   const handleCreateSchedule = () => {
+    // Validate at least one config has adAccountId
+    const validConfigs = reportConfigs.filter(c => c.adAccountId.trim());
+    if (validConfigs.length === 0) {
+      toast.error('Please add at least one Ad Account ID');
+      return;
+    }
+    
     // Build cron expression: "second minute hour dayOfMonth month dayOfWeek"
     const cronExpression = `0 ${newSchedule.minute} ${newSchedule.hour} * * ${newSchedule.dayOfWeek}`;
+    
+    // Prepare report configs with dateRangeType
+    const configsWithDateRange = validConfigs.map((c, i) => ({
+      name: c.name || `Account ${i + 1}`,
+      adAccountId: c.adAccountId.trim(),
+      minSpend: c.minSpend?.trim() || undefined,
+      minCTR: c.minCTR?.trim() || undefined,
+      dateRangeType: c.dateRangeType || newSchedule.dateRangeType,
+    }));
     
     createMutation.mutate({
       name: newSchedule.name || `Weekly Report - ${getDayName(parseInt(newSchedule.dayOfWeek))}`,
       jobType: newSchedule.jobType,
       cronExpression,
       config: {
-        adAccountId: tokenData?.adAccountId || undefined,
         dateRangeType: newSchedule.dateRangeType,
-        minSpend: tokenData?.minSpend || undefined,
-        minCTR: tokenData?.minCTR || undefined,
+        // Legacy single config (use first config)
+        adAccountId: validConfigs[0].adAccountId,
+        minSpend: validConfigs[0].minSpend || undefined,
+        minCTR: validConfigs[0].minCTR || undefined,
       },
+      reportConfigs: configsWithDateRange,
     });
   };
   
@@ -112,6 +187,14 @@ export default function ScheduledJobs() {
     
     return { day, time };
   };
+  
+  // Get report configs count from schedule
+  const getConfigCount = (schedule: any) => {
+    if (schedule.reportConfigs && Array.isArray(schedule.reportConfigs)) {
+      return schedule.reportConfigs.length;
+    }
+    return schedule.config?.adAccountId ? 1 : 0;
+  };
 
   return (
     <div className="min-h-screen bg-background font-sans">
@@ -141,7 +224,7 @@ export default function ScheduledJobs() {
                 New Schedule
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Scheduled Job</DialogTitle>
               </DialogHeader>
@@ -230,7 +313,7 @@ export default function ScheduledJobs() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label>Date Range</Label>
+                  <Label>Default Date Range</Label>
                   <Select
                     value={newSchedule.dateRangeType}
                     onValueChange={(v) => setNewSchedule({ ...newSchedule, dateRangeType: v })}
@@ -247,6 +330,88 @@ export default function ScheduledJobs() {
                   </Select>
                 </div>
                 
+                {/* Multi-Account Configurations */}
+                <div className="space-y-3 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-semibold">Account Configurations</Label>
+                    <Button variant="outline" size="sm" onClick={addReportConfig}>
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Account
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Add multiple Ad Account IDs with different filter parameters. Each account will generate a separate report.
+                  </p>
+                  
+                  {reportConfigs.map((config, index) => (
+                    <Card key={index} className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-2">
+                          <Building2 className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">Account {index + 1}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => copyDefaultsToConfig(index)}
+                            title="Copy from saved settings"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                          {reportConfigs.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeReportConfig(index)}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Config Name (Optional)</Label>
+                          <Input
+                            placeholder="e.g., Main Account, Brand A"
+                            value={config.name || ''}
+                            onChange={(e) => updateReportConfig(index, 'name', e.target.value)}
+                          />
+                        </div>
+                        
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Ad Account ID *</Label>
+                          <Input
+                            placeholder="act_123456789"
+                            value={config.adAccountId}
+                            onChange={(e) => updateReportConfig(index, 'adAccountId', e.target.value)}
+                          />
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <Label className="text-xs">Min Spend ($)</Label>
+                          <Input
+                            placeholder="e.g., 10"
+                            value={config.minSpend || ''}
+                            onChange={(e) => updateReportConfig(index, 'minSpend', e.target.value)}
+                          />
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <Label className="text-xs">Min CTR (%)</Label>
+                          <Input
+                            placeholder="e.g., 1.0"
+                            value={config.minCTR || ''}
+                            onChange={(e) => updateReportConfig(index, 'minCTR', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+                
                 <Button 
                   className="w-full" 
                   onClick={handleCreateSchedule}
@@ -257,7 +422,7 @@ export default function ScheduledJobs() {
                   ) : (
                     <Plus className="w-4 h-4 mr-2" />
                   )}
-                  Create Schedule
+                  Create Schedule ({reportConfigs.filter(c => c.adAccountId.trim()).length} account{reportConfigs.filter(c => c.adAccountId.trim()).length !== 1 ? 's' : ''})
                 </Button>
               </div>
             </DialogContent>
@@ -286,6 +451,7 @@ export default function ScheduledJobs() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {schedules.map((schedule) => {
               const { day, time } = parseCronExpression(schedule.cronExpression);
+              const configCount = getConfigCount(schedule);
               
               return (
                 <Card key={schedule.id} className="relative">
@@ -310,6 +476,12 @@ export default function ScheduledJobs() {
                       <span className="font-medium">{day}</span>
                       <span className="mx-2 text-muted-foreground">at</span>
                       <span className="font-medium">{time}</span>
+                    </div>
+                    
+                    {/* Account Count */}
+                    <div className="flex items-center text-sm">
+                      <Building2 className="w-4 h-4 mr-2 text-muted-foreground" />
+                      <span>{configCount} account{configCount !== 1 ? 's' : ''}</span>
                     </div>
                     
                     {/* Last Run Status */}

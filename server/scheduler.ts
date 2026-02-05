@@ -3,6 +3,7 @@
  * 
  * This module handles scheduled job execution.
  * It checks for due scheduled jobs and creates batch jobs for them.
+ * Supports multi-account configurations - a single schedule can generate multiple reports.
  */
 
 import { 
@@ -18,6 +19,18 @@ let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 
 // Configuration
 const SCHEDULER_INTERVAL_MS = 60000; // Check every minute
+
+// Type for report configuration
+interface ReportConfig {
+  name?: string;
+  adAccountId: string;
+  accessToken?: string;
+  dateRangeType?: string;
+  minSpend?: string;
+  minCTR?: string;
+  level?: string;
+  breakdown?: string;
+}
 
 /**
  * Parse cron expression and calculate next run time
@@ -92,7 +105,49 @@ function calculateNextRunTime(schedule: ScheduledJob): Date {
 }
 
 /**
+ * Get all report configurations from a schedule
+ * Supports both legacy single config and new multi-config format
+ */
+function getReportConfigs(schedule: ScheduledJob): ReportConfig[] {
+  const configs: ReportConfig[] = [];
+  
+  // Check for new multi-account configurations
+  if (schedule.reportConfigs && Array.isArray(schedule.reportConfigs) && schedule.reportConfigs.length > 0) {
+    for (const rc of schedule.reportConfigs) {
+      if (rc.adAccountId) {
+        configs.push({
+          name: rc.name,
+          adAccountId: rc.adAccountId,
+          accessToken: rc.accessToken,
+          dateRangeType: rc.dateRangeType || schedule.config?.dateRangeType,
+          minSpend: rc.minSpend,
+          minCTR: rc.minCTR,
+          level: rc.level || schedule.config?.level,
+          breakdown: rc.breakdown || schedule.config?.breakdown,
+        });
+      }
+    }
+  }
+  
+  // Fall back to legacy single config if no multi-configs
+  if (configs.length === 0 && schedule.config?.adAccountId) {
+    configs.push({
+      adAccountId: schedule.config.adAccountId,
+      accessToken: schedule.config.accessToken,
+      dateRangeType: schedule.config.dateRangeType,
+      minSpend: schedule.config.minSpend,
+      minCTR: schedule.config.minCTR,
+      level: schedule.config.level,
+      breakdown: schedule.config.breakdown,
+    });
+  }
+  
+  return configs;
+}
+
+/**
  * Process a scheduled job
+ * Creates multiple batch jobs if there are multiple report configurations
  */
 async function processScheduledJob(schedule: ScheduledJob): Promise<void> {
   console.log(`[Scheduler] Processing scheduled job ${schedule.id}: ${schedule.name}`);
@@ -109,27 +164,70 @@ async function processScheduledJob(schedule: ScheduledJob): Promise<void> {
       return;
     }
     
-    // Build job config from schedule config and user tokens
-    const jobConfig = {
-      ...schedule.config,
-      accessToken: adsToken.accessToken,
-      adAccountId: schedule.config?.adAccountId || adsToken.adAccountId || undefined,
-      minSpend: schedule.config?.minSpend || adsToken.minSpend || undefined,
-      minCTR: schedule.config?.minCTR || adsToken.minCTR || undefined,
-    };
+    // Get all report configurations
+    const reportConfigs = getReportConfigs(schedule);
     
-    // Create a batch job for report generation
-    const jobId = await createBatchJob({
-      userId: schedule.userId,
-      jobType: 'report_generation',
-      config: jobConfig,
-    });
-    
-    if (!jobId) {
-      throw new Error('Failed to create batch job');
+    if (reportConfigs.length === 0) {
+      console.error(`[Scheduler] No report configurations found for schedule ${schedule.id}`);
+      await updateScheduledJob(schedule.id, {
+        lastRunStatus: 'failed',
+      });
+      return;
     }
     
-    console.log(`[Scheduler] Created batch job ${jobId} for schedule ${schedule.id}`);
+    console.log(`[Scheduler] Creating ${reportConfigs.length} report job(s) for schedule ${schedule.id}`);
+    
+    let lastJobId: number | null = null;
+    let successCount = 0;
+    let failCount = 0;
+    
+    // Create a batch job for each report configuration
+    for (let i = 0; i < reportConfigs.length; i++) {
+      const config = reportConfigs[i];
+      
+      try {
+        // Build job config from report config and user tokens
+        const jobConfig = {
+          adAccountId: config.adAccountId,
+          accessToken: config.accessToken || adsToken.accessToken,
+          dateRangeType: config.dateRangeType || 'last_7_days',
+          level: config.level || 'ad',
+          breakdown: config.breakdown || 'product_id',
+          minSpend: config.minSpend || adsToken.minSpend || undefined,
+          minCTR: config.minCTR || adsToken.minCTR || undefined,
+          // Add metadata for tracking
+          configIndex: i,
+          configName: config.name || `Config ${i + 1}`,
+          scheduleId: schedule.id,
+          scheduleName: schedule.name,
+        };
+        
+        // Create a batch job for report generation
+        const jobId = await createBatchJob({
+          userId: schedule.userId,
+          jobType: 'report_generation',
+          config: jobConfig,
+        });
+        
+        if (jobId) {
+          console.log(`[Scheduler] Created batch job ${jobId} for config ${i + 1}/${reportConfigs.length} (Account: ${config.adAccountId})`);
+          lastJobId = jobId;
+          successCount++;
+        } else {
+          console.error(`[Scheduler] Failed to create batch job for config ${i + 1}`);
+          failCount++;
+        }
+        
+        // Small delay between job creations to avoid overwhelming the system
+        if (i < reportConfigs.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+      } catch (error: any) {
+        console.error(`[Scheduler] Error creating job for config ${i + 1}:`, error.message);
+        failCount++;
+      }
+    }
     
     // Update schedule with next run time
     const nextRunAt = calculateNextRunTime(schedule);
@@ -138,11 +236,11 @@ async function processScheduledJob(schedule: ScheduledJob): Promise<void> {
       lastRunAt: new Date(),
       nextRunAt,
       runCount: (schedule.runCount || 0) + 1,
-      lastRunStatus: 'success',
-      lastRunJobId: jobId,
+      lastRunStatus: failCount === 0 ? 'success' : (successCount > 0 ? 'success' : 'failed'),
+      lastRunJobId: lastJobId,
     });
     
-    console.log(`[Scheduler] Next run for schedule ${schedule.id}: ${nextRunAt.toISOString()}`);
+    console.log(`[Scheduler] Schedule ${schedule.id} completed: ${successCount} jobs created, ${failCount} failed. Next run: ${nextRunAt.toISOString()}`);
     
   } catch (error: any) {
     console.error(`[Scheduler] Error processing schedule ${schedule.id}:`, error);

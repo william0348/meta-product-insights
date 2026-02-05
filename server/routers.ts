@@ -664,6 +664,17 @@ export const appRouter = router({
           catalogId: z.string().optional(),
           customLabel4: z.string().optional(),
         }),
+        // Multi-account configurations
+        reportConfigs: z.array(z.object({
+          name: z.string().optional(),
+          adAccountId: z.string(),
+          accessToken: z.string().optional(),
+          dateRangeType: z.string().optional(),
+          minSpend: z.string().optional(),
+          minCTR: z.string().optional(),
+          level: z.string().optional(),
+          breakdown: z.string().optional(),
+        })).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
@@ -681,6 +692,7 @@ export const appRouter = router({
           cronExpression: input.cronExpression,
           timezone: input.timezone,
           config: input.config,
+          reportConfigs: input.reportConfigs || null,
           enabled: true,
           nextRunAt,
         });

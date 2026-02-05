@@ -304,3 +304,33 @@ This feature moves Product Level Reporting data fetching to background processin
 ---
 
 *Last updated: 2026-02-05*
+
+
+---
+
+## Multi-Account Support for Scheduled Reports (2026-02-05)
+
+### Overview
+This feature allows a single scheduled job to generate multiple reports for different Ad Account IDs with different filter parameters. When the schedule runs, it creates separate batch jobs for each configured account.
+
+### Database Changes
+Added `reportConfigs` column to `scheduled_jobs` table. This is a JSON array containing multiple report configurations, each with its own Ad Account ID and filter parameters.
+
+### Configuration Structure
+Each report configuration in the array can include the following fields: `name` (optional label for the config), `adAccountId` (required), `accessToken` (optional override), `dateRangeType` (optional override), `minSpend` (optional filter), `minCTR` (optional filter), `level` (optional), and `breakdown` (optional).
+
+### Scheduler Behavior
+When a scheduled job runs, the scheduler performs the following steps. First, it retrieves the user's saved access token from the database. Then, it extracts all report configurations from the `reportConfigs` array, falling back to the legacy single config if the array is empty. For each configuration, it creates a separate batch job with the appropriate parameters. Finally, it updates the schedule with the next run time and run count.
+
+### Frontend Changes
+The ScheduledJobs page now includes a multi-account configuration section. Users can add multiple accounts by clicking "Add Account" and filling in the Ad Account ID and optional filter parameters. A "Copy from saved settings" button allows quick population of values from the user's saved token settings.
+
+### Best Practices
+1. Use descriptive names for each configuration to easily identify them later
+2. Set different minSpend/minCTR filters for different accounts based on their performance characteristics
+3. The scheduler creates jobs with a small delay between them to avoid overwhelming the system
+4. All jobs from a single schedule run share the same `scheduleId` for tracking purposes
+
+---
+
+*Last updated: 2026-02-05*

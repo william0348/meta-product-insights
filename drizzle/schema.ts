@@ -238,6 +238,7 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
   timezone: varchar("timezone", { length: 64 }).default("Asia/Taipei").notNull(),
   
   // Job configuration (same as batchJobs.config)
+  // For single config (legacy)
   config: json("config").$type<{
     // For report generation
     adAccountId?: string;
@@ -253,6 +254,19 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
     customNumberField?: string;
     customNumberValue?: string;
   }>().notNull(),
+  
+  // Multi-account configurations (array of report configs)
+  // Each config can have different adAccountId and filter parameters
+  reportConfigs: json("reportConfigs").$type<Array<{
+    name?: string;           // Optional name for this config
+    adAccountId: string;     // Required: Ad Account ID
+    accessToken?: string;    // Optional: Override access token
+    dateRangeType?: string;  // Optional: Override date range
+    minSpend?: string;       // Optional: Min spend filter
+    minCTR?: string;         // Optional: Min CTR filter
+    level?: string;          // Optional: Report level
+    breakdown?: string;      // Optional: Breakdown type
+  }>>(),
   
   // Status
   enabled: boolean("enabled").default(true).notNull(),
