@@ -3,11 +3,15 @@ import axios from 'axios';
 const FB_API_VERSION = 'v24.0';
 const BASE_URL = `https://graph.facebook.com/${FB_API_VERSION}`;
 
-// Maximum items per batch request (Facebook limit is 5000, recommended 3000 for optimal performance)
+// Maximum items per batch request (Facebook limit is 5000, using 3000 for optimal performance)
 const MAX_BATCH_SIZE = 3000;
 
 // Maximum retailer IDs per fetch request (to avoid timeout)
 const MAX_FETCH_BATCH_SIZE = 25;
+
+// Concurrency settings for parallel requests
+const FETCH_CONCURRENCY = 2;  // For fetch operations
+const UPDATE_CONCURRENCY = 5; // For batch update operations (5 parallel requests)
 
 export interface FBProduct {
   id: string;
@@ -65,6 +69,20 @@ export interface BatchStatusResponse {
 }
 
 /**
+ * Aggregated response from parallel batch updates
+ */
+export interface ParallelBatchResponse {
+  handles: string[];
+  validation_status: Array<{
+    retailer_id: string;
+    errors?: Array<{ message: string; [key: string]: any }>;
+    warnings?: Array<{ message: string; [key: string]: any }>;
+  }>;
+  totalProcessed: number;
+  batchCount: number;
+}
+
+/**
  * Fetches a single batch of products by their retailer IDs
  * Internal helper function with retry logic
  */
@@ -92,7 +110,7 @@ const fetchProductBatch = async (
       const response = await axios.get(
         `${BASE_URL}/${catalogId}/products?filter=${encodedFilter}&fields=${fields}&access_token=${accessToken}&limit=${retailerIds.length}`,
         {
-          timeout: 60000, // 60 second timeout (increased from 30s)
+          timeout: 60000, // 60 second timeout
         }
       );
 
@@ -146,12 +164,11 @@ export const fetchProductsByRetailerIds = async (
 
   console.log(`[Catalog Fetch] Splitting ${retailerIds.length} IDs into ${batches.length} batches of max ${MAX_FETCH_BATCH_SIZE}`);
 
-  // Process batches with limited concurrency (2 at a time to avoid rate limiting)
-  const CONCURRENCY = 2;
+  // Process batches with limited concurrency
   const allProducts: FBProduct[] = [];
   
-  for (let i = 0; i < batches.length; i += CONCURRENCY) {
-    const batchGroup = batches.slice(i, i + CONCURRENCY);
+  for (let i = 0; i < batches.length; i += FETCH_CONCURRENCY) {
+    const batchGroup = batches.slice(i, i + FETCH_CONCURRENCY);
     const promises = batchGroup.map(batch => 
       fetchProductBatch(catalogId, batch, accessToken, maxRetries)
     );
@@ -159,14 +176,14 @@ export const fetchProductsByRetailerIds = async (
     try {
       const results = await Promise.all(promises);
       results.forEach(products => allProducts.push(...products));
-      console.log(`[Catalog Fetch] Completed batches ${i + 1}-${Math.min(i + CONCURRENCY, batches.length)} of ${batches.length}`);
+      console.log(`[Catalog Fetch] Completed batches ${i + 1}-${Math.min(i + FETCH_CONCURRENCY, batches.length)} of ${batches.length}`);
     } catch (error: any) {
       console.error(`[Catalog Fetch] Error in batch group starting at ${i}:`, error.message);
       throw error;
     }
     
     // Small delay between batch groups to avoid rate limiting
-    if (i + CONCURRENCY < batches.length) {
+    if (i + FETCH_CONCURRENCY < batches.length) {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
@@ -206,38 +223,16 @@ export const checkBatchRequestStatus = async (
 };
 
 /**
- * Sends a batch update request to the Facebook Catalog
- * Reference: https://developers.facebook.com/docs/marketing-api/reference/product-catalog/items_batch/
- * 
- * Key parameters:
- * - requests: Array of batch request items (max 5000, recommended 3000)
- * - item_type: PRODUCT_ITEM for product catalog
- * - allow_upsert: false to only update existing products (prevents accidental creation)
- * 
- * Request format uses form data (-F) as per Facebook's curl example:
- * curl -X POST https://graph.facebook.com/{catalog-id}/items_batch \
- *   -F access_token=TOKEN \
- *   -F 'requests=[{"method":"UPDATE","data":{"id":"product_123",...}}]' \
- *   -F item_type=PRODUCT_ITEM
- * 
- * @param catalogId - The catalog ID
- * @param requests - Array of batch request items
- * @param accessToken - Valid access token
- * @param allowUpsert - Whether to create new products if they don't exist (default: false)
+ * Sends a single batch update request to the Facebook Catalog
+ * Internal helper function
  */
-export const batchUpdateProducts = async (
+const sendBatchRequest = async (
   catalogId: string,
   requests: BatchRequestItem[],
   accessToken: string,
-  allowUpsert: boolean = false
+  allowUpsert: boolean = false,
+  batchIndex: number = 0
 ): Promise<BatchResponse> => {
-  // Validate batch size
-  if (requests.length > MAX_BATCH_SIZE) {
-    console.warn(`[Catalog Batch] Warning: Batch size ${requests.length} exceeds recommended limit of ${MAX_BATCH_SIZE}`);
-  }
-
-  // Facebook Catalog Batch API uses form data format (multipart/form-data style via -F)
-  // Using URLSearchParams to mimic form data submission
   const formData = new URLSearchParams();
   formData.append('access_token', accessToken);
   formData.append('requests', JSON.stringify(requests));
@@ -252,33 +247,114 @@ export const batchUpdateProducts = async (
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        timeout: 120000, // 120 second timeout for large batches (increased from 60s)
+        timeout: 120000, // 120 second timeout for large batches
       }
     );
 
     // Log response for debugging
     if (response.data.handles) {
-      console.log(`[Catalog Batch] Async processing started. Handles: ${response.data.handles.length}`);
-    }
-    if (response.data.validation_status) {
-      const errors = response.data.validation_status.filter((s: any) => s.errors?.length > 0);
-      const warnings = response.data.validation_status.filter((s: any) => s.warnings?.length > 0);
-      if (errors.length > 0) {
-        console.log(`[Catalog Batch] Validation errors: ${errors.length} items`);
-      }
-      if (warnings.length > 0) {
-        console.log(`[Catalog Batch] Validation warnings: ${warnings.length} items`);
-      }
+      console.log(`[Catalog Batch ${batchIndex}] Async processing started. Handles: ${response.data.handles.length}`);
     }
 
     return response.data;
   } catch (error: any) {
     // Log detailed error information
     if (error.response) {
-      console.error(`[Catalog Batch] API Error:`, JSON.stringify(error.response.data, null, 2));
+      console.error(`[Catalog Batch ${batchIndex}] API Error:`, JSON.stringify(error.response.data, null, 2));
     }
     throw error;
   }
+};
+
+/**
+ * Sends batch update requests to the Facebook Catalog with parallel processing
+ * Reference: https://developers.facebook.com/docs/marketing-api/reference/product-catalog/items_batch/
+ * 
+ * Optimization strategy:
+ * - Max 3000 items per request (Facebook limit is 5000)
+ * - 5 concurrent parallel requests
+ * - Throughput: ~15,000 items per batch cycle
+ * 
+ * @param catalogId - The catalog ID
+ * @param requests - Array of batch request items (can be any size, will be split automatically)
+ * @param accessToken - Valid access token
+ * @param allowUpsert - Whether to create new products if they don't exist (default: false)
+ */
+export const batchUpdateProducts = async (
+  catalogId: string,
+  requests: BatchRequestItem[],
+  accessToken: string,
+  allowUpsert: boolean = false
+): Promise<ParallelBatchResponse> => {
+  if (requests.length === 0) {
+    return { handles: [], validation_status: [], totalProcessed: 0, batchCount: 0 };
+  }
+
+  // Split requests into batches of MAX_BATCH_SIZE (3000)
+  const batches: BatchRequestItem[][] = [];
+  for (let i = 0; i < requests.length; i += MAX_BATCH_SIZE) {
+    batches.push(requests.slice(i, i + MAX_BATCH_SIZE));
+  }
+
+  console.log(`[Catalog Batch] Processing ${requests.length} items in ${batches.length} batches (${MAX_BATCH_SIZE} items/batch, ${UPDATE_CONCURRENCY} concurrent)`);
+
+  // Aggregate results
+  const allHandles: string[] = [];
+  const allValidationStatus: BatchResponse['validation_status'] = [];
+  let totalProcessed = 0;
+
+  // Process batches with UPDATE_CONCURRENCY (5) parallel requests
+  for (let i = 0; i < batches.length; i += UPDATE_CONCURRENCY) {
+    const batchGroup = batches.slice(i, i + UPDATE_CONCURRENCY);
+    const startTime = Date.now();
+    
+    console.log(`[Catalog Batch] Sending batch group ${Math.floor(i / UPDATE_CONCURRENCY) + 1}/${Math.ceil(batches.length / UPDATE_CONCURRENCY)} (${batchGroup.length} parallel requests)`);
+    
+    const promises = batchGroup.map((batch, index) => 
+      sendBatchRequest(catalogId, batch, accessToken, allowUpsert, i + index + 1)
+    );
+    
+    try {
+      const results = await Promise.all(promises);
+      
+      // Aggregate results from all parallel requests
+      results.forEach((result, index) => {
+        if (result.handles) {
+          allHandles.push(...result.handles);
+        }
+        if (result.validation_status) {
+          allValidationStatus.push(...result.validation_status);
+        }
+        totalProcessed += batchGroup[index].length;
+      });
+      
+      const elapsed = Date.now() - startTime;
+      const itemsInGroup = batchGroup.reduce((sum, batch) => sum + batch.length, 0);
+      console.log(`[Catalog Batch] Batch group completed: ${itemsInGroup} items in ${elapsed}ms (${Math.round(itemsInGroup / (elapsed / 1000))} items/sec)`);
+      
+    } catch (error: any) {
+      console.error(`[Catalog Batch] Error in batch group starting at ${i}:`, error.message);
+      throw error;
+    }
+    
+    // Small delay between batch groups to avoid rate limiting (only if more batches remain)
+    if (i + UPDATE_CONCURRENCY < batches.length) {
+      console.log(`[Catalog Batch] Waiting 1s before next batch group...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+
+  // Log summary
+  const errorCount = allValidationStatus.filter(s => s.errors && s.errors.length > 0).length;
+  const warningCount = allValidationStatus.filter(s => s.warnings && s.warnings.length > 0).length;
+  console.log(`[Catalog Batch] Complete: ${totalProcessed} items processed, ${allHandles.length} handles, ${errorCount} errors, ${warningCount} warnings`);
+
+  return {
+    handles: allHandles,
+    validation_status: allValidationStatus,
+    totalProcessed,
+    batchCount: batches.length,
+  };
 };
 
 /**

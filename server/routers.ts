@@ -157,6 +157,8 @@ export const appRouter = router({
             success: true,
             handles: response.handles,
             validation_status: response.validation_status || [],
+            totalProcessed: response.totalProcessed,
+            batchCount: response.batchCount,
           };
         } catch (error: any) {
           console.error('[Catalog Batch] Error:', error.message);

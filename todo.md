@@ -190,3 +190,10 @@
 - [x] Fix catalog.fetchProducts API returning 502 error on published website
 - [x] Investigate timeout/performance issues with batch product fetching
 - [x] Solution: Split large requests into smaller batches (25 IDs per batch), increased timeout to 60s, added concurrency limit
+
+## Performance Optimization - Catalog Batch API
+- [x] Optimize batch update to use 3000 items per request
+- [x] Enable 5 concurrent parallel requests for maximum throughput
+- [x] Target: ~15,000 items per batch cycle
+- [x] Added automatic batch splitting and parallel processing
+- [x] Added progress logging with items/sec metrics
