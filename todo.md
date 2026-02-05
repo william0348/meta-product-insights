@@ -206,3 +206,12 @@
 - [x] Add History button to main page header
 - [x] Track updateCriteria in batch operations
 - [x] Add summary statistics (total operations, items processed, success/failed counts)
+
+## Feature - Background Batch Processing
+- [x] Create batch_jobs database table for job queue
+- [x] Implement background job processor that runs independently (job-processor.ts)
+- [x] Create API endpoints: jobs.submit, jobs.getStatus, jobs.getMyJobs, jobs.cancel
+- [x] Update frontend to submit jobs and poll progress (BackgroundJobProgress component)
+- [x] Handle browser close - jobs continue in background
+- [x] Added real-time progress tracking with 2-second polling
+- [x] Added job cancellation support

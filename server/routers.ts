@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory } from "./db";
+import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory, createBatchJob, getBatchJob, getBatchJobsByUser, updateBatchJob } from "./db";
 import { z } from "zod";
 import axios from "axios";
 import { fetchProductsByRetailerIds, batchUpdateProducts, checkBatchRequestStatus, BatchRequestItem } from "./catalog";
@@ -304,6 +304,154 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const history = await getAllBatchHistory(input.limit);
         return { success: true, history };
+      }),
+  }),
+
+  // Background Jobs API
+  jobs: router({
+    // Submit a new background job
+    submit: protectedProcedure
+      .input(z.object({
+        jobType: z.enum(["catalog_update", "catalog_delete", "report_generation"]),
+        config: z.object({
+          catalogId: z.string(),
+          accessToken: z.string(),
+          retailerIds: z.array(z.string()),
+          customLabel4: z.string().optional(),
+          customNumberField: z.string().optional(),
+          customNumberValue: z.string().optional(),
+          updateCriteria: z.object({
+            sourceField: z.string().optional(),
+            targetField: z.string().optional(),
+            condition: z.string().optional(),
+            description: z.string().optional(),
+          }).optional(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = ctx.user.id;
+        
+        console.log(`[Jobs] Creating new ${input.jobType} job for user ${userId}`);
+        console.log(`[Jobs] Config: ${input.config.retailerIds.length} items`);
+        
+        const jobId = await createBatchJob({
+          userId,
+          jobType: input.jobType,
+          config: input.config,
+          totalItems: input.config.retailerIds.length,
+        });
+        
+        if (!jobId) {
+          throw new Error("Failed to create job");
+        }
+        
+        console.log(`[Jobs] Created job ${jobId}`);
+        
+        return {
+          success: true,
+          jobId,
+          message: `Job queued with ${input.config.retailerIds.length} items`,
+        };
+      }),
+    
+    // Get job status
+    getStatus: protectedProcedure
+      .input(z.object({
+        jobId: z.number(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const job = await getBatchJob(input.jobId);
+        
+        if (!job) {
+          return { found: false, job: null };
+        }
+        
+        // Only allow users to see their own jobs
+        if (job.userId !== ctx.user.id) {
+          return { found: false, job: null };
+        }
+        
+        return {
+          found: true,
+          job: {
+            id: job.id,
+            jobType: job.jobType,
+            status: job.status,
+            progress: job.progress,
+            currentBatch: job.currentBatch,
+            totalBatches: job.totalBatches,
+            processedItems: job.processedItems,
+            totalItems: job.totalItems,
+            successCount: job.successCount,
+            errorCount: job.errorCount,
+            warningCount: job.warningCount,
+            statusMessage: job.statusMessage,
+            queuedAt: job.queuedAt,
+            startedAt: job.startedAt,
+            completedAt: job.completedAt,
+            historyId: job.historyId,
+            errors: job.errors?.slice(-10), // Only return last 10 errors
+          },
+        };
+      }),
+    
+    // Get all jobs for current user
+    getMyJobs: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional().default(20),
+      }))
+      .query(async ({ ctx, input }) => {
+        const jobs = await getBatchJobsByUser(ctx.user.id, input.limit);
+        
+        return {
+          success: true,
+          jobs: jobs.map(job => ({
+            id: job.id,
+            jobType: job.jobType,
+            status: job.status,
+            progress: job.progress,
+            totalItems: job.totalItems,
+            successCount: job.successCount,
+            errorCount: job.errorCount,
+            statusMessage: job.statusMessage,
+            queuedAt: job.queuedAt,
+            startedAt: job.startedAt,
+            completedAt: job.completedAt,
+          })),
+        };
+      }),
+    
+    // Cancel a job
+    cancel: protectedProcedure
+      .input(z.object({
+        jobId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const job = await getBatchJob(input.jobId);
+        
+        if (!job) {
+          throw new Error("Job not found");
+        }
+        
+        // Only allow users to cancel their own jobs
+        if (job.userId !== ctx.user.id) {
+          throw new Error("Not authorized to cancel this job");
+        }
+        
+        // Only allow cancelling queued or running jobs
+        if (job.status !== "queued" && job.status !== "running") {
+          throw new Error(`Cannot cancel job with status: ${job.status}`);
+        }
+        
+        await updateBatchJob(input.jobId, {
+          status: "cancelled",
+          statusMessage: "Cancelled by user",
+          completedAt: new Date(),
+        });
+        
+        console.log(`[Jobs] Job ${input.jobId} cancelled by user ${ctx.user.id}`);
+        
+        return { success: true };
       }),
   }),
 

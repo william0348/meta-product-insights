@@ -135,4 +135,64 @@ The batch history feature tracks all catalog batch operations with detailed meta
 
 ---
 
+## Background Batch Processing Feature (2026-02-05)
+
+### Overview
+The background batch processing feature allows catalog batch operations to continue running even if the user closes their browser. Jobs are queued in the database and processed by a background worker.
+
+### Architecture
+1. **Job Queue (batch_jobs table)**: Stores job configuration, status, and progress
+2. **Job Processor (job-processor.ts)**: Background worker that polls for queued jobs every 5 seconds
+3. **API Endpoints**: Submit, status, list, and cancel jobs
+4. **Frontend Component (BackgroundJobProgress)**: Real-time progress display with 2-second polling
+
+### Database Schema (batch_jobs)
+- `id`: Auto-increment primary key
+- `userId`: Foreign key to users table
+- `jobType`: catalog_update, catalog_delete, report_generation
+- `config`: JSON object with job parameters (catalogId, accessToken, retailerIds, etc.)
+- `status`: queued, running, completed, failed, cancelled
+- `progress`: 0-100 percentage
+- `currentBatch`, `totalBatches`: Batch tracking
+- `processedItems`, `totalItems`: Item counts
+- `successCount`, `errorCount`, `warningCount`: Result counts
+- `handles`: Array of Facebook API handles
+- `errors`: Array of error details
+- `statusMessage`: Human-readable status
+- `historyId`: Link to catalog_batch_history record
+- `queuedAt`, `startedAt`, `completedAt`: Timestamps
+
+### API Endpoints
+- `jobs.submit`: Create a new background job
+- `jobs.getStatus`: Get status of a specific job
+- `jobs.getMyJobs`: Get all jobs for current user
+- `jobs.cancel`: Cancel a queued or running job
+
+### Job Processing Flow
+1. User submits catalog update via UI
+2. Frontend calls `jobs.submit` with job configuration
+3. Job is created in database with status "queued"
+4. Job processor picks up job and sets status to "running"
+5. Job processor splits items into batches (3000 items each)
+6. Batches are processed with 5 concurrent requests
+7. Progress is updated in database after each batch group
+8. Frontend polls `jobs.getStatus` every 2 seconds to show progress
+9. Job completes and status is set to "completed" or "failed"
+10. Batch history record is created/updated for auditing
+
+### Key Features
+- **Browser-independent**: Jobs continue even if browser is closed
+- **Real-time progress**: Frontend polls every 2 seconds
+- **Cancellation**: Users can cancel queued or running jobs
+- **Error tracking**: Errors are stored and displayed
+- **History integration**: Completed jobs create batch history records
+
+### Configuration
+- `PROCESSOR_INTERVAL_MS`: 5000 (check for new jobs every 5 seconds)
+- `MAX_CONCURRENT_JOBS`: 1 (process one job at a time)
+- `BATCH_SIZE`: 3000 (items per Facebook API request)
+- `CONCURRENT_BATCHES`: 5 (parallel batch requests)
+
+---
+
 *Last updated: 2026-02-05*

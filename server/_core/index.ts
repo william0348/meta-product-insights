@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { startJobProcessor } from "../job-processor";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -65,6 +66,11 @@ async function startServer() {
   // Bind to 0.0.0.0 to accept connections from outside the container
   server.listen(finalPort, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${finalPort}/`);
+    
+    // Start the background job processor after server is ready
+    // This runs in the same process and will continue processing jobs
+    // even if the browser is closed
+    startJobProcessor();
   });
 }
 

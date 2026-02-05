@@ -87,3 +87,64 @@ export const catalogBatchHistory = mysqlTable("catalog_batch_history", {
 
 export type CatalogBatchHistory = typeof catalogBatchHistory.$inferSelect;
 export type InsertCatalogBatchHistory = typeof catalogBatchHistory.$inferInsert;
+
+// Background batch jobs table for async processing
+export const batchJobs = mysqlTable("batch_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  
+  // Job type and configuration
+  jobType: mysqlEnum("jobType", ["catalog_update", "catalog_delete", "report_generation"]).notNull(),
+  
+  // Job configuration (all parameters needed to execute the job)
+  config: json("config").$type<{
+    catalogId: string;
+    accessToken: string;
+    retailerIds: string[];
+    customLabel4?: string;
+    customNumberField?: string;
+    customNumberValue?: string;
+    updateCriteria?: {
+      sourceField?: string;
+      targetField?: string;
+      condition?: string;
+      description?: string;
+    };
+  }>().notNull(),
+  
+  // Progress tracking
+  status: mysqlEnum("status", ["queued", "running", "completed", "failed", "cancelled"]).default("queued").notNull(),
+  progress: int("progress").default(0), // 0-100 percentage
+  currentBatch: int("currentBatch").default(0),
+  totalBatches: int("totalBatches").default(0),
+  processedItems: int("processedItems").default(0),
+  totalItems: int("totalItems").default(0),
+  
+  // Results
+  successCount: int("successCount").default(0),
+  errorCount: int("errorCount").default(0),
+  warningCount: int("warningCount").default(0),
+  
+  // Facebook API handles for async tracking
+  handles: json("handles").$type<string[]>(),
+  
+  // Error/warning details
+  errors: json("errors").$type<Array<{ retailerId?: string; message: string; batchIndex?: number }>>(),
+  
+  // Status message for UI display
+  statusMessage: text("statusMessage"),
+  
+  // Timing
+  queuedAt: timestamp("queuedAt").defaultNow().notNull(),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+  
+  // Link to batch history record (created when job completes)
+  historyId: int("historyId"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BatchJob = typeof batchJobs.$inferSelect;
+export type InsertBatchJob = typeof batchJobs.$inferInsert;

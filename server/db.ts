@@ -304,3 +304,144 @@ export async function getAllBatchHistory(
     return [];
   }
 }
+
+
+// Batch Jobs functions
+import { batchJobs, InsertBatchJob, BatchJob } from "../drizzle/schema";
+
+export async function createBatchJob(
+  job: Omit<InsertBatchJob, "id" | "createdAt" | "updatedAt" | "queuedAt">
+): Promise<number | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create batch job: database not available");
+    return null;
+  }
+
+  try {
+    const result = await db.insert(batchJobs).values({
+      ...job,
+      status: "queued",
+      progress: 0,
+      currentBatch: 0,
+      totalBatches: 0,
+      processedItems: 0,
+      successCount: 0,
+      errorCount: 0,
+      warningCount: 0,
+    });
+    return (result as any)[0]?.insertId || null;
+  } catch (error) {
+    console.error("[Database] Failed to create batch job:", error);
+    throw error;
+  }
+}
+
+export async function updateBatchJob(
+  id: number,
+  updates: Partial<Omit<BatchJob, "id" | "createdAt" | "queuedAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update batch job: database not available");
+    return;
+  }
+
+  try {
+    await db
+      .update(batchJobs)
+      .set(updates)
+      .where(eq(batchJobs.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to update batch job:", error);
+    throw error;
+  }
+}
+
+export async function getBatchJob(id: number): Promise<BatchJob | undefined> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get batch job: database not available");
+    return undefined;
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(batchJobs)
+      .where(eq(batchJobs.id, id))
+      .limit(1);
+
+    return result.length > 0 ? result[0] : undefined;
+  } catch (error) {
+    console.error("[Database] Failed to get batch job:", error);
+    return undefined;
+  }
+}
+
+export async function getBatchJobsByUser(
+  userId: number,
+  limit: number = 50
+): Promise<BatchJob[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get batch jobs: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(batchJobs)
+      .where(eq(batchJobs.userId, userId))
+      .orderBy(desc(batchJobs.queuedAt))
+      .limit(limit);
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get batch jobs:", error);
+    return [];
+  }
+}
+
+export async function getQueuedJobs(limit: number = 10): Promise<BatchJob[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get queued jobs: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(batchJobs)
+      .where(eq(batchJobs.status, "queued"))
+      .orderBy(batchJobs.queuedAt)
+      .limit(limit);
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get queued jobs:", error);
+    return [];
+  }
+}
+
+export async function getRunningJobs(): Promise<BatchJob[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get running jobs: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(batchJobs)
+      .where(eq(batchJobs.status, "running"));
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get running jobs:", error);
+    return [];
+  }
+}

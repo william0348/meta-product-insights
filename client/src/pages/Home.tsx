@@ -8,6 +8,7 @@ import { ProductTable } from '@/components/ProductTable';
 import { FilterBar } from '@/components/FilterBar';
 import { SummaryMetrics } from '@/components/SummaryMetrics';
 import { CatalogUploadModal, CatalogUploadConfig } from '@/components/CatalogUploadModal';
+import { BackgroundJobProgress } from '@/components/BackgroundJobProgress';
 import { trpc } from '@/lib/trpc';
 
 import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, History } from 'lucide-react';
@@ -43,6 +44,13 @@ export default function Home() {
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
   const [catalogUploading, setCatalogUploading] = useState(false);
   const trpcUtils = trpc.useUtils();
+  
+  // Background Job State
+  const [activeJobId, setActiveJobId] = useState<number | null>(null);
+  const [useBackgroundJob, setUseBackgroundJob] = useState(true); // Default to background processing
+  
+  // Job submission mutation
+  const submitJobMutation = trpc.jobs.submit.useMutation();
   
   // Saved token state
   const [savedAdsToken, setSavedAdsToken] = useState<string | null>(null);
@@ -312,17 +320,83 @@ export default function Home() {
     toast.success("Excel file downloaded");
   };
 
-  // Catalog Upload Handler
+  // Catalog Upload Handler - Now uses background job processing
   const handleCatalogUpload = async (config: CatalogUploadConfig) => {
+    if (!filteredData || filteredData.length === 0) return;
+    
+    // Extract retailer IDs from filtered data
+    const retailerIds = filteredData
+      .map(item => item.product_retailer_id)
+      .filter(Boolean);
+    
+    if (retailerIds.length === 0) {
+      toast.error('No valid product IDs found');
+      return;
+    }
+    
+    // Submit as background job (continues even if browser is closed)
+    try {
+      setCatalogUploading(true);
+      
+      const updateCriteria = {
+        sourceField: config.customLabel4 ? 'custom_label_4' : undefined,
+        targetField: config.customNumberValue ? config.customNumberField : undefined,
+        condition: config.customLabel4 ? 'merge' : 'overwrite',
+        description: [
+          config.customLabel4 ? `Add label "${config.customLabel4}" to custom_label_4` : '',
+          config.customNumberValue ? `Set ${config.customNumberField} = ${config.customNumberValue}` : '',
+        ].filter(Boolean).join('; ') || 'Batch update',
+      };
+      
+      const result = await submitJobMutation.mutateAsync({
+        jobType: 'catalog_update',
+        config: {
+          catalogId: config.catalogId,
+          accessToken: config.accessToken,
+          retailerIds,
+          customLabel4: config.customLabel4,
+          customNumberField: config.customNumberField,
+          customNumberValue: config.customNumberValue,
+          updateCriteria,
+        },
+      });
+      
+      if (result.success && result.jobId) {
+        setActiveJobId(result.jobId);
+        toast.success(`Background job started! Processing ${retailerIds.length} products...`);
+        toast.info('You can close this window - the job will continue in the background.', { duration: 8000 });
+        
+        // Save catalog token for future use
+        try {
+          await saveTokenMutation.mutateAsync({
+            tokenType: "catalog_management",
+            accessToken: config.accessToken,
+            catalogId: config.catalogId,
+          });
+          setSavedCatalogToken(config.accessToken);
+          setSavedCatalogId(config.catalogId);
+        } catch (e) {
+          console.warn("[Token Save] Could not save catalog token:", e);
+        }
+      }
+    } catch (error: any) {
+      console.error('[Background Job] Error:', error);
+      toast.error(error.message || 'Failed to start background job');
+    } finally {
+      setCatalogUploading(false);
+    }
+  };
+  
+  // Legacy synchronous catalog upload (kept for reference, not used)
+  const handleCatalogUploadLegacy = async (config: CatalogUploadConfig) => {
     if (!filteredData || filteredData.length === 0) return;
     
     setCatalogUploading(true);
     
     try {
       const FETCH_CHUNK_SIZE = 50;
-      const BATCH_SIZE = savedBatchSize; // Use saved batch size from settings
+      const BATCH_SIZE = savedBatchSize;
       
-      // Extract retailer IDs from filtered data
       const retailerIds = filteredData
         .map(item => item.product_retailer_id)
         .filter(Boolean);
@@ -333,7 +407,6 @@ export default function Home() {
       
       toast.info(`Preparing to upload ${retailerIds.length} products...`);
       
-      // Split into batches
       const batches: string[][] = [];
       for (let i = 0; i < retailerIds.length; i += BATCH_SIZE) {
         batches.push(retailerIds.slice(i, i + BATCH_SIZE));
@@ -341,14 +414,12 @@ export default function Home() {
       
       toast.info(`Uploading ${retailerIds.length} products in ${batches.length} sequential batches...`);
       
-      // Process batches sequentially (one at a time)
       const handles: string[] = [];
       
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
         const batchIds = batches[batchIndex];
         const actualBatchNum = batchIndex + 1;
           
-        // Fetch existing products in chunks to avoid URL length limit
         let currentProducts: any[] = [];
         for (let j = 0; j < batchIds.length; j += FETCH_CHUNK_SIZE) {
           const chunk = batchIds.slice(j, j + FETCH_CHUNK_SIZE);
@@ -623,6 +694,21 @@ export default function Home() {
               defaultMinSpend={savedMinSpend || undefined}
               defaultMinCTR={savedMinCTR || undefined}
             />
+            
+            {/* Background Job Progress */}
+            {activeJobId && (
+              <BackgroundJobProgress
+                jobId={activeJobId}
+                onComplete={(success) => {
+                  if (success) {
+                    toast.success('Background job completed successfully!');
+                  } else {
+                    toast.error('Background job failed. Check history for details.');
+                  }
+                }}
+                onClose={() => setActiveJobId(null)}
+              />
+            )}
             
             {/* Job Status Card */}
             {(reportId || isRequesting) && (
