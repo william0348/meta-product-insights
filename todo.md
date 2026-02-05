@@ -181,5 +181,7 @@
 - [x] Fix 500 error on published website - removed batchSize validation constraint and synced database schema
 
 ## Bug Fixes - Truncated Response
-- [ ] Fix "Unexpected end of JSON input" error on published website - server response being truncated or empty
-- [ ] Debug production database connection issue causing 500 errors on tokens.get/tokens.save
+- [x] Fix "Unexpected end of JSON input" error on published website - server response being truncated or empty
+- [x] Debug production database connection issue causing 500 errors on tokens.get/tokens.save
+- [x] Root cause: CSV cleanup scheduled task with file system operations caused server crash in production
+- [x] Solution: Removed CSV cleanup from server startup (see KNOWLEDGE.md for details)
