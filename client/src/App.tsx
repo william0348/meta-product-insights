@@ -7,6 +7,8 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import BatchHistory from "./pages/BatchHistory";
+import SavedReports from "./pages/SavedReports";
+import ScheduledJobs from "./pages/ScheduledJobs";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -15,6 +17,8 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/settings"} component={Settings} />
       <Route path={"/batch-history"} component={BatchHistory} />
+      <Route path={"/saved-reports"} component={SavedReports} />
+      <Route path={"/schedules"} component={ScheduledJobs} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

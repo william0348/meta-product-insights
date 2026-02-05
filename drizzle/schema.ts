@@ -1,4 +1,4 @@
-import { bigint, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -98,9 +98,10 @@ export const batchJobs = mysqlTable("batch_jobs", {
   
   // Job configuration (all parameters needed to execute the job)
   config: json("config").$type<{
-    catalogId: string;
-    accessToken: string;
-    retailerIds: string[];
+    // For catalog jobs
+    catalogId?: string;
+    accessToken?: string;
+    retailerIds?: string[];
     customLabel4?: string;
     customNumberField?: string;
     customNumberValue?: string;
@@ -110,6 +111,14 @@ export const batchJobs = mysqlTable("batch_jobs", {
       condition?: string;
       description?: string;
     };
+    // For report generation jobs
+    adAccountId?: string;
+    dateStart?: string;
+    dateEnd?: string;
+    level?: string;
+    breakdown?: string;
+    minSpend?: string;
+    minCTR?: string;
   }>().notNull(),
   
   // Progress tracking
@@ -142,9 +151,122 @@ export const batchJobs = mysqlTable("batch_jobs", {
   // Link to batch history record (created when job completes)
   historyId: int("historyId"),
   
+  // Link to saved report (for report_generation jobs)
+  reportId: int("reportId"),
+  
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type BatchJob = typeof batchJobs.$inferSelect;
 export type InsertBatchJob = typeof batchJobs.$inferInsert;
+
+// Saved reports table for storing generated report data
+export const savedReports = mysqlTable("saved_reports", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  
+  // Report configuration
+  name: varchar("name", { length: 255 }).notNull(),
+  adAccountId: varchar("adAccountId", { length: 64 }).notNull(),
+  dateStart: varchar("dateStart", { length: 32 }).notNull(),
+  dateEnd: varchar("dateEnd", { length: 32 }).notNull(),
+  level: varchar("level", { length: 32 }).notNull(),
+  breakdown: varchar("breakdown", { length: 32 }),
+  
+  // Filter settings used
+  minSpend: varchar("minSpend", { length: 32 }),
+  minCTR: varchar("minCTR", { length: 32 }),
+  
+  // Report data (stored as JSON array of product insights)
+  data: json("data").$type<Array<{
+    product_name: string;
+    product_retailer_id: string;
+    product_brand?: string;
+    impressions: number;
+    spend: number;
+    link_clicks: number;
+    inline_link_click_ctr?: number;
+    cvr?: number;
+    cpm: number;
+    cost_per_inline_link_click?: number;
+    purchases: number;
+    adds_to_cart?: number;
+    catalog_purchases?: number;
+    product_set_purchases?: number;
+    product_views?: number;
+  }>>(),
+  
+  // Report statistics
+  totalItems: int("totalItems").default(0),
+  totalSpend: bigint("totalSpend", { mode: "number" }),
+  totalImpressions: bigint("totalImpressions", { mode: "number" }),
+  
+  // Status
+  status: mysqlEnum("status", ["generating", "completed", "failed"]).default("generating").notNull(),
+  errorMessage: text("errorMessage"),
+  
+  // Timing
+  generatedAt: timestamp("generatedAt"),
+  durationMs: bigint("durationMs", { mode: "number" }),
+  
+  // Source (manual or scheduled)
+  source: mysqlEnum("source", ["manual", "scheduled"]).default("manual").notNull(),
+  scheduleId: int("scheduleId"), // Link to scheduled_jobs if from schedule
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SavedReport = typeof savedReports.$inferSelect;
+export type InsertSavedReport = typeof savedReports.$inferInsert;
+
+// Scheduled jobs table for recurring tasks
+export const scheduledJobs = mysqlTable("scheduled_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  
+  // Schedule name and description
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  
+  // Job type
+  jobType: mysqlEnum("jobType", ["report_generation", "catalog_update"]).notNull(),
+  
+  // Schedule configuration
+  cronExpression: varchar("cronExpression", { length: 64 }).notNull(), // e.g., "0 0 9 * * 1" for Monday 9 AM
+  timezone: varchar("timezone", { length: 64 }).default("Asia/Taipei").notNull(),
+  
+  // Job configuration (same as batchJobs.config)
+  config: json("config").$type<{
+    // For report generation
+    adAccountId?: string;
+    accessToken?: string;
+    dateRangeType?: string; // "last_7_days", "last_30_days", "last_week", etc.
+    level?: string;
+    breakdown?: string;
+    minSpend?: string;
+    minCTR?: string;
+    // For catalog update
+    catalogId?: string;
+    customLabel4?: string;
+    customNumberField?: string;
+    customNumberValue?: string;
+  }>().notNull(),
+  
+  // Status
+  enabled: boolean("enabled").default(true).notNull(),
+  
+  // Execution tracking
+  lastRunAt: timestamp("lastRunAt"),
+  nextRunAt: timestamp("nextRunAt"),
+  lastRunStatus: mysqlEnum("lastRunStatus", ["success", "failed", "running"]),
+  lastRunJobId: int("lastRunJobId"), // Link to last batch_jobs record
+  runCount: int("runCount").default(0),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ScheduledJob = typeof scheduledJobs.$inferSelect;
+export type InsertScheduledJob = typeof scheduledJobs.$inferInsert;

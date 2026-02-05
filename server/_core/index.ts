@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startJobProcessor } from "../job-processor";
+import { startScheduler } from "../scheduler";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -71,6 +72,9 @@ async function startServer() {
     // This runs in the same process and will continue processing jobs
     // even if the browser is closed
     startJobProcessor();
+    
+    // Start the scheduler for recurring tasks (weekly reports, etc.)
+    startScheduler();
   });
 }
 

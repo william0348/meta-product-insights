@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory, createBatchJob, getBatchJob, getBatchJobsByUser, updateBatchJob } from "./db";
+import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory, createBatchJob, getBatchJob, getBatchJobsByUser, updateBatchJob, createSavedReport, getSavedReport, getSavedReportsByUser, deleteSavedReport, createScheduledJob, getScheduledJob, getScheduledJobsByUser, updateScheduledJob, deleteScheduledJob } from "./db";
 import { z } from "zod";
 import axios from "axios";
 import { fetchProductsByRetailerIds, batchUpdateProducts, checkBatchRequestStatus, BatchRequestItem } from "./catalog";
@@ -529,6 +529,260 @@ export const appRouter = router({
         
         // This should never be reached, but TypeScript needs it
         throw new Error('Failed to fetch insights after all retries');
+      }),
+  }),
+
+  // Saved Reports API
+  reports: router({
+    // Submit a report generation job
+    generate: protectedProcedure
+      .input(z.object({
+        adAccountId: z.string(),
+        accessToken: z.string(),
+        dateStart: z.string(),
+        dateEnd: z.string(),
+        level: z.string().optional().default('account'),
+        breakdown: z.string().optional().default('product_id'),
+        minSpend: z.string().optional(),
+        minCTR: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = ctx.user.id;
+        
+        console.log(`[Reports] Creating report generation job for user ${userId}`);
+        
+        const jobId = await createBatchJob({
+          userId,
+          jobType: 'report_generation',
+          config: {
+            adAccountId: input.adAccountId,
+            accessToken: input.accessToken,
+            dateStart: input.dateStart,
+            dateEnd: input.dateEnd,
+            level: input.level,
+            breakdown: input.breakdown,
+            minSpend: input.minSpend,
+            minCTR: input.minCTR,
+          },
+        });
+        
+        if (!jobId) {
+          throw new Error('Failed to create report generation job');
+        }
+        
+        console.log(`[Reports] Created job ${jobId}`);
+        
+        return { success: true, jobId };
+      }),
+    
+    // Get a saved report by ID
+    get: protectedProcedure
+      .input(z.object({
+        reportId: z.number(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const report = await getSavedReport(input.reportId);
+        
+        if (!report) {
+          throw new Error('Report not found');
+        }
+        
+        // Check ownership
+        if (report.userId !== ctx.user.id) {
+          throw new Error('Access denied');
+        }
+        
+        return { success: true, report };
+      }),
+    
+    // Get all reports for current user
+    getMyReports: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional().default(50),
+      }))
+      .query(async ({ ctx, input }) => {
+        const reports = await getSavedReportsByUser(ctx.user.id, input.limit);
+        
+        // Return reports without full data (for list view)
+        return {
+          success: true,
+          reports: reports.map(r => ({
+            id: r.id,
+            name: r.name,
+            adAccountId: r.adAccountId,
+            dateStart: r.dateStart,
+            dateEnd: r.dateEnd,
+            totalItems: r.totalItems,
+            totalSpend: r.totalSpend,
+            status: r.status,
+            source: r.source,
+            generatedAt: r.generatedAt,
+            createdAt: r.createdAt,
+          })),
+        };
+      }),
+    
+    // Delete a report
+    delete: protectedProcedure
+      .input(z.object({
+        reportId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const report = await getSavedReport(input.reportId);
+        
+        if (!report) {
+          throw new Error('Report not found');
+        }
+        
+        if (report.userId !== ctx.user.id) {
+          throw new Error('Access denied');
+        }
+        
+        await deleteSavedReport(input.reportId);
+        
+        return { success: true };
+      }),
+  }),
+
+  // Scheduled Jobs API
+  schedules: router({
+    // Create a new scheduled job
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        jobType: z.enum(['report_generation', 'catalog_update']),
+        cronExpression: z.string(), // e.g., "0 0 9 * * 1" for Monday 9 AM
+        timezone: z.string().optional().default('Asia/Taipei'),
+        config: z.object({
+          adAccountId: z.string().optional(),
+          dateRangeType: z.string().optional(), // "last_7_days", "last_week", etc.
+          level: z.string().optional(),
+          breakdown: z.string().optional(),
+          minSpend: z.string().optional(),
+          minCTR: z.string().optional(),
+          catalogId: z.string().optional(),
+          customLabel4: z.string().optional(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = ctx.user.id;
+        
+        // Calculate next run time based on cron expression
+        const now = new Date();
+        const nextRunAt = new Date(now);
+        nextRunAt.setDate(nextRunAt.getDate() + 7); // Default to next week
+        
+        const scheduleId = await createScheduledJob({
+          userId,
+          name: input.name,
+          description: input.description || null,
+          jobType: input.jobType,
+          cronExpression: input.cronExpression,
+          timezone: input.timezone,
+          config: input.config,
+          enabled: true,
+          nextRunAt,
+        });
+        
+        if (!scheduleId) {
+          throw new Error('Failed to create scheduled job');
+        }
+        
+        console.log(`[Schedules] Created schedule ${scheduleId} for user ${userId}`);
+        
+        return { success: true, scheduleId };
+      }),
+    
+    // Get a scheduled job by ID
+    get: protectedProcedure
+      .input(z.object({
+        scheduleId: z.number(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const schedule = await getScheduledJob(input.scheduleId);
+        
+        if (!schedule) {
+          throw new Error('Schedule not found');
+        }
+        
+        if (schedule.userId !== ctx.user.id) {
+          throw new Error('Access denied');
+        }
+        
+        return { success: true, schedule };
+      }),
+    
+    // Get all schedules for current user
+    getMySchedules: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional().default(50),
+      }))
+      .query(async ({ ctx, input }) => {
+        const schedules = await getScheduledJobsByUser(ctx.user.id, input.limit);
+        
+        return { success: true, schedules };
+      }),
+    
+    // Update a scheduled job
+    update: protectedProcedure
+      .input(z.object({
+        scheduleId: z.number(),
+        enabled: z.boolean().optional(),
+        name: z.string().optional(),
+        cronExpression: z.string().optional(),
+        config: z.object({
+          adAccountId: z.string().optional(),
+          dateRangeType: z.string().optional(),
+          level: z.string().optional(),
+          breakdown: z.string().optional(),
+          minSpend: z.string().optional(),
+          minCTR: z.string().optional(),
+          catalogId: z.string().optional(),
+          customLabel4: z.string().optional(),
+        }).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const schedule = await getScheduledJob(input.scheduleId);
+        
+        if (!schedule) {
+          throw new Error('Schedule not found');
+        }
+        
+        if (schedule.userId !== ctx.user.id) {
+          throw new Error('Access denied');
+        }
+        
+        const updates: any = {};
+        if (input.enabled !== undefined) updates.enabled = input.enabled;
+        if (input.name) updates.name = input.name;
+        if (input.cronExpression) updates.cronExpression = input.cronExpression;
+        if (input.config) updates.config = { ...schedule.config, ...input.config };
+        
+        await updateScheduledJob(input.scheduleId, updates);
+        
+        return { success: true };
+      }),
+    
+    // Delete a scheduled job
+    delete: protectedProcedure
+      .input(z.object({
+        scheduleId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const schedule = await getScheduledJob(input.scheduleId);
+        
+        if (!schedule) {
+          throw new Error('Schedule not found');
+        }
+        
+        if (schedule.userId !== ctx.user.id) {
+          throw new Error('Access denied');
+        }
+        
+        await deleteScheduledJob(input.scheduleId);
+        
+        return { success: true };
       }),
   }),
 });

@@ -11,7 +11,7 @@ import { CatalogUploadModal, CatalogUploadConfig } from '@/components/CatalogUpl
 import { BackgroundJobProgress } from '@/components/BackgroundJobProgress';
 import { trpc } from '@/lib/trpc';
 
-import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, History } from 'lucide-react';
+import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, History, FileText, Calendar } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -666,6 +666,24 @@ export default function Home() {
             >
               <History className="w-4 h-4" />
               <span className="hidden sm:inline">History</span>
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setLocation('/saved-reports')}
+              className="gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">Reports</span>
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setLocation('/schedules')}
+              className="gap-2"
+            >
+              <Calendar className="w-4 h-4" />
+              <span className="hidden sm:inline">Schedules</span>
             </Button>
             <Button 
               variant="ghost" 

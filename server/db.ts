@@ -445,3 +445,253 @@ export async function getRunningJobs(): Promise<BatchJob[]> {
     return [];
   }
 }
+
+
+// Saved Reports functions
+import { savedReports, InsertSavedReport, SavedReport, scheduledJobs, InsertScheduledJob, ScheduledJob } from "../drizzle/schema";
+import { lte } from "drizzle-orm";
+
+export async function createSavedReport(
+  report: Omit<InsertSavedReport, "id" | "createdAt" | "updatedAt">
+): Promise<number | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create saved report: database not available");
+    return null;
+  }
+
+  try {
+    const result = await db.insert(savedReports).values(report);
+    return (result as any)[0]?.insertId || null;
+  } catch (error) {
+    console.error("[Database] Failed to create saved report:", error);
+    throw error;
+  }
+}
+
+export async function updateSavedReport(
+  id: number,
+  updates: Partial<Omit<SavedReport, "id" | "createdAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update saved report: database not available");
+    return;
+  }
+
+  try {
+    await db
+      .update(savedReports)
+      .set(updates)
+      .where(eq(savedReports.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to update saved report:", error);
+    throw error;
+  }
+}
+
+export async function getSavedReport(id: number): Promise<SavedReport | undefined> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get saved report: database not available");
+    return undefined;
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(savedReports)
+      .where(eq(savedReports.id, id))
+      .limit(1);
+
+    return result.length > 0 ? result[0] : undefined;
+  } catch (error) {
+    console.error("[Database] Failed to get saved report:", error);
+    return undefined;
+  }
+}
+
+export async function getSavedReportsByUser(
+  userId: number,
+  limit: number = 50
+): Promise<SavedReport[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get saved reports: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(savedReports)
+      .where(eq(savedReports.userId, userId))
+      .orderBy(desc(savedReports.createdAt))
+      .limit(limit);
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get saved reports:", error);
+    return [];
+  }
+}
+
+export async function deleteSavedReport(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete saved report: database not available");
+    return;
+  }
+
+  try {
+    await db.delete(savedReports).where(eq(savedReports.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to delete saved report:", error);
+    throw error;
+  }
+}
+
+// Scheduled Jobs functions
+export async function createScheduledJob(
+  job: Omit<InsertScheduledJob, "id" | "createdAt" | "updatedAt">
+): Promise<number | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create scheduled job: database not available");
+    return null;
+  }
+
+  try {
+    const result = await db.insert(scheduledJobs).values(job);
+    return (result as any)[0]?.insertId || null;
+  } catch (error) {
+    console.error("[Database] Failed to create scheduled job:", error);
+    throw error;
+  }
+}
+
+export async function updateScheduledJob(
+  id: number,
+  updates: Partial<Omit<ScheduledJob, "id" | "createdAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update scheduled job: database not available");
+    return;
+  }
+
+  try {
+    await db
+      .update(scheduledJobs)
+      .set(updates)
+      .where(eq(scheduledJobs.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to update scheduled job:", error);
+    throw error;
+  }
+}
+
+export async function getScheduledJob(id: number): Promise<ScheduledJob | undefined> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get scheduled job: database not available");
+    return undefined;
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(scheduledJobs)
+      .where(eq(scheduledJobs.id, id))
+      .limit(1);
+
+    return result.length > 0 ? result[0] : undefined;
+  } catch (error) {
+    console.error("[Database] Failed to get scheduled job:", error);
+    return undefined;
+  }
+}
+
+export async function getScheduledJobsByUser(
+  userId: number,
+  limit: number = 50
+): Promise<ScheduledJob[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get scheduled jobs: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(scheduledJobs)
+      .where(eq(scheduledJobs.userId, userId))
+      .orderBy(desc(scheduledJobs.createdAt))
+      .limit(limit);
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get scheduled jobs:", error);
+    return [];
+  }
+}
+
+export async function getEnabledScheduledJobs(): Promise<ScheduledJob[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get enabled scheduled jobs: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(scheduledJobs)
+      .where(eq(scheduledJobs.enabled, true));
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get enabled scheduled jobs:", error);
+    return [];
+  }
+}
+
+export async function getDueScheduledJobs(): Promise<ScheduledJob[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get due scheduled jobs: database not available");
+    return [];
+  }
+
+  try {
+    const now = new Date();
+    const result = await db
+      .select()
+      .from(scheduledJobs)
+      .where(and(
+        eq(scheduledJobs.enabled, true),
+        lte(scheduledJobs.nextRunAt, now)
+      ));
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get due scheduled jobs:", error);
+    return [];
+  }
+}
+
+export async function deleteScheduledJob(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete scheduled job: database not available");
+    return;
+  }
+
+  try {
+    await db.delete(scheduledJobs).where(eq(scheduledJobs.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to delete scheduled job:", error);
+    throw error;
+  }
+}

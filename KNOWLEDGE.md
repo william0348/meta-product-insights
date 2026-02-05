@@ -196,3 +196,111 @@ The background batch processing feature allows catalog batch operations to conti
 ---
 
 *Last updated: 2026-02-05*
+
+
+---
+
+## Background Report Generation with Weekly Scheduling (2026-02-05)
+
+### Overview
+This feature moves Product Level Reporting data fetching to background processing, allowing reports to be generated even when the browser is closed. Additionally, reports can be scheduled to run automatically on a weekly basis.
+
+### Architecture
+
+**New Database Tables:**
+1. **saved_reports**: Stores generated reports with all product data
+   - `id`, `userId`, `name`, `adAccountId`, `dateStart`, `dateEnd`
+   - `level`, `breakdown`, `minSpend`, `minCTR`
+   - `status`: pending, generating, completed, failed
+   - `totalItems`, `totalSpend`, `totalImpressions`, `totalClicks`, `totalPurchases`
+   - `data`: JSON array of product insight data
+   - `generatedAt`, `generationDurationMs`
+   - `jobId`: Link to batch_jobs record
+   - `isScheduled`, `scheduleId`: For scheduled reports
+
+2. **scheduled_jobs**: Stores recurring job schedules
+   - `id`, `userId`, `name`, `jobType`
+   - `cronExpression`: 6-field cron format (second minute hour dayOfMonth month dayOfWeek)
+   - `config`: JSON object with job parameters
+   - `enabled`: Boolean to enable/disable schedule
+   - `lastRunAt`, `lastRunStatus`, `nextRunAt`
+   - `runCount`: Total number of executions
+
+**New Backend Components:**
+1. **report-generator.ts**: Handles Facebook API calls to generate reports
+   - Creates async report run on Facebook
+   - Polls for completion
+   - Downloads and parses CSV data
+   - Saves to database
+
+2. **scheduler.ts**: Checks scheduled jobs every minute
+   - Parses cron expressions
+   - Creates batch jobs when schedules are due
+   - Updates next run time after execution
+
+3. **job-processor.ts**: Extended to handle `report_generation` job type
+   - Calls report generator
+   - Updates job progress
+   - Saves report to database
+
+### API Endpoints
+
+**Reports:**
+- `reports.generate`: Create a new report generation job
+- `reports.get`: Get a specific report with data
+- `reports.getMyReports`: Get all reports for current user
+- `reports.delete`: Delete a report
+
+**Schedules:**
+- `schedules.create`: Create a new scheduled job
+- `schedules.update`: Update schedule (enable/disable)
+- `schedules.delete`: Delete a schedule
+- `schedules.getMySchedules`: Get all schedules for current user
+
+### Frontend Pages
+
+1. **/saved-reports**: View all generated reports
+   - List of reports with status badges
+   - Click to view report details and data
+   - Summary statistics (items, spend, impressions)
+   - Delete reports
+
+2. **/schedules**: Manage scheduled jobs
+   - Create new schedules with day/time selection
+   - Enable/disable schedules with toggle
+   - View last run status and next run time
+   - Delete schedules
+
+### Cron Expression Format
+- 6-field format: `second minute hour dayOfMonth month dayOfWeek`
+- Day of week: 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+- Example: `0 0 9 * * 1` = Every Monday at 9:00 AM
+- Example: `0 30 14 * * 5` = Every Friday at 2:30 PM
+
+### Scheduling Flow
+1. User creates schedule in `/schedules` page
+2. Scheduler runs every minute and checks all enabled schedules
+3. When a schedule is due (current time matches cron expression):
+   - Creates a batch job with type `report_generation`
+   - Updates `lastRunAt` and calculates `nextRunAt`
+   - Increments `runCount`
+4. Job processor picks up the job and generates the report
+5. Report data is saved to `saved_reports` table
+6. User can view the report in `/saved-reports` page
+
+### Date Range Types for Scheduled Reports
+- `last_7_days`: Previous 7 days from execution date
+- `last_week`: Previous Monday to Sunday
+- `last_14_days`: Previous 14 days
+- `last_30_days`: Previous 30 days
+
+### Best Practices
+1. Use UTC timestamps for all scheduling calculations
+2. Store report data as JSON in the database for easy querying
+3. Limit UI display to 100 items for performance
+4. Keep scheduler interval at 60 seconds to balance responsiveness and resource usage
+5. Always validate access tokens before scheduling (tokens may expire)
+
+---
+
+*Last updated: 2026-02-05*

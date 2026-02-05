@@ -43,6 +43,13 @@
       "when": 1770300741770,
       "tag": "0005_fat_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1770301738005,
+      "tag": "0006_tricky_xavin",
+      "breakpoints": true
     }
   ]
 }

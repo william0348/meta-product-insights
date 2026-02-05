@@ -215,3 +215,15 @@
 - [x] Handle browser close - jobs continue in background
 - [x] Added real-time progress tracking with 2-second polling
 - [x] Added job cancellation support
+
+## Feature - Background Report Generation with Weekly Schedule
+- [x] Create saved_reports database table for storing generated reports
+- [x] Create scheduled_jobs database table for recurring job schedules
+- [x] Implement report generation logic in job processor (report-generator.ts)
+- [x] Store report data in database after generation
+- [x] Create weekly schedule system for automatic report generation (scheduler.ts)
+- [x] Add API endpoints for viewing saved reports (reports.generate, reports.get, reports.getMyReports, reports.delete)
+- [x] Update frontend to submit report generation jobs
+- [x] Create Reports page to view historical reports (/saved-reports)
+- [x] Create Schedules page for schedule configuration (/schedules)
+- [x] Add navigation links to Home page header (Reports, Schedules)

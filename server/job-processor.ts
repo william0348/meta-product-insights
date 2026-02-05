@@ -15,6 +15,7 @@ import {
   updateBatchHistoryRecord
 } from "./db";
 import { batchUpdateProducts, fetchProductsByRetailerIds, checkBatchRequestStatus } from "./catalog";
+import { processReportGenerationJob } from "./report-generator";
 import { BatchJob } from "../drizzle/schema";
 
 // Job processor state
@@ -114,6 +115,8 @@ async function processJob(job: BatchJob): Promise<void> {
 
     if (job.jobType === "catalog_update") {
       await processCatalogUpdateJob(job, startTime);
+    } else if (job.jobType === "report_generation") {
+      await processReportGenerationJob(job, startTime);
     } else {
       throw new Error(`Unknown job type: ${job.jobType}`);
     }
@@ -134,6 +137,14 @@ async function processJob(job: BatchJob): Promise<void> {
  */
 async function processCatalogUpdateJob(job: BatchJob, startTime: number): Promise<void> {
   const config = job.config;
+  
+  // Validate required config fields
+  if (!config.catalogId || !config.accessToken || !config.retailerIds) {
+    throw new Error("Missing required config fields: catalogId, accessToken, or retailerIds");
+  }
+  
+  const catalogId = config.catalogId;
+  const accessToken = config.accessToken;
   const retailerIds = config.retailerIds;
   const totalItems = retailerIds.length;
   
@@ -191,9 +202,9 @@ async function processCatalogUpdateJob(job: BatchJob, startTime: number): Promis
       try {
         // Fetch current products to merge values
         const products = await fetchProductsByRetailerIds(
-          config.catalogId,
+          catalogId,
           batchIds,
-          config.accessToken
+          accessToken
         );
         
         const productMap = new Map(products.map((p: any) => [p.retailer_id, p]));
@@ -233,9 +244,9 @@ async function processCatalogUpdateJob(job: BatchJob, startTime: number): Promis
         
         // Send batch update
         const response = await batchUpdateProducts(
-          config.catalogId,
+          catalogId,
           requests,
-          config.accessToken
+          accessToken
         );
         
         // Collect handles
