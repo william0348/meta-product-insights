@@ -644,9 +644,11 @@ export default function Home() {
       <header className="border-b border-border bg-background sticky top-0 z-20">
         <div className="container h-16 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <div className="bg-primary text-primary-foreground w-8 h-8 flex items-center justify-center font-bold text-lg">
-              M
-            </div>
+            <img 
+              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663317876169/sDXSavaiZprWHKPf.png" 
+              alt="Meta Product Insights" 
+              className="w-10 h-10 rounded-lg"
+            />
             <div>
               <h1 className="text-sm font-bold uppercase tracking-widest">Meta Product Insights</h1>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Explorer v2.0</p>
