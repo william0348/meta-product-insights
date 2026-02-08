@@ -17,6 +17,8 @@ import {
 import { notifyOwner } from "./_core/notification";
 import { BatchJob } from "../drizzle/schema";
 import { batchUpdateProducts } from "./catalog";
+import { storagePut } from "./storage";
+import { nanoid } from "nanoid";
 
 const GRAPH_API_VERSION = 'v22.0';
 
@@ -233,23 +235,29 @@ async function createReportRun(
   const params = new URLSearchParams(queryParams);
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${formattedAccountId}/insights?${params.toString()}`;
   
+  console.log(`[ReportGenerator] API call params: level=${level}, breakdown=${breakdown}, filters=${filters ? JSON.stringify(filters) : 'none'}, dateRange=${dateStart} to ${dateEnd}`);
+  
   const response = await axios.post(url);
   
   if (response.data.error) {
-    throw new Error(response.data.error.message || 'Failed to create report run');
+    console.error(`[ReportGenerator] Facebook API error:`, JSON.stringify(response.data.error));
+    const errorMessage = response.data.error.error_user_msg || response.data.error.message || 'Failed to create report run';
+    throw new Error(`${errorMessage} (Code: ${response.data.error.code})`);
   }
   
   return response.data.report_run_id;
 }
 
 /**
- * Poll report status until complete
+ * Poll report status until complete.
+ * If the job fails, returns the failure info instead of throwing,
+ * so the caller can decide whether to retry.
  */
 async function pollReportStatus(
   reportRunId: string,
   accessToken: string,
   onProgress?: (percent: number) => void
-): Promise<void> {
+): Promise<{ success: boolean; failureReason?: string }> {
   const maxAttempts = 120; // 10 minutes max
   const pollInterval = 5000; // 5 seconds
   
@@ -258,6 +266,7 @@ async function pollReportStatus(
     const response = await axios.get(url);
     
     if (response.data.error) {
+      console.error(`[ReportGenerator] Poll error:`, JSON.stringify(response.data.error));
       throw new Error(response.data.error.message || 'Failed to poll report status');
     }
     
@@ -269,9 +278,10 @@ async function pollReportStatus(
     }
     
     if (status === 'Job Completed') {
-      return;
+      return { success: true };
     } else if (status === 'Job Failed' || status === 'Job Skipped') {
-      throw new Error(`Report generation failed with status: ${status}`);
+      console.error(`[ReportGenerator] Facebook async job failed. Full response:`, JSON.stringify(response.data));
+      return { success: false, failureReason: status };
     }
     
     await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -392,31 +402,75 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
   });
   
   try {
-    // Step 1: Create report run
-    console.log(`[ReportGenerator] Creating report run for ${adAccountId}...`);
-    const reportRunId = await createReportRun(
-      adAccountId,
-      dateStart,
-      dateEnd,
-      accessToken,
-      level,
-      breakdown,
-      filters.length > 0 ? filters : undefined
-    );
+    // Step 1: Create report run with retry logic
+    // Facebook async jobs can fail with certain parameter combinations.
+    // Strategy: Try with full params first, then retry without filters if it fails.
+    let reportRunId: string = '';
+    let usedFilters = filters.length > 0 ? filters : undefined;
     
-    console.log(`[ReportGenerator] Report run created: ${reportRunId}`);
+    const MAX_RETRIES = 2;
+    let lastFailureReason = '';
     
-    // Step 2: Poll for completion
-    await updateBatchJob(job.id, {
-      statusMessage: 'Waiting for report generation...',
-    });
-    
-    await pollReportStatus(reportRunId, accessToken, async (percent) => {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        console.log(`[ReportGenerator] Retry attempt ${attempt}/${MAX_RETRIES} for ${adAccountId} (previous failure: ${lastFailureReason})`);
+        await updateBatchJob(job.id, {
+          statusMessage: `Retrying report generation (attempt ${attempt + 1})...`,
+        });
+        
+        // On first retry: remove API-level filters (they can cause Job Failed)
+        // The data will be fetched unfiltered and we'll filter client-side after
+        if (attempt === 1 && usedFilters) {
+          console.log(`[ReportGenerator] Retry without API-level filters`);
+          usedFilters = undefined;
+        }
+        
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+      
+      console.log(`[ReportGenerator] Creating report run for ${adAccountId}... (attempt ${attempt + 1})`);
+      reportRunId = await createReportRun(
+        adAccountId,
+        dateStart,
+        dateEnd,
+        accessToken,
+        level,
+        breakdown,
+        usedFilters
+      );
+      
+      console.log(`[ReportGenerator] Report run created: ${reportRunId}`);
+      
+      // Step 2: Poll for completion
       await updateBatchJob(job.id, {
-        progress: Math.floor(percent * 0.5), // 0-50% for generation
-        statusMessage: `Generating report: ${percent}%`,
+        statusMessage: 'Waiting for report generation...',
       });
-    });
+      
+      const pollResult = await pollReportStatus(reportRunId, accessToken, async (percent) => {
+        await updateBatchJob(job.id, {
+          progress: Math.floor(percent * 0.5), // 0-50% for generation
+          statusMessage: `Generating report: ${percent}%`,
+        });
+      });
+      
+      if (pollResult.success) {
+        // Success! Continue to data fetching
+        break;
+      } else {
+        lastFailureReason = pollResult.failureReason || 'Unknown';
+        console.warn(`[ReportGenerator] Facebook async job failed (attempt ${attempt + 1}): ${lastFailureReason}`);
+        
+        if (attempt === MAX_RETRIES) {
+          throw new Error(`Report generation failed after ${MAX_RETRIES + 1} attempts. Last status: ${lastFailureReason}`);
+        }
+      }
+    }
+    
+    // If we removed filters for retry, log it
+    if (filters.length > 0 && !usedFilters) {
+      console.log(`[ReportGenerator] Note: API-level filters were removed during retry. Data will be unfiltered.`);
+    }
     
     // Step 3: Fetch all data
     await updateBatchJob(job.id, {
@@ -435,11 +489,17 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
     const totalSpend = data.reduce((sum, item) => sum + item.spend, 0);
     const totalImpressions = data.reduce((sum, item) => sum + item.impressions, 0);
     
-    // Step 4: Save report data
+    // Step 4: Save report data to S3 (too large for database max_allowed_packet)
     const durationMs = Date.now() - startTime;
+    const jsonData = JSON.stringify(data);
+    const s3Key = `reports/${job.userId}/${reportId}-${nanoid(8)}.json`;
+    
+    console.log(`[ReportGenerator] Uploading ${data.length} records (${(jsonData.length / 1024 / 1024).toFixed(1)}MB) to S3...`);
+    const { url: s3Url } = await storagePut(s3Key, jsonData, 'application/json');
+    console.log(`[ReportGenerator] Report data uploaded to S3: ${s3Key}`);
     
     await updateSavedReport(reportId, {
-      data,
+      data: s3Url, // Store S3 URL instead of raw data
       totalItems: data.length,
       totalSpend: Math.round(totalSpend * 100), // Store as cents
       totalImpressions,
@@ -583,12 +643,14 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
   } catch (error: any) {
     console.error(`[ReportGenerator] Job ${job.id} failed:`, error);
     
-    // Update report as failed
+    // Update report as failed - truncate error message to prevent Data Too Long
+    const truncatedError = (error.message || 'Unknown error').substring(0, 500);
     await updateSavedReport(reportId, {
       status: 'failed',
-      errorMessage: error.message || 'Unknown error',
+      errorMessage: truncatedError,
     });
     
-    throw error;
+    // Re-throw with truncated message to prevent cascading Data Too Long errors
+    throw new Error(truncatedError);
   }
 }

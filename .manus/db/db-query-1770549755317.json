@@ -1,0 +1,24 @@
+{
+  "query": "SELECT id, status, jobType, statusMessage FROM batch_jobs WHERE id >= 60004 ORDER BY id DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SELECT id, status, jobType, statusMessage FROM batch_jobs WHERE id >= 60004 ORDER BY id DESC;",
+  "rows": [
+    {
+      "id": "60005",
+      "status": "running",
+      "jobType": "report_generation",
+      "statusMessage": "Fetched 14000 records..."
+    },
+    {
+      "id": "60004",
+      "status": "failed",
+      "jobType": "report_generation",
+      "statusMessage": "Failed query: update `saved_reports` set `data` = ?, `totalItems` = ?, `totalSpend` = ?, `totalImpressions` = ?, `status` = ?, `generatedAt` = ?, `durationMs` = ? where `saved_reports`.`id` = ?"
+    }
+  ],
+  "messages": [
+    "params: [{\"product_name\":\"【YSL】Saint Laurent Paris Le 5a7 大款 小牛皮肩背包-多色可選(流浪包 托特包)\",\"product_retailer_id\":\"14834274\",\"product_brand\":\"YSL\",\"impressions\":228361,\"spend\":38797,\"link_clicks\":24389,\"inline_link_click_ctr\":10.68002,\"cvr\":0,\"cpm\":169.893283,\"cost_per_inline_link_click\":1.590758,\"purchases\":713,\""
+  ],
+  "stdout": "id\tstatus\tjobType\tstatusMessage\n60005\trunning\treport_generation\tFetched 14000 records...\n60004\tfailed\treport_generation\tFailed query: update `saved_reports` set `data` = ?, `totalItems` = ?, `totalSpend` = ?, `totalImpressions` = ?, `status` = ?, `generatedAt` = ?, `durationMs` = ? where `saved_reports`.`id` = ?\nparams: [{\"product_name\":\"【YSL】Saint Laurent Paris Le 5a7 大款 小牛皮肩背包-多色可選(流浪包 托特包)\",\"product_retailer_id\":\"14834274\",\"product_brand\":\"YSL\",\"impressions\":228361,\"spend\":38797,\"link_clicks\":24389,\"inline_link_click_ctr\":10.68002,\"cvr\":0,\"cpm\":169.893283,\"cost_per_inline_link_click\":1.590758,\"purchases\":713,\"\n",
+  "stderr": "",
+  "execution_time_ms": 1620
+}

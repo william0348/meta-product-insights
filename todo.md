@@ -277,3 +277,25 @@
 - [x] Design new app icon with tech style, Meta blue + green colors, data elements
 - [x] Generate icon using AI image generation
 - [x] Update app favicon and logo (header + favicon)
+
+## Bug Fix - Scheduled Report Fails (Run Now)
+- [x] Investigate why scheduled/Run Now reports fail while manual reports work
+- [x] Check server logs for error details
+- [x] Root cause 1: level parameter defaulted to 'ad' instead of 'account' - fixed
+- [x] Root cause 2: Data Too Long - 30MB JSON exceeds MySQL max_allowed_packet
+- [x] Fix: Migrated report data storage to S3 (storagePut)
+- [x] Added retry logic for Facebook Job Failed
+- [x] Added error message truncation to prevent cascading DB errors
+- [x] Test: Job 60005 completed successfully - 73,392 records uploaded to S3 in 10 min
+
+## Knowledge - Large Data Database Design
+- [x] Document: Never store large JSON/blob data directly in MySQL - use S3 instead
+- [x] Document: MySQL max_allowed_packet limits DB writes (~6MB default in TiDB)
+- [x] Document: Store S3 URL in DB, fetch data from S3 on read
+- [x] Document: Always truncate error messages before saving to DB
+
+## Bug Fix - Data Too Long Error
+- [x] Changed saved_reports.data from JSON to LONGTEXT in schema
+- [x] Migrated to S3 storage for report data (storagePut/fetch)
+- [x] Backend reports.get fetches data from S3 URL transparently
+- [x] Verified: 73,392 records (25.6MB) stored and retrieved successfully

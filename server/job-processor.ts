@@ -124,11 +124,14 @@ async function processJob(job: BatchJob): Promise<void> {
   } catch (error: any) {
     console.error(`[JobProcessor] Job ${job.id} failed:`, error);
     
+    // Truncate error message to prevent Data Too Long errors in database
+    const errorMsg = (error.message || "Unknown error").substring(0, 500);
+    
     await updateBatchJob(job.id, {
       status: "failed",
-      statusMessage: error.message || "Unknown error",
+      statusMessage: errorMsg,
       completedAt: new Date(),
-      errors: [{ message: error.message || "Unknown error" }],
+      errors: [{ message: errorMsg }],
     });
   }
 }

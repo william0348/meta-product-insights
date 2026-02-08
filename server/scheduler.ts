@@ -192,7 +192,7 @@ export async function processScheduledJob(schedule: ScheduledJob): Promise<void>
           adAccountId: config.adAccountId,
           accessToken: config.accessToken || adsToken.accessToken,
           dateRangeType: config.dateRangeType || 'last_7_days',
-          level: config.level || 'ad',
+          level: config.level || 'account',
           breakdown: config.breakdown || 'product_id',
           minSpend: config.minSpend || adsToken.minSpend || undefined,
           minCTR: config.minCTR || adsToken.minCTR || undefined,

@@ -592,7 +592,31 @@ export const appRouter = router({
           throw new Error('Access denied');
         }
         
-        return { success: true, report };
+        // Load report data - either from S3 URL or inline JSON
+        let parsedData: any[] = [];
+        if (report.data) {
+          try {
+            if (typeof report.data === 'string' && report.data.startsWith('http')) {
+              // Data is stored as S3 URL - fetch it
+              console.log(`[Reports] Fetching report data from S3: ${report.data.substring(0, 80)}...`);
+              const response = await fetch(report.data);
+              if (response.ok) {
+                parsedData = await response.json();
+              } else {
+                console.error(`[Reports] Failed to fetch from S3: ${response.status}`);
+              }
+            } else if (typeof report.data === 'string') {
+              // Legacy: inline JSON data
+              parsedData = JSON.parse(report.data);
+            } else {
+              parsedData = report.data as any;
+            }
+          } catch (e) {
+            console.error('[Reports] Failed to load report data:', e);
+          }
+        }
+        
+        return { success: true, report: { ...report, data: parsedData } };
       }),
     
     // Get all reports for current user

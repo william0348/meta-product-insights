@@ -1,0 +1,1 @@
+ALTER TABLE `saved_reports` MODIFY COLUMN `data` longtext;

@@ -1,4 +1,4 @@
-import { bigint, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean } from "drizzle-orm/mysql-core";
+import { bigint, int, json, longtext, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -178,24 +178,8 @@ export const savedReports = mysqlTable("saved_reports", {
   minSpend: varchar("minSpend", { length: 32 }),
   minCTR: varchar("minCTR", { length: 32 }),
   
-  // Report data (stored as JSON array of product insights)
-  data: json("data").$type<Array<{
-    product_name: string;
-    product_retailer_id: string;
-    product_brand?: string;
-    impressions: number;
-    spend: number;
-    link_clicks: number;
-    inline_link_click_ctr?: number;
-    cvr?: number;
-    cpm: number;
-    cost_per_inline_link_click?: number;
-    purchases: number;
-    adds_to_cart?: number;
-    catalog_purchases?: number;
-    product_set_purchases?: number;
-    product_views?: number;
-  }>>(),
+  // Report data (stored as LONGTEXT JSON to handle large datasets 70k+ records)
+  data: longtext("data"),
   
   // Report statistics
   totalItems: int("totalItems").default(0),

@@ -1,0 +1,18 @@
+{
+  "query": "SELECT id, status, jobType, statusMessage, queuedAt, startedAt FROM batch_jobs WHERE id = 60005;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SELECT id, status, jobType, statusMessage, queuedAt, startedAt FROM batch_jobs WHERE id = 60005;",
+  "rows": [
+    {
+      "id": "60005",
+      "status": "running",
+      "jobType": "report_generation",
+      "statusMessage": "Fetched 13000 records...",
+      "queuedAt": "2026-02-08 11:14:53",
+      "startedAt": "2026-02-08 11:14:57"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\tjobType\tstatusMessage\tqueuedAt\tstartedAt\n60005\trunning\treport_generation\tFetched 13000 records...\t2026-02-08 11:14:53\t2026-02-08 11:14:57\n",
+  "stderr": "",
+  "execution_time_ms": 1586
+}
