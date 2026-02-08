@@ -1,0 +1,42 @@
+{
+  "query": "SHOW COLUMNS FROM schedule_runs WHERE Field IN ('retryCount', 'maxRetries', 'nextRetryAt', 'lastErrorType');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SHOW COLUMNS FROM schedule_runs WHERE Field IN ('retryCount', 'maxRetries', 'nextRetryAt', 'lastErrorType');",
+  "rows": [
+    {
+      "Field": "retryCount",
+      "Type": "int(11)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "maxRetries",
+      "Type": "int(11)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "3",
+      "Extra": ""
+    },
+    {
+      "Field": "nextRetryAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "lastErrorType",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nretryCount\tint(11)\tNO\t\t0\t\nmaxRetries\tint(11)\tNO\t\t3\t\nnextRetryAt\ttimestamp\tYES\t\tNULL\t\nlastErrorType\tvarchar(50)\tYES\t\tNULL\t\n",
+  "stderr": "",
+  "execution_time_ms": 1655
+}

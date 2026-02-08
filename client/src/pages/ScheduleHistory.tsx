@@ -23,6 +23,10 @@ import {
   History,
   Zap,
   CalendarClock,
+  RefreshCw,
+  ShieldAlert,
+  Wifi,
+  Ban,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -220,9 +224,31 @@ export default function ScheduleHistory() {
                       onClick={() => setSelectedRunId(run.id)}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           {getStatusBadge(run.status)}
                           {getTriggerBadge(run.triggerType)}
+                          {/* Retry info */}
+                          {(run.retryCount > 0 || run.nextRetryAt) && (
+                            <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                              <RefreshCw className="w-2.5 h-2.5 mr-1" />
+                              Retry {run.retryCount}/{run.maxRetries}
+                            </Badge>
+                          )}
+                          {run.nextRetryAt && (
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                              <Clock className="w-2.5 h-2.5 mr-1" />
+                              Next retry {formatDistanceToNow(new Date(run.nextRetryAt), { addSuffix: true })}
+                            </Badge>
+                          )}
+                          {run.lastErrorType && (
+                            <Badge variant="outline" className="text-xs">
+                              {run.lastErrorType === 'rate_limit' && <ShieldAlert className="w-2.5 h-2.5 mr-1" />}
+                              {run.lastErrorType === 'timeout' && <Clock className="w-2.5 h-2.5 mr-1" />}
+                              {run.lastErrorType === 'transient' && <Wifi className="w-2.5 h-2.5 mr-1" />}
+                              {run.lastErrorType === 'permanent' && <Ban className="w-2.5 h-2.5 mr-1" />}
+                              {run.lastErrorType}
+                            </Badge>
+                          )}
                         </div>
                         <ChevronRight className="w-4 h-4 text-muted-foreground" />
                       </div>
@@ -331,6 +357,56 @@ export default function ScheduleHistory() {
                   </p>
                 </div>
               </div>
+              
+              {/* Retry Information */}
+              {(runDetailData.run.retryCount > 0 || runDetailData.run.nextRetryAt || runDetailData.run.lastErrorType) && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4" />
+                      Retry Information
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <Card className="bg-orange-50/50">
+                        <CardContent className="pt-3 pb-3">
+                          <span className="text-[10px] font-bold uppercase text-muted-foreground block">Retry Attempts</span>
+                          <p className="text-lg font-bold text-orange-700">
+                            {runDetailData.run.retryCount} / {runDetailData.run.maxRetries}
+                          </p>
+                        </CardContent>
+                      </Card>
+                      {runDetailData.run.lastErrorType && (
+                        <Card className="bg-muted/30">
+                          <CardContent className="pt-3 pb-3">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Error Type</span>
+                            <p className="text-lg font-bold flex items-center gap-1.5">
+                              {runDetailData.run.lastErrorType === 'rate_limit' && <ShieldAlert className="w-4 h-4 text-amber-600" />}
+                              {runDetailData.run.lastErrorType === 'timeout' && <Clock className="w-4 h-4 text-blue-600" />}
+                              {runDetailData.run.lastErrorType === 'transient' && <Wifi className="w-4 h-4 text-orange-600" />}
+                              {runDetailData.run.lastErrorType === 'permanent' && <Ban className="w-4 h-4 text-red-600" />}
+                              <span className="capitalize">{runDetailData.run.lastErrorType.replace('_', ' ')}</span>
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+                      {runDetailData.run.nextRetryAt && (
+                        <Card className="bg-blue-50/50">
+                          <CardContent className="pt-3 pb-3">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Next Retry</span>
+                            <p className="text-sm font-bold text-blue-700">
+                              {format(new Date(runDetailData.run.nextRetryAt), 'MMM d, HH:mm:ss')}
+                            </p>
+                            <p className="text-xs text-blue-500">
+                              {formatDistanceToNow(new Date(runDetailData.run.nextRetryAt), { addSuffix: true })}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
               
               <Separator />
               

@@ -311,6 +311,12 @@ export const scheduleRuns = mysqlTable("schedule_runs", {
   status: mysqlEnum("status", ["running", "completed", "partial", "failed"]).default("running").notNull(),
   errorMessage: text("errorMessage"),
   
+  // Retry mechanism
+  retryCount: int("retryCount").default(0).notNull(),
+  maxRetries: int("maxRetries").default(3).notNull(),
+  nextRetryAt: timestamp("nextRetryAt"),
+  lastErrorType: varchar("lastErrorType", { length: 50 }), // 'transient' | 'permanent' | 'timeout' | 'rate_limit'
+  
   // Linked batch job IDs (JSON array)
   jobIds: json("jobIds").$type<number[]>(),
   

@@ -13,8 +13,11 @@ import {
   getUserToken,
   createScheduleRun,
   updateScheduleRun,
+  getRetryableScheduleRuns,
+  getScheduledJob,
 } from "./db";
-import { ScheduledJob } from "../drizzle/schema";
+import { ScheduledJob, ScheduleRun } from "../drizzle/schema";
+import { classifyError, calculateRetryDelay } from "./error-classifier";
 
 // Scheduler state
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
@@ -154,11 +157,19 @@ function getReportConfigs(schedule: ScheduledJob): ReportConfig[] {
  * @param schedule - The scheduled job to process
  * @param triggerType - 'auto' for scheduled runs, 'manual' for Run Now
  */
+interface RetryOptions {
+  retryCount: number;
+  maxRetries: number;
+  originalRunId: number;
+}
+
 export async function processScheduledJob(
   schedule: ScheduledJob, 
-  triggerType: 'auto' | 'manual' = 'auto'
+  triggerType: 'auto' | 'manual' = 'auto',
+  retryOpts?: RetryOptions
 ): Promise<void> {
-  console.log(`[Scheduler] Processing scheduled job ${schedule.id}: ${schedule.name} (trigger: ${triggerType})`);
+  const retryLabel = retryOpts ? ` [retry ${retryOpts.retryCount}/${retryOpts.maxRetries}]` : '';
+  console.log(`[Scheduler] Processing scheduled job ${schedule.id}: ${schedule.name} (trigger: ${triggerType})${retryLabel}`);
   
   const startTime = Date.now();
   
@@ -171,8 +182,10 @@ export async function processScheduledJob(
       triggerType,
       status: 'running',
       startedAt: new Date(),
+      retryCount: retryOpts?.retryCount || 0,
+      maxRetries: retryOpts?.maxRetries || 3,
     });
-    console.log(`[Scheduler] Created schedule run ${runId} for schedule ${schedule.id}`);
+    console.log(`[Scheduler] Created schedule run ${runId} for schedule ${schedule.id}${retryLabel}`);
   } catch (err) {
     console.error(`[Scheduler] Failed to create schedule run record:`, err);
   }
@@ -322,36 +335,134 @@ export async function processScheduledJob(
   } catch (error: any) {
     console.error(`[Scheduler] Error processing schedule ${schedule.id}:`, error);
     
+    // Classify the error to determine if it's retryable
+    const classified = classifyError(error);
+    console.log(`[Scheduler] Error classified as: ${classified.type} (retryable: ${classified.retryable})`);
+    
     await updateScheduledJob(schedule.id, {
       lastRunStatus: 'failed',
     });
     
     if (runId) {
-      await updateScheduleRun(runId, {
-        status: 'failed',
+      const currentRetryCount = retryOpts?.retryCount || 0;
+      const maxRetries = retryOpts?.maxRetries || 3;
+      
+      if (classified.retryable && currentRetryCount < maxRetries) {
+        // Schedule a retry with exponential backoff
+        const retryDelay = calculateRetryDelay(currentRetryCount, classified.type);
+        const nextRetryAt = new Date(Date.now() + retryDelay);
+        
+        console.log(`[Scheduler] Scheduling retry for run ${runId} at ${nextRetryAt.toISOString()} (delay: ${Math.round(retryDelay / 1000)}s)`);
+        
+        await updateScheduleRun(runId, {
+          status: 'failed',
+          errorMessage: error.message?.substring(0, 2000) || 'Unknown error',
+          completedAt: new Date(),
+          durationMs: Date.now() - startTime,
+          lastErrorType: classified.type,
+          retryCount: currentRetryCount,
+          maxRetries,
+          nextRetryAt,
+        });
+      } else {
+        // Permanent error or max retries reached
+        await updateScheduleRun(runId, {
+          status: 'failed',
+          errorMessage: error.message?.substring(0, 2000) || 'Unknown error',
+          completedAt: new Date(),
+          durationMs: Date.now() - startTime,
+          lastErrorType: classified.type,
+          retryCount: currentRetryCount,
+          maxRetries: classified.retryable ? maxRetries : 0,
+          nextRetryAt: null,
+        });
+      }
+    }
+  }
+}
+
+/**
+ * Retry a failed schedule run
+ */
+async function retryFailedRun(failedRun: ScheduleRun): Promise<void> {
+  const newRetryCount = failedRun.retryCount + 1;
+  console.log(`[Scheduler] Retrying failed run ${failedRun.id} for schedule ${failedRun.scheduleId} (attempt ${newRetryCount}/${failedRun.maxRetries})`);
+  
+  try {
+    const schedule = await getScheduledJob(failedRun.scheduleId);
+    if (!schedule) {
+      console.error(`[Scheduler] Schedule ${failedRun.scheduleId} not found for retry`);
+      await updateScheduleRun(failedRun.id, {
+        nextRetryAt: null,
+        errorMessage: (failedRun.errorMessage || '') + ' | Retry aborted: schedule not found',
+      });
+      return;
+    }
+    
+    // Clear the retry marker on the failed run
+    await updateScheduleRun(failedRun.id, {
+      nextRetryAt: null,
+      errorMessage: (failedRun.errorMessage || '') + ` | Retry #${newRetryCount} initiated`,
+    });
+    
+    // Re-process the schedule with retry context
+    await processScheduledJob(schedule, 'auto', {
+      retryCount: newRetryCount,
+      maxRetries: failedRun.maxRetries,
+      originalRunId: failedRun.id,
+    });
+    
+    console.log(`[Scheduler] Retry #${newRetryCount} for schedule ${failedRun.scheduleId} completed`);
+    
+  } catch (error: any) {
+    console.error(`[Scheduler] Retry failed for run ${failedRun.id}:`, error);
+    
+    const classified = classifyError(error);
+    
+    if (classified.retryable && newRetryCount < failedRun.maxRetries) {
+      const retryDelay = calculateRetryDelay(newRetryCount, classified.type);
+      const nextRetryAt = new Date(Date.now() + retryDelay);
+      
+      await updateScheduleRun(failedRun.id, {
+        retryCount: newRetryCount,
+        lastErrorType: classified.type,
+        nextRetryAt,
         errorMessage: error.message?.substring(0, 2000) || 'Unknown error',
-        completedAt: new Date(),
-        durationMs: Date.now() - startTime,
+      });
+    } else {
+      await updateScheduleRun(failedRun.id, {
+        retryCount: newRetryCount,
+        lastErrorType: classified.type,
+        nextRetryAt: null,
+        errorMessage: (error.message?.substring(0, 1500) || 'Unknown error') + ' | Max retries reached',
       });
     }
   }
 }
 
 /**
- * Check and process due scheduled jobs
+ * Check and process due scheduled jobs, and retry failed runs
  */
 async function checkScheduledJobs(): Promise<void> {
   try {
+    // 1. Process due scheduled jobs
     const dueJobs = await getDueScheduledJobs();
     
-    if (dueJobs.length === 0) {
-      return;
+    if (dueJobs.length > 0) {
+      console.log(`[Scheduler] Found ${dueJobs.length} due scheduled jobs`);
+      for (const schedule of dueJobs) {
+        await processScheduledJob(schedule, 'auto');
+      }
     }
     
-    console.log(`[Scheduler] Found ${dueJobs.length} due scheduled jobs`);
+    // 2. Check for failed runs that need retrying
+    const retryableRuns = await getRetryableScheduleRuns();
     
-    for (const schedule of dueJobs) {
-      await processScheduledJob(schedule, 'auto');
+    if (retryableRuns.length > 0) {
+      console.log(`[Scheduler] Found ${retryableRuns.length} runs eligible for retry`);
+      for (const run of retryableRuns) {
+        await retryFailedRun(run);
+      }
     }
     
   } catch (error) {

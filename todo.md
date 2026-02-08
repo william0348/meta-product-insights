@@ -317,3 +317,19 @@
 - [x] Remove unused debug console.log statements
 - [x] Rewrite schedule-history.test.ts with proper tRPC procedure tests (getHistory, getRunDetail)
 - [x] All 31 tests passing
+
+## Feature - Automatic Retry Mechanism for Facebook API Failures
+- [x] Add retry-related columns to schedule_runs table (retryCount, maxRetries, nextRetryAt, lastErrorType)
+- [x] Create error-classifier.ts module with Facebook API error code classification
+- [x] Implement classifyError() function supporting FB error codes, HTTP status codes, Node.js system errors, and message patterns
+- [x] Implement calculateRetryDelay() with exponential backoff and jitter (30s base for transient, 60s for rate limits, 10min cap)
+- [x] Update scheduler.ts processScheduledJob to accept RetryOptions and classify errors on failure
+- [x] Add retryFailedRun() function to scheduler for re-processing failed runs
+- [x] Update checkScheduledJobs() to also check for retryable failed runs via getRetryableScheduleRuns()
+- [x] Update job-processor.ts error handling to classify errors and schedule retries for schedule runs
+- [x] Add getRetryableScheduleRuns() db helper to find failed runs with nextRetryAt in the past
+- [x] Update ScheduleHistory frontend to display retry count, error type, and next retry time badges
+- [x] Add Retry Information section to run detail dialog with retry attempts, error type, and next retry time
+- [x] Write comprehensive error-classifier.test.ts with 42 tests covering all error categories
+- [x] Fix calculateRetryDelay to use ?? instead of || for permanent error base delay (0)
+- [x] All 73 tests passing (5 test files)

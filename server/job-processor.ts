@@ -135,6 +135,62 @@ async function processJob(job: BatchJob): Promise<void> {
       completedAt: new Date(),
       errors: [{ message: errorMsg }],
     });
+    
+    // Update schedule run with error classification for retry logic
+    const scheduleRunId = job.config?.scheduleRunId;
+    if (scheduleRunId) {
+      try {
+        const { classifyError, calculateRetryDelay } = await import("./error-classifier");
+        const classified = classifyError(error);
+        const run = await getScheduleRun(scheduleRunId);
+        
+        if (run) {
+          const newFailedJobs = (run.failedJobs || 0) + 1;
+          const totalJobsDone = (run.completedJobs || 0) + newFailedJobs;
+          const allDone = totalJobsDone >= (run.totalJobs || 1);
+          
+          if (allDone && newFailedJobs > 0) {
+            const currentRetryCount = run.retryCount || 0;
+            const maxRetries = run.maxRetries || 3;
+            
+            if (classified.retryable && currentRetryCount < maxRetries) {
+              const retryDelay = calculateRetryDelay(currentRetryCount, classified.type);
+              const nextRetryAt = new Date(Date.now() + retryDelay);
+              
+              console.log(`[JobProcessor] Scheduling retry for run ${scheduleRunId} at ${nextRetryAt.toISOString()}`);
+              
+              await updateScheduleRun(scheduleRunId, {
+                failedJobs: newFailedJobs,
+                status: 'failed',
+                completedAt: new Date(),
+                durationMs: Date.now() - run.startedAt.getTime(),
+                lastErrorType: classified.type,
+                nextRetryAt,
+                errorMessage: errorMsg,
+              });
+            } else {
+              await updateScheduleRun(scheduleRunId, {
+                failedJobs: newFailedJobs,
+                status: (run.completedJobs || 0) > 0 ? 'partial' : 'failed',
+                completedAt: new Date(),
+                durationMs: Date.now() - run.startedAt.getTime(),
+                lastErrorType: classified.type,
+                nextRetryAt: null,
+                errorMessage: errorMsg,
+              });
+            }
+          } else {
+            await updateScheduleRun(scheduleRunId, {
+              failedJobs: newFailedJobs,
+              lastErrorType: classified.type,
+              errorMessage: errorMsg,
+            });
+          }
+        }
+      } catch (retryErr) {
+        console.warn(`[JobProcessor] Failed to update schedule run retry info:`, retryErr);
+      }
+    }
   }
 }
 

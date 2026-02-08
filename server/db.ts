@@ -449,7 +449,7 @@ export async function getRunningJobs(): Promise<BatchJob[]> {
 
 // Saved Reports functions
 import { savedReports, InsertSavedReport, SavedReport, scheduledJobs, InsertScheduledJob, ScheduledJob } from "../drizzle/schema";
-import { lte } from "drizzle-orm";
+import { lte, isNotNull } from "drizzle-orm";
 
 export async function createSavedReport(
   report: Omit<InsertSavedReport, "id" | "createdAt" | "updatedAt">
@@ -804,5 +804,38 @@ export async function getLatestScheduleRun(scheduleId: number): Promise<Schedule
   } catch (error) {
     console.error("[Database] Failed to get latest schedule run:", error);
     return undefined;
+  }
+}
+
+/**
+ * Get schedule runs that are eligible for retry
+ * (failed runs with nextRetryAt in the past)
+ */
+export async function getRetryableScheduleRuns(): Promise<ScheduleRun[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get retryable schedule runs: database not available");
+    return [];
+  }
+
+  try {
+    const now = new Date();
+    const result = await db
+      .select()
+      .from(scheduleRuns)
+      .where(
+        and(
+          eq(scheduleRuns.status, 'failed'),
+          isNotNull(scheduleRuns.nextRetryAt),
+          lte(scheduleRuns.nextRetryAt, now)
+        )
+      )
+      .orderBy(scheduleRuns.nextRetryAt)
+      .limit(10);
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get retryable schedule runs:", error);
+    return [];
   }
 }

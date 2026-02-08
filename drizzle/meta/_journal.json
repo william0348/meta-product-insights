@@ -78,6 +78,13 @@
       "when": 1770551199706,
       "tag": "0010_violet_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1770560384610,
+      "tag": "0011_gifted_logan",
+      "breakpoints": true
     }
   ]
 }
