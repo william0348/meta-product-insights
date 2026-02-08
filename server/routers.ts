@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory, createBatchJob, getBatchJob, getBatchJobsByUser, updateBatchJob, createSavedReport, getSavedReport, getSavedReportsByUser, deleteSavedReport, createScheduledJob, getScheduledJob, getScheduledJobsByUser, updateScheduledJob, deleteScheduledJob } from "./db";
+import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory, createBatchJob, getBatchJob, getBatchJobsByUser, updateBatchJob, createSavedReport, getSavedReport, getSavedReportsByUser, deleteSavedReport, createScheduledJob, getScheduledJob, getScheduledJobsByUser, updateScheduledJob, deleteScheduledJob, getScheduleRunsByScheduleId, getScheduleRun } from "./db";
 import { z } from "zod";
 import axios from "axios";
 import { fetchProductsByRetailerIds, batchUpdateProducts, checkBatchRequestStatus, BatchRequestItem } from "./catalog";
@@ -865,11 +865,75 @@ export const appRouter = router({
         
         // Import and call the scheduler's processScheduledJob function
         const { processScheduledJob } = await import('./scheduler');
-        await processScheduledJob(schedule);
+        await processScheduledJob(schedule, 'manual');
         
         console.log(`[Schedules] Manual run triggered for schedule ${input.scheduleId}`);
         
         return { success: true };
+      }),
+    
+    // Get execution history for a schedule
+    getHistory: protectedProcedure
+      .input(z.object({
+        scheduleId: z.number(),
+        limit: z.number().optional().default(50),
+      }))
+      .query(async ({ ctx, input }) => {
+        const schedule = await getScheduledJob(input.scheduleId);
+        
+        if (!schedule) {
+          throw new Error('Schedule not found');
+        }
+        
+        if (schedule.userId !== ctx.user.id) {
+          throw new Error('Access denied');
+        }
+        
+        const runs = await getScheduleRunsByScheduleId(input.scheduleId, input.limit);
+        
+        return { success: true, runs, scheduleName: schedule.name };
+      }),
+    
+    // Get a single run detail
+    getRunDetail: protectedProcedure
+      .input(z.object({
+        runId: z.number(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const run = await getScheduleRun(input.runId);
+        
+        if (!run) {
+          throw new Error('Run not found');
+        }
+        
+        if (run.userId !== ctx.user.id) {
+          throw new Error('Access denied');
+        }
+        
+        // Also fetch the linked batch jobs for detailed info
+        const jobDetails = [];
+        if (run.jobIds && run.jobIds.length > 0) {
+          for (const jobId of run.jobIds) {
+            const job = await getBatchJob(jobId);
+            if (job) {
+              jobDetails.push({
+                id: job.id,
+                jobType: job.jobType,
+                status: job.status,
+                processedItems: job.processedItems,
+                totalItems: job.totalItems,
+                successCount: job.successCount,
+                errorCount: job.errorCount,
+                statusMessage: job.statusMessage,
+                startedAt: job.startedAt,
+                completedAt: job.completedAt,
+                config: job.config,
+              });
+            }
+          }
+        }
+        
+        return { success: true, run, jobDetails };
       }),
   }),
 });

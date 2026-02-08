@@ -71,6 +71,13 @@
       "when": 1770548393444,
       "tag": "0009_harsh_true_believers",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1770551199706,
+      "tag": "0010_violet_paper_doll",
+      "breakpoints": true
     }
   ]
 }

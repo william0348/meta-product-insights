@@ -22,7 +22,8 @@ import {
   Building2,
   Copy,
   Pencil,
-  Play
+  Play,
+  History
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -745,6 +746,15 @@ export default function ScheduledJobs() {
                           <Play className="w-4 h-4" />
                         )}
                       </Button>
+                      <Link href={`/schedule-history/${schedule.id}`}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="View History"
+                        >
+                          <History className="w-4 h-4" />
+                        </Button>
+                      </Link>
                       <Button
                         variant="ghost"
                         size="sm"

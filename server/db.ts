@@ -695,3 +695,114 @@ export async function deleteScheduledJob(id: number): Promise<void> {
     throw error;
   }
 }
+
+
+// Schedule Runs (Execution History) functions
+import { scheduleRuns, InsertScheduleRun, ScheduleRun } from "../drizzle/schema";
+
+export async function createScheduleRun(
+  run: Omit<InsertScheduleRun, "id" | "createdAt">
+): Promise<number | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create schedule run: database not available");
+    return null;
+  }
+
+  try {
+    const result = await db.insert(scheduleRuns).values(run);
+    return (result as any)[0]?.insertId || null;
+  } catch (error) {
+    console.error("[Database] Failed to create schedule run:", error);
+    throw error;
+  }
+}
+
+export async function updateScheduleRun(
+  id: number,
+  updates: Partial<Omit<ScheduleRun, "id" | "createdAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update schedule run: database not available");
+    return;
+  }
+
+  try {
+    await db
+      .update(scheduleRuns)
+      .set(updates)
+      .where(eq(scheduleRuns.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to update schedule run:", error);
+    throw error;
+  }
+}
+
+export async function getScheduleRunsByScheduleId(
+  scheduleId: number,
+  limit: number = 50
+): Promise<ScheduleRun[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get schedule runs: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(scheduleRuns)
+      .where(eq(scheduleRuns.scheduleId, scheduleId))
+      .orderBy(desc(scheduleRuns.startedAt))
+      .limit(limit);
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get schedule runs:", error);
+    return [];
+  }
+}
+
+export async function getScheduleRun(id: number): Promise<ScheduleRun | undefined> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get schedule run: database not available");
+    return undefined;
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(scheduleRuns)
+      .where(eq(scheduleRuns.id, id))
+      .limit(1);
+
+    return result.length > 0 ? result[0] : undefined;
+  } catch (error) {
+    console.error("[Database] Failed to get schedule run:", error);
+    return undefined;
+  }
+}
+
+export async function getLatestScheduleRun(scheduleId: number): Promise<ScheduleRun | undefined> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get latest schedule run: database not available");
+    return undefined;
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(scheduleRuns)
+      .where(eq(scheduleRuns.scheduleId, scheduleId))
+      .orderBy(desc(scheduleRuns.startedAt))
+      .limit(1);
+
+    return result.length > 0 ? result[0] : undefined;
+  } catch (error) {
+    console.error("[Database] Failed to get latest schedule run:", error);
+    return undefined;
+  }
+}

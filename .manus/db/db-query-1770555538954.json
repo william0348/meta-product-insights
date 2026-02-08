@@ -1,0 +1,18 @@
+{
+  "query": "SELECT id, name, jobType, enabled, lastRunStatus, runCount FROM scheduled_jobs ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SELECT id, name, jobType, enabled, lastRunStatus, runCount FROM scheduled_jobs ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "1",
+      "name": "CTR 8%",
+      "jobType": "report_and_catalog",
+      "enabled": "1",
+      "lastRunStatus": "success",
+      "runCount": "7"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tjobType\tenabled\tlastRunStatus\trunCount\n1\tCTR 8%\treport_and_catalog\t1\tsuccess\t7\n",
+  "stderr": "",
+  "execution_time_ms": 1643
+}

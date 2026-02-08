@@ -119,6 +119,17 @@ export const batchJobs = mysqlTable("batch_jobs", {
     breakdown?: string;
     minSpend?: string;
     minCTR?: string;
+    // Schedule tracking
+    scheduleId?: number;
+    scheduleName?: string;
+    scheduleRunId?: number;
+    configIndex?: number;
+    configName?: string;
+    // Combined workflow flags
+    updateToCatalog?: boolean;
+    catalogAccessToken?: string;
+    dateRangeType?: string;
+    customNumbers?: Record<string, string>;
   }>().notNull(),
   
   // Progress tracking
@@ -274,3 +285,42 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
 
 export type ScheduledJob = typeof scheduledJobs.$inferSelect;
 export type InsertScheduledJob = typeof scheduledJobs.$inferInsert;
+
+// Schedule execution history table
+export const scheduleRuns = mysqlTable("schedule_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  scheduleId: int("scheduleId").notNull(),
+  userId: int("userId").notNull(),
+  
+  // Trigger info
+  triggerType: mysqlEnum("triggerType", ["auto", "manual"]).default("auto").notNull(),
+  
+  // Job tracking
+  totalJobs: int("totalJobs").default(0), // Number of batch jobs created
+  completedJobs: int("completedJobs").default(0),
+  failedJobs: int("failedJobs").default(0),
+  
+  // Aggregated results
+  totalItems: int("totalItems").default(0), // Total products processed across all jobs
+  totalSpend: bigint("totalSpend", { mode: "number" }),
+  totalImpressions: bigint("totalImpressions", { mode: "number" }),
+  catalogItemsUpdated: int("catalogItemsUpdated").default(0),
+  catalogErrors: int("catalogErrors").default(0),
+  
+  // Status
+  status: mysqlEnum("status", ["running", "completed", "partial", "failed"]).default("running").notNull(),
+  errorMessage: text("errorMessage"),
+  
+  // Linked batch job IDs (JSON array)
+  jobIds: json("jobIds").$type<number[]>(),
+  
+  // Timing
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+  durationMs: bigint("durationMs", { mode: "number" }),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ScheduleRun = typeof scheduleRuns.$inferSelect;
+export type InsertScheduleRun = typeof scheduleRuns.$inferInsert;

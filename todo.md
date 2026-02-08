@@ -299,3 +299,21 @@
 - [x] Migrated to S3 storage for report data (storagePut/fetch)
 - [x] Backend reports.get fetches data from S3 URL transparently
 - [x] Verified: 73,392 records (25.6MB) stored and retrieved successfully
+
+## Feature - Schedule Execution History Page
+- [x] Create schedule_runs database table for execution records
+- [x] Add fields: scheduleId, jobId, startedAt, completedAt, status, totalItems, totalSpend, errorMessage, durationMs, triggerType (auto/manual)
+- [x] Add backend API endpoints (schedules.getHistory, schedules.getRunDetail)
+- [x] Update scheduler.ts to record execution start/end in schedule_runs
+- [x] Update job processor to update schedule_runs on completion/failure
+- [x] Create ScheduleHistory frontend page (/schedule-history/:id)
+- [x] Show execution timeline with status badges, duration, data counts
+- [x] Add "View History" button to schedule cards
+- [x] Add navigation from ScheduledJobs page to history page
+
+## Bug Fix - Schedule History Page
+- [x] Fix ScheduleHistory page to use wouter useParams hook instead of manual URL parsing
+- [x] Fix duplicate 'error' variable conflict after template upgrade (useAuth hook)
+- [x] Remove unused debug console.log statements
+- [x] Rewrite schedule-history.test.ts with proper tRPC procedure tests (getHistory, getRunDetail)
+- [x] All 31 tests passing

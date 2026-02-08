@@ -12,7 +12,9 @@ import {
   getQueuedJobs, 
   getRunningJobs,
   createBatchHistoryRecord,
-  updateBatchHistoryRecord
+  updateBatchHistoryRecord,
+  getScheduleRun,
+  updateScheduleRun,
 } from "./db";
 import { notifyOwner } from "./_core/notification";
 import { batchUpdateProducts, fetchProductsByRetailerIds, checkBatchRequestStatus } from "./catalog";
@@ -376,6 +378,16 @@ async function processCatalogUpdateJob(job: BatchJob, startTime: number): Promis
 
   console.log(`[JobProcessor] Job ${job.id} completed in ${durationMs}ms: ${successCount} success, ${errorCount} errors`);
   
+  // Update schedule run if this job was triggered by a schedule
+  await updateScheduleRunFromJob(job, {
+    totalItems,
+    successCount: successCount,
+    errorCount,
+    catalogItemsUpdated: successCount,
+    catalogErrors: errorCount,
+    durationMs,
+  });
+  
   // Send notification to owner
   try {
     const durationMinutes = Math.round(durationMs / 60000);
@@ -399,6 +411,61 @@ async function processCatalogUpdateJob(job: BatchJob, startTime: number): Promis
   } catch (notifyError) {
     console.warn(`[JobProcessor] Failed to send notification:`, notifyError);
     // Don't fail the job if notification fails
+  }
+}
+
+/**
+ * Update schedule run record when a batch job completes
+ * Aggregates results from all linked jobs
+ */
+async function updateScheduleRunFromJob(
+  job: BatchJob,
+  results: {
+    totalItems: number;
+    successCount: number;
+    errorCount: number;
+    catalogItemsUpdated?: number;
+    catalogErrors?: number;
+    durationMs: number;
+  }
+): Promise<void> {
+  const scheduleRunId = job.config?.scheduleRunId;
+  if (!scheduleRunId) return;
+  
+  try {
+    const run = await getScheduleRun(scheduleRunId);
+    if (!run) return;
+    
+    const jobStatus = results.errorCount > 0 && results.successCount === 0 ? 'failed' : 'completed';
+    const newCompletedJobs = (run.completedJobs || 0) + (jobStatus === 'completed' ? 1 : 0);
+    const newFailedJobs = (run.failedJobs || 0) + (jobStatus === 'failed' ? 1 : 0);
+    const totalJobsDone = newCompletedJobs + newFailedJobs;
+    const allDone = totalJobsDone >= (run.totalJobs || 1);
+    
+    // Determine overall run status
+    let runStatus: 'running' | 'completed' | 'partial' | 'failed' = 'running';
+    if (allDone) {
+      if (newFailedJobs === 0) runStatus = 'completed';
+      else if (newCompletedJobs === 0) runStatus = 'failed';
+      else runStatus = 'partial';
+    }
+    
+    await updateScheduleRun(scheduleRunId, {
+      completedJobs: newCompletedJobs,
+      failedJobs: newFailedJobs,
+      totalItems: (run.totalItems || 0) + results.totalItems,
+      catalogItemsUpdated: (run.catalogItemsUpdated || 0) + (results.catalogItemsUpdated || 0),
+      catalogErrors: (run.catalogErrors || 0) + (results.catalogErrors || 0),
+      status: runStatus,
+      ...(allDone ? {
+        completedAt: new Date(),
+        durationMs: Date.now() - run.startedAt.getTime(),
+      } : {}),
+    });
+    
+    console.log(`[JobProcessor] Updated schedule run ${scheduleRunId}: ${runStatus} (${totalJobsDone}/${run.totalJobs} jobs done)`);
+  } catch (error) {
+    console.warn(`[JobProcessor] Failed to update schedule run ${scheduleRunId}:`, error);
   }
 }
 

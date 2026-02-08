@@ -10,7 +10,9 @@ import {
   getDueScheduledJobs, 
   updateScheduledJob,
   createBatchJob,
-  getUserToken
+  getUserToken,
+  createScheduleRun,
+  updateScheduleRun,
 } from "./db";
 import { ScheduledJob } from "../drizzle/schema";
 
@@ -149,9 +151,31 @@ function getReportConfigs(schedule: ScheduledJob): ReportConfig[] {
  * Process a scheduled job
  * Creates multiple batch jobs if there are multiple report configurations
  * Exported for manual triggering via Run Now feature
+ * @param schedule - The scheduled job to process
+ * @param triggerType - 'auto' for scheduled runs, 'manual' for Run Now
  */
-export async function processScheduledJob(schedule: ScheduledJob): Promise<void> {
-  console.log(`[Scheduler] Processing scheduled job ${schedule.id}: ${schedule.name}`);
+export async function processScheduledJob(
+  schedule: ScheduledJob, 
+  triggerType: 'auto' | 'manual' = 'auto'
+): Promise<void> {
+  console.log(`[Scheduler] Processing scheduled job ${schedule.id}: ${schedule.name} (trigger: ${triggerType})`);
+  
+  const startTime = Date.now();
+  
+  // Create a schedule run record
+  let runId: number | null = null;
+  try {
+    runId = await createScheduleRun({
+      scheduleId: schedule.id,
+      userId: schedule.userId,
+      triggerType,
+      status: 'running',
+      startedAt: new Date(),
+    });
+    console.log(`[Scheduler] Created schedule run ${runId} for schedule ${schedule.id}`);
+  } catch (err) {
+    console.error(`[Scheduler] Failed to create schedule run record:`, err);
+  }
   
   try {
     // Get user's saved tokens
@@ -162,6 +186,14 @@ export async function processScheduledJob(schedule: ScheduledJob): Promise<void>
       await updateScheduledJob(schedule.id, {
         lastRunStatus: 'failed',
       });
+      if (runId) {
+        await updateScheduleRun(runId, {
+          status: 'failed',
+          errorMessage: 'No ads management token found. Please save your access token in Settings.',
+          completedAt: new Date(),
+          durationMs: Date.now() - startTime,
+        });
+      }
       return;
     }
     
@@ -173,6 +205,14 @@ export async function processScheduledJob(schedule: ScheduledJob): Promise<void>
       await updateScheduledJob(schedule.id, {
         lastRunStatus: 'failed',
       });
+      if (runId) {
+        await updateScheduleRun(runId, {
+          status: 'failed',
+          errorMessage: 'No report configurations found. Please add at least one ad account.',
+          completedAt: new Date(),
+          durationMs: Date.now() - startTime,
+        });
+      }
       return;
     }
     
@@ -181,6 +221,14 @@ export async function processScheduledJob(schedule: ScheduledJob): Promise<void>
     let lastJobId: number | null = null;
     let successCount = 0;
     let failCount = 0;
+    const jobIds: number[] = [];
+    
+    // Update run with total jobs count
+    if (runId) {
+      await updateScheduleRun(runId, {
+        totalJobs: reportConfigs.length,
+      });
+    }
     
     // Create a batch job for each report configuration
     for (let i = 0; i < reportConfigs.length; i++) {
@@ -201,16 +249,14 @@ export async function processScheduledJob(schedule: ScheduledJob): Promise<void>
           configName: config.name || `Config ${i + 1}`,
           scheduleId: schedule.id,
           scheduleName: schedule.name,
+          scheduleRunId: runId ?? undefined, // Link batch job to the schedule run
         };
         
         // Determine job type based on schedule type
-        // For combined workflow, we still create report_generation jobs
-        // but add updateToCatalog flag so job processor knows to continue with catalog update
         const jobType = schedule.jobType === 'catalog_update' ? 'catalog_update' : 'report_generation';
         
         // For combined workflow, add catalog settings to the job config
         if (schedule.jobType === 'report_and_catalog') {
-          // Get catalog token for the combined workflow
           const catalogToken = await getUserToken(schedule.userId, 'catalog_management');
           if (catalogToken) {
             (jobConfig as any).updateToCatalog = true;
@@ -231,6 +277,7 @@ export async function processScheduledJob(schedule: ScheduledJob): Promise<void>
           console.log(`[Scheduler] Created batch job ${jobId} for config ${i + 1}/${reportConfigs.length} (Account: ${config.adAccountId})`);
           lastJobId = jobId;
           successCount++;
+          jobIds.push(jobId);
         } else {
           console.error(`[Scheduler] Failed to create batch job for config ${i + 1}`);
           failCount++;
@@ -258,6 +305,18 @@ export async function processScheduledJob(schedule: ScheduledJob): Promise<void>
       lastRunJobId: lastJobId,
     });
     
+    // Update schedule run record - mark as running (jobs are queued, will be updated when they complete)
+    if (runId) {
+      const runStatus = failCount === reportConfigs.length ? 'failed' : 'running';
+      await updateScheduleRun(runId, {
+        status: runStatus,
+        jobIds,
+        completedJobs: 0,
+        failedJobs: failCount,
+        errorMessage: failCount > 0 ? `${failCount} job(s) failed to create` : null,
+      });
+    }
+    
     console.log(`[Scheduler] Schedule ${schedule.id} completed: ${successCount} jobs created, ${failCount} failed. Next run: ${nextRunAt.toISOString()}`);
     
   } catch (error: any) {
@@ -266,6 +325,15 @@ export async function processScheduledJob(schedule: ScheduledJob): Promise<void>
     await updateScheduledJob(schedule.id, {
       lastRunStatus: 'failed',
     });
+    
+    if (runId) {
+      await updateScheduleRun(runId, {
+        status: 'failed',
+        errorMessage: error.message?.substring(0, 2000) || 'Unknown error',
+        completedAt: new Date(),
+        durationMs: Date.now() - startTime,
+      });
+    }
   }
 }
 
@@ -283,7 +351,7 @@ async function checkScheduledJobs(): Promise<void> {
     console.log(`[Scheduler] Found ${dueJobs.length} due scheduled jobs`);
     
     for (const schedule of dueJobs) {
-      await processScheduledJob(schedule);
+      await processScheduledJob(schedule, 'auto');
     }
     
   } catch (error) {

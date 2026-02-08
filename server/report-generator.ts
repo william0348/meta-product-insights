@@ -12,7 +12,9 @@ import {
   updateSavedReport,
   getUserToken,
   createBatchHistoryRecord,
-  updateBatchHistoryRecord
+  updateBatchHistoryRecord,
+  getScheduleRun,
+  updateScheduleRun,
 } from "./db";
 import { notifyOwner } from "./_core/notification";
 import { BatchJob } from "../drizzle/schema";
@@ -80,6 +82,12 @@ interface ReportConfig {
   customLabel4?: string;
   // Custom number fields (0-4)
   customNumbers?: Record<string, string>;
+  // Schedule tracking
+  scheduleId?: number;
+  scheduleName?: string;
+  scheduleRunId?: number;
+  configIndex?: number;
+  configName?: string;
 }
 
 interface ProductInsight {
@@ -614,6 +622,48 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
     });
     
     console.log(`[ReportGenerator] Job ${job.id} completed: ${data.length} products in ${finalDurationMs}ms`);
+    
+    // Update schedule run if this job was triggered by a schedule
+    const scheduleRunId = config.scheduleRunId;
+    if (scheduleRunId) {
+      try {
+        const run = await getScheduleRun(scheduleRunId);
+        if (run) {
+          const newCompletedJobs = (run.completedJobs || 0) + 1;
+          const totalJobsDone = newCompletedJobs + (run.failedJobs || 0);
+          const allDone = totalJobsDone >= (run.totalJobs || 1);
+          
+          let runStatus: 'running' | 'completed' | 'partial' | 'failed' = 'running';
+          if (allDone) {
+            if ((run.failedJobs || 0) === 0) runStatus = 'completed';
+            else runStatus = 'partial';
+          }
+          
+          // Calculate total spend and impressions from data
+          let totalSpend = 0;
+          let totalImpressions = 0;
+          for (const item of data) {
+            totalSpend += item.spend || 0;
+            totalImpressions += item.impressions || 0;
+          }
+          
+          await updateScheduleRun(scheduleRunId, {
+            completedJobs: newCompletedJobs,
+            totalItems: (run.totalItems || 0) + data.length,
+            totalSpend: (run.totalSpend || 0) + Math.round(totalSpend * 100),
+            totalImpressions: (run.totalImpressions || 0) + totalImpressions,
+            status: runStatus,
+            ...(allDone ? {
+              completedAt: new Date(),
+              durationMs: Date.now() - run.startedAt.getTime(),
+            } : {}),
+          });
+          console.log(`[ReportGenerator] Updated schedule run ${scheduleRunId}: ${runStatus}`);
+        }
+      } catch (err) {
+        console.warn(`[ReportGenerator] Failed to update schedule run:`, err);
+      }
+    }
     
     // Send notification to owner
     try {
