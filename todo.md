@@ -425,3 +425,10 @@
 - [x] Remove default 'from_scheduled_report' value from Custom Label 4 input
 - [x] Custom Label 4 value required only when toggle is enabled
 - [x] All 99 tests passing
+
+## Bug Fix - Python ENOENT in Deployment
+- [x] Fix spawn /usr/bin/python3.11 ENOENT - Python not at hardcoded path in deployment
+- [x] Implement dynamic Python path resolution (try python3.11, python3.10, python3, fallback to `which`)
+- [x] Cache resolved path for performance
+- [x] Add Python dependency auto-install in package.json postinstall
+- [x] All 99 tests passing

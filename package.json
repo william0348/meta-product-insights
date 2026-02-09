@@ -10,7 +10,8 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "postinstall": "pip3 install -r python/requirements.txt --quiet 2>/dev/null || python3 -m pip install -r python/requirements.txt --quiet 2>/dev/null || echo 'Warning: Could not install Python dependencies'"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

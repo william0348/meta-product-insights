@@ -11,10 +11,11 @@
  *   Communication: Python updates progress directly in the database (batch_jobs table)
  */
 
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import { writeFile, unlink, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { existsSync } from "fs";
 import { 
   updateBatchJob, 
   createSavedReport, 
@@ -114,6 +115,53 @@ interface PythonWorkerResult {
 }
 
 /**
+ * Find the best available Python 3 interpreter.
+ * Tries multiple paths to handle different deployment environments.
+ */
+let _cachedPythonPath: string | null = null;
+function findPythonPath(): string {
+  if (_cachedPythonPath) return _cachedPythonPath;
+
+  // Priority list of Python paths to try
+  const candidates = [
+    '/usr/bin/python3.11',
+    '/usr/bin/python3.10',
+    '/usr/bin/python3',
+    '/usr/local/bin/python3.11',
+    '/usr/local/bin/python3',
+  ];
+
+  // First try: check if any candidate exists on disk
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      console.log(`[ReportGenerator] Found Python at: ${p}`);
+      _cachedPythonPath = p;
+      return p;
+    }
+  }
+
+  // Fallback: use `which` to find python3 in PATH
+  try {
+    const found = execSync('which python3 2>/dev/null || which python 2>/dev/null', {
+      encoding: 'utf-8',
+      env: { ...process.env, PATH: `/usr/bin:/usr/local/bin:${process.env.PATH || ''}` },
+    }).trim();
+    if (found) {
+      console.log(`[ReportGenerator] Found Python via which: ${found}`);
+      _cachedPythonPath = found;
+      return found;
+    }
+  } catch {
+    // which failed, continue to error
+  }
+
+  throw new Error(
+    'Python 3 not found. Tried: ' + candidates.join(', ') +
+    '. Please install Python 3 in the deployment environment.'
+  );
+}
+
+/**
  * Spawn the Python worker process and wait for it to complete.
  * The Python process updates the database directly for progress tracking.
  * Returns the parsed result from the worker's stdout.
@@ -123,9 +171,8 @@ function runPythonWorker(configPath: string): Promise<PythonWorkerResult> {
     // Resolve the Python script path relative to the project root
     const scriptPath = join(process.cwd(), 'python', 'report_worker.py');
     
-    // Use absolute path to system Python 3.11 to avoid uv-installed Python 3.13 interference
-    // The uv Python 3.13 causes SRE module mismatch with system-installed packages
-    const pythonPath = '/usr/bin/python3.11';
+    // Dynamically find the best available Python interpreter
+    const pythonPath = findPythonPath();
     
     // Clean environment: remove PYTHONPATH and PYTHONHOME that may point to wrong Python
     const cleanEnv = { ...process.env };
