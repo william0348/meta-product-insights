@@ -382,3 +382,18 @@
 - [x] Fix 3: Added retry logic with exponential backoff for individual page fetches
 - [x] Fix 4: Added timeout (60s) to all axios calls to prevent hanging connections
 - [ ] Test fix with real data (user to trigger Run Now)
+
+## Feature - Python Data Processing Backend
+- [x] Create Python script for Facebook API data fetching (report_worker.py)
+- [x] Implement async pagination with aiohttp for faster data retrieval
+- [x] Add progress reporting via database updates (batch_jobs table)
+- [x] Implement data mapping and transformation in Python (pandas)
+- [x] Upload processed report data to S3 from Python
+- [x] Handle catalog batch update workflow in Python
+- [x] Update Node.js report-generator.ts to spawn Python subprocess
+- [x] Pass job config via temp JSON file (--config flag)
+- [x] Handle Python process exit codes and error reporting (__RESULT__ protocol)
+- [x] Ensure Python 3.11 compatibility (requirements.txt created)
+- [x] Test Python script independently (syntax, imports, data mapping, DB helper)
+- [x] Test integration with Node.js job processor (99 vitest tests passing)
+- [x] Update vitest tests (report-generator.test.ts with 9 new tests)
