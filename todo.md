@@ -454,3 +454,8 @@
 - [x] Update progress reporting to use direct DB updates from Node.js
 - [x] Update and pass all tests (99 tests passing)
 - [x] Verify full workflow - server starts cleanly, no Python dependency errors
+
+## Bug Fix - Publish Failure After Python-to-Node.js Migration
+- [x] Diagnose publish/deployment failure: lockfile contained stale papaparse/@types/papaparse entries not in package.json
+- [x] Fix: Regenerated pnpm-lock.yaml from clean package.json
+- [x] Verified: build succeeds, 99 tests passing
