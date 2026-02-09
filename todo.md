@@ -372,3 +372,13 @@
 - [x] Keep BatchHistory.tsx file as reference
 - [x] Update tests - all 90 tests passing
 - [x] Update notification links from /saved-reports to /reports in report-generator.ts and test file
+
+## Bug Fix - Report Generation Job Stuck at 50% Timeout
+- [x] Investigate why scheduled report jobs get stuck at 50% and timeout after 15 minutes
+- [x] Review current data fetching implementation (Node.js - uses axios + pagination, not Python)
+- [x] Identify root cause: fetchInsightsData only updated processedItems but NOT progress field; stale detection only checked progress
+- [x] Fix 1: Update progress proportionally (50-90%) during data fetching phase
+- [x] Fix 2: Stale detection now checks both progress AND processedItems changes
+- [x] Fix 3: Added retry logic with exponential backoff for individual page fetches
+- [x] Fix 4: Added timeout (60s) to all axios calls to prevent hanging connections
+- [ ] Test fix with real data (user to trigger Run Now)

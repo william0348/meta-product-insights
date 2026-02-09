@@ -245,7 +245,7 @@ async function createReportRun(
   
   console.log(`[ReportGenerator] API call params: level=${level}, breakdown=${breakdown}, filters=${filters ? JSON.stringify(filters) : 'none'}, dateRange=${dateStart} to ${dateEnd}`);
   
-  const response = await axios.post(url);
+  const response = await axios.post(url, null, { timeout: 60000 });
   
   if (response.data.error) {
     console.error(`[ReportGenerator] Facebook API error:`, JSON.stringify(response.data.error));
@@ -271,7 +271,7 @@ async function pollReportStatus(
   
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${reportRunId}?access_token=${accessToken}`;
-    const response = await axios.get(url);
+    const response = await axios.get(url, { timeout: 30000 });
     
     if (response.data.error) {
       console.error(`[ReportGenerator] Poll error:`, JSON.stringify(response.data.error));
@@ -309,6 +309,7 @@ async function fetchInsightsData(
   const allData: ProductInsight[] = [];
   let after: string | undefined = undefined;
   let pageCount = 0;
+  const MAX_PAGE_RETRIES = 3;
   
   while (true) {
     let url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${reportRunId}/insights?access_token=${accessToken}&limit=1000`;
@@ -316,7 +317,33 @@ async function fetchInsightsData(
       url += `&after=${after}`;
     }
     
-    const response = await axios.get(url);
+    // Retry logic for individual page fetches (network errors, timeouts)
+    let response;
+    for (let retry = 0; retry <= MAX_PAGE_RETRIES; retry++) {
+      try {
+        response = await axios.get(url, { timeout: 60000 }); // 60s timeout per page
+        break; // Success, exit retry loop
+      } catch (fetchError: any) {
+        const isRetryable = fetchError.code === 'ECONNRESET' 
+          || fetchError.code === 'ETIMEDOUT'
+          || fetchError.code === 'ECONNABORTED'
+          || fetchError.code === 'ERR_SOCKET_CONNECTION_TIMEOUT'
+          || fetchError.response?.status === 502
+          || fetchError.response?.status === 503;
+        
+        if (retry < MAX_PAGE_RETRIES && isRetryable) {
+          const delay = Math.pow(2, retry) * 2000; // 2s, 4s, 8s
+          console.warn(`[ReportGenerator] Page ${pageCount + 1} fetch failed (${fetchError.code || fetchError.response?.status}), retrying in ${delay/1000}s... (${retry + 1}/${MAX_PAGE_RETRIES})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw fetchError; // Non-retryable or max retries exceeded
+      }
+    }
+    
+    if (!response) {
+      throw new Error('Failed to fetch insights page after retries');
+    }
     
     if (response.data.error) {
       throw new Error(response.data.error.message || 'Failed to fetch insights');
@@ -486,10 +513,17 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
       statusMessage: 'Fetching report data...',
     });
     
+    // Estimate total items based on previous runs (~73k typical)
+    // We'll use processedItems growth to calculate progress from 50% to 90%
+    const ESTIMATED_TOTAL = 80000; // Conservative estimate for progress calculation
     const data = await fetchInsightsData(reportRunId, accessToken, async (loaded) => {
+      // Calculate progress: 50% (report gen done) to 90% (data fetch done)
+      const fetchProgress = Math.min(Math.floor((loaded / ESTIMATED_TOTAL) * 40), 40);
+      const totalProgress = 50 + fetchProgress; // 50-90%
       await updateBatchJob(job.id, {
+        progress: totalProgress,
         processedItems: loaded,
-        statusMessage: `Fetched ${loaded} records...`,
+        statusMessage: `Fetched ${loaded.toLocaleString()} records...`,
       });
     });
     

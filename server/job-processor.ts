@@ -34,7 +34,8 @@ const JOB_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes max for any job
 const STALE_PROGRESS_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes without progress update = stale
 
 // Track last known progress for stale detection
-const jobProgressCache = new Map<number, { progress: number; updatedAt: number }>();
+// We track both `progress` and `processedItems` to avoid false stale timeouts
+const jobProgressCache = new Map<number, { progress: number; processedItems: number; updatedAt: number }>();
 
 /**
  * Start the background job processor
@@ -91,14 +92,16 @@ async function processJobs(): Promise<void> {
       const runningTime = Date.now() - (job.startedAt?.getTime() || 0);
       
       // Track progress for stale detection
+      // Check BOTH progress field AND processedItems to detect activity
       const cached = jobProgressCache.get(job.id);
       const currentProgress = job.progress || 0;
+      const currentProcessedItems = job.processedItems || 0;
       
       if (!cached) {
-        jobProgressCache.set(job.id, { progress: currentProgress, updatedAt: Date.now() });
-      } else if (currentProgress > cached.progress) {
-        // Progress was made, update cache
-        jobProgressCache.set(job.id, { progress: currentProgress, updatedAt: Date.now() });
+        jobProgressCache.set(job.id, { progress: currentProgress, processedItems: currentProcessedItems, updatedAt: Date.now() });
+      } else if (currentProgress > cached.progress || currentProcessedItems > cached.processedItems) {
+        // Progress was made (either progress % or processedItems count increased), update cache
+        jobProgressCache.set(job.id, { progress: currentProgress, processedItems: currentProcessedItems, updatedAt: Date.now() });
       }
       
       // Check for absolute timeout (60 minutes)
