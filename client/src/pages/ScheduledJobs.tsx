@@ -276,8 +276,8 @@ export default function ScheduledJobs() {
       config.catalogId = catalogTokenData?.catalogId;
       config.catalogAccessToken = catalogTokenData?.accessToken;
       config.enableCustomLabel4 = formData.enableCustomLabel4;
-      if (formData.enableCustomLabel4) {
-        config.customLabel4 = formData.customLabel4 || 'from_scheduled_report';
+      if (formData.enableCustomLabel4 && formData.customLabel4.trim()) {
+        config.customLabel4 = formData.customLabel4.trim();
       }
       
       // Add custom_number fields (0-4)
@@ -535,7 +535,7 @@ export default function ScheduledJobs() {
                       />
                       <span className="text-sm font-mono w-28">custom_label_4</span>
                       <Input
-                        placeholder="Value"
+                        placeholder="Enter custom label value"
                         value={formData.customLabel4}
                         onChange={(e) => setFormData({ ...formData, customLabel4: e.target.value })}
                         disabled={!formData.enableCustomLabel4}

@@ -537,6 +537,104 @@ async def batch_update_catalog(
     return {"success": total_success, "errors": total_errors, "handles": all_handles}
 
 
+# ─── Catalog Verification ───────────────────────────────────────────────────
+
+async def verify_catalog_update(
+    session: aiohttp.ClientSession,
+    catalog_id: str,
+    access_token: str,
+    update_fields: dict,
+) -> dict:
+    """
+    After catalog batch update, verify how many products in the catalog
+    match the updated field values.
+    Returns {field_name: {value, matched_count, total_count}}.
+    """
+    verification = {}
+    base_url = f"https://graph.facebook.com/{FB_CATALOG_API_VERSION}"
+
+    # First get total product count in catalog
+    total_count = 0
+    try:
+        async with session.get(
+            f"{base_url}/{catalog_id}/products",
+            params={
+                "access_token": access_token,
+                "limit": 0,
+                "summary": "true",
+                "fields": "id",
+            },
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as resp:
+            result = await resp.json()
+            total_count = result.get("summary", {}).get("total_count", 0)
+            print(f"[Python] Catalog total products: {total_count}", flush=True)
+    except Exception as e:
+        print(f"[Python] Failed to get total product count: {e}", flush=True)
+
+    # For each updated field, query how many products have the expected value
+    for field_name, field_value in update_fields.items():
+        try:
+            # Build filter based on field type
+            if field_name == "custom_label_4":
+                filter_param = json.dumps({"custom_label_4": {"eq": str(field_value)}})
+            elif field_name.startswith("custom_number_"):
+                filter_param = json.dumps({field_name: {"eq": float(field_value)}})
+            else:
+                continue
+
+            async with session.get(
+                f"{base_url}/{catalog_id}/products",
+                params={
+                    "access_token": access_token,
+                    "limit": 0,
+                    "summary": "true",
+                    "fields": "id",
+                    "filter": filter_param,
+                },
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                result = await resp.json()
+                if "error" in result:
+                    print(
+                        f"[Python] Verification filter error for {field_name}: "
+                        f"{result['error'].get('message', 'Unknown')}",
+                        flush=True,
+                    )
+                    verification[field_name] = {
+                        "value": str(field_value),
+                        "matched_count": -1,
+                        "total_count": total_count,
+                        "error": result["error"].get("message", "Unknown"),
+                    }
+                else:
+                    matched = result.get("summary", {}).get("total_count", 0)
+                    print(
+                        f"[Python] Verification: {field_name}={field_value} -> "
+                        f"{matched}/{total_count} products match",
+                        flush=True,
+                    )
+                    verification[field_name] = {
+                        "value": str(field_value),
+                        "matched_count": matched,
+                        "total_count": total_count,
+                    }
+
+            # Small delay between verification queries
+            await asyncio.sleep(0.5)
+
+        except Exception as e:
+            print(f"[Python] Verification failed for {field_name}: {e}", flush=True)
+            verification[field_name] = {
+                "value": str(field_value),
+                "matched_count": -1,
+                "total_count": total_count,
+                "error": str(e),
+            }
+
+    return {"total_catalog_products": total_count, "fields": verification}
+
+
 # ─── Main Worker ─────────────────────────────────────────────────────────────
 
 async def run_worker(config: dict):
@@ -743,8 +841,65 @@ async def run_worker(config: dict):
                         )
                         db.update_job(
                             job_id, progress=95,
-                            statusMessage=f"Catalog updated: {result['success']} products",
+                            statusMessage=f"Catalog updated: {result['success']} products. Verifying...",
                         )
+
+                        # ── Step 6b: Verify catalog update ──
+                        try:
+                            print("[Python] Starting catalog verification...", flush=True)
+                            db.update_job(
+                                job_id, progress=97,
+                                statusMessage="Verifying catalog update...",
+                            )
+                            verification = await verify_catalog_update(
+                                session, catalog_id, catalog_access_token,
+                                update_fields,
+                            )
+
+                            # Build verification summary for status message
+                            verify_parts = []
+                            for fname, finfo in verification.get("fields", {}).items():
+                                matched = finfo.get("matched_count", -1)
+                                total = finfo.get("total_count", 0)
+                                if matched >= 0:
+                                    verify_parts.append(f"{fname}={finfo['value']}: {matched}/{total}")
+                                else:
+                                    verify_parts.append(f"{fname}: verification failed")
+
+                            verify_summary = "; ".join(verify_parts) if verify_parts else "No fields verified"
+                            total_catalog = verification.get("total_catalog_products", 0)
+
+                            # Update batch history with verification results
+                            if history_id:
+                                db.update_batch_history(
+                                    history_id,
+                                    updateCriteria={
+                                        "sourceField": "scheduled_report",
+                                        "targetField": ", ".join(update_fields.keys()),
+                                        "condition": f"reportId={report_id}",
+                                        "description": (
+                                            f"Scheduled report update: {verify_summary}"
+                                        ),
+                                        "verification": verification,
+                                    },
+                                )
+
+                            db.update_job(
+                                job_id, progress=98,
+                                statusMessage=(
+                                    f"Catalog updated: {result['success']} products. "
+                                    f"Verified: {verify_summary} (Total catalog: {total_catalog})"
+                                ),
+                            )
+                            print(
+                                f"[Python] Verification complete: {verify_summary} "
+                                f"(Total catalog: {total_catalog})",
+                                flush=True,
+                            )
+                        except Exception as verify_err:
+                            print(f"[Python] Verification failed (non-critical): {verify_err}", flush=True)
+                            # Verification failure is non-critical, don't fail the job
+
                     except Exception as cat_err:
                         print(f"[Python] Catalog update failed: {cat_err}", flush=True)
                         db.update_job(

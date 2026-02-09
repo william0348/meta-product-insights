@@ -416,3 +416,12 @@
 - [x] Update Python worker to respect enableCustomLabel4 toggle
 - [x] Update scheduler.ts to pass enableCustomLabel4 to job config
 - [x] All 99 tests passing
+
+## Feature - Post-Upload Catalog Verification
+- [x] Add verify_catalog_update function in Python worker after batch update
+- [x] Query Facebook Catalog API to count products matching updated fields (custom_label_4, custom_number_0-4)
+- [x] Store verification results in catalog_batch_history updateCriteria JSON
+- [x] Display verification results in Reports > Catalog Operations expanded row (matched count / total)
+- [x] Remove default 'from_scheduled_report' value from Custom Label 4 input
+- [x] Custom Label 4 value required only when toggle is enabled
+- [x] All 99 tests passing

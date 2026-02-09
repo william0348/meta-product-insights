@@ -646,6 +646,30 @@ export default function ScheduleHistory() {
                                             <p className="text-xs text-muted-foreground">{record.statusMessage}</p>
                                           </div>
                                         )}
+                                        {/* Verification Results */}
+                                        {record.updateCriteria?.verification && (
+                                          <div>
+                                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Catalog Verification</span>
+                                            <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2">
+                                              <div className="text-xs text-blue-700">
+                                                Total catalog products: {(record.updateCriteria.verification.total_catalog_products || 0).toLocaleString()}
+                                              </div>
+                                              {Object.entries(record.updateCriteria.verification.fields || {}).map(([fieldName, info]: [string, any]) => (
+                                                <div key={fieldName} className="flex items-center justify-between text-xs">
+                                                  <span className="font-mono text-blue-800">{fieldName} = {info.value}</span>
+                                                  {info.matched_count >= 0 ? (
+                                                    <span className="font-medium text-blue-700">
+                                                      {info.matched_count.toLocaleString()} / {info.total_count.toLocaleString()} matched
+                                                      <span className="ml-1 text-blue-500">({info.total_count > 0 ? ((info.matched_count / info.total_count) * 100).toFixed(1) : 0}%)</span>
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-red-500">Verification failed</span>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
                                     </TableCell>
                                   </TableRow>
@@ -999,7 +1023,7 @@ export default function ScheduleHistory() {
                             </div>
                             
                             {job.statusMessage && (
-                              <p className="text-xs text-muted-foreground mt-2 truncate">
+                              <p className="text-xs text-muted-foreground mt-2 break-words">
                                 {job.statusMessage}
                               </p>
                             )}
