@@ -346,3 +346,20 @@
 - [x] Fix: Added DB connection auto-recovery (resetDbConnection on ECONNRESET/ETIMEDOUT/EPIPE)
 - [x] Fix: Added stale connection refresh (recreate after 30 min idle)
 - [x] All 90 tests passing (5 test files)
+
+## Feature - Merge Reports & History into Unified Page
+- [x] Analyze SavedReports page features (report viewing, download, delete)
+- [x] Analyze ScheduleHistory page features (execution timeline, status, retry info)
+- [x] Design unified page combining both: execution history with report data access
+- [x] Build unified page using History's visual style as base
+- [x] Add report viewing/download capability to history run items (inline report data tab in dialog)
+- [x] Add global /reports route showing all execution history across schedules
+- [x] Add per-schedule /schedule-history/:id route for filtered view
+- [x] Add getAllHistory backend endpoint for fetching all runs for a user
+- [x] Update getRunDetail to include reportId from linked batch jobs
+- [x] Add Tabs (Overview / Report Data) in run detail dialog
+- [x] Inline report data table with product stats (spend, impressions, clicks, CTR, purchases)
+- [x] Update navigation (Reports link now goes to /reports unified page)
+- [x] Update App.tsx routing (removed SavedReports import, added /reports route)
+- [x] SavedReports.tsx kept as reference file but removed from routing
+- [x] All 90 tests passing (5 test files)

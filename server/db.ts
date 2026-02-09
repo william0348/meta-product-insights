@@ -813,6 +813,55 @@ export async function getScheduleRun(id: number): Promise<ScheduleRun | undefine
   }
 }
 
+export async function getScheduleRunsByUser(
+  userId: number,
+  limit: number = 50
+): Promise<(ScheduleRun & { scheduleName?: string | null })[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get schedule runs by user: database not available");
+    return [];
+  }
+  try {
+    const result = await db
+      .select({
+        id: scheduleRuns.id,
+        scheduleId: scheduleRuns.scheduleId,
+        userId: scheduleRuns.userId,
+        triggerType: scheduleRuns.triggerType,
+        totalJobs: scheduleRuns.totalJobs,
+        completedJobs: scheduleRuns.completedJobs,
+        failedJobs: scheduleRuns.failedJobs,
+        totalItems: scheduleRuns.totalItems,
+        totalSpend: scheduleRuns.totalSpend,
+        totalImpressions: scheduleRuns.totalImpressions,
+        catalogItemsUpdated: scheduleRuns.catalogItemsUpdated,
+        catalogErrors: scheduleRuns.catalogErrors,
+        status: scheduleRuns.status,
+        errorMessage: scheduleRuns.errorMessage,
+        retryCount: scheduleRuns.retryCount,
+        maxRetries: scheduleRuns.maxRetries,
+        nextRetryAt: scheduleRuns.nextRetryAt,
+        lastErrorType: scheduleRuns.lastErrorType,
+        jobIds: scheduleRuns.jobIds,
+        startedAt: scheduleRuns.startedAt,
+        completedAt: scheduleRuns.completedAt,
+        durationMs: scheduleRuns.durationMs,
+        createdAt: scheduleRuns.createdAt,
+        scheduleName: scheduledJobs.name,
+      })
+      .from(scheduleRuns)
+      .leftJoin(scheduledJobs, eq(scheduleRuns.scheduleId, scheduledJobs.id))
+      .where(eq(scheduleRuns.userId, userId))
+      .orderBy(desc(scheduleRuns.startedAt))
+      .limit(limit);
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get schedule runs by user:", error);
+    return [];
+  }
+}
+
 export async function getLatestScheduleRun(scheduleId: number): Promise<ScheduleRun | undefined> {
   const db = await getDb();
   if (!db) {

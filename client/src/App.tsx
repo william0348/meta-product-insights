@@ -7,7 +7,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import BatchHistory from "./pages/BatchHistory";
-import SavedReports from "./pages/SavedReports";
 import ScheduledJobs from "./pages/ScheduledJobs";
 import ScheduleHistory from "./pages/ScheduleHistory";
 
@@ -18,7 +17,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/settings"} component={Settings} />
       <Route path={"/batch-history"} component={BatchHistory} />
-      <Route path={"/saved-reports"} component={SavedReports} />
+      <Route path={"/reports"} component={ScheduleHistory} />
       <Route path="/schedule-history/:id" component={ScheduleHistory} />
       <Route path={"/schedules"} component={ScheduledJobs} />
       <Route path={"/404"} component={NotFound} />

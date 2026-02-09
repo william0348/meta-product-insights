@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory, createBatchJob, getBatchJob, getBatchJobsByUser, updateBatchJob, createSavedReport, getSavedReport, getSavedReportsByUser, deleteSavedReport, createScheduledJob, getScheduledJob, getScheduledJobsByUser, updateScheduledJob, deleteScheduledJob, getScheduleRunsByScheduleId, getScheduleRun } from "./db";
+import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory, createBatchJob, getBatchJob, getBatchJobsByUser, updateBatchJob, createSavedReport, getSavedReport, getSavedReportsByUser, deleteSavedReport, createScheduledJob, getScheduledJob, getScheduledJobsByUser, updateScheduledJob, deleteScheduledJob, getScheduleRunsByScheduleId, getScheduleRun, getScheduleRunsByUser } from "./db";
 import { z } from "zod";
 import axios from "axios";
 import { fetchProductsByRetailerIds, batchUpdateProducts, checkBatchRequestStatus, BatchRequestItem } from "./catalog";
@@ -894,7 +894,17 @@ export const appRouter = router({
         return { success: true, runs, scheduleName: schedule.name };
       }),
     
-    // Get a single run detail
+    // Get all execution history across all schedules for the current user
+    getAllHistory: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional().default(50),
+      }))
+      .query(async ({ ctx, input }) => {
+        const runs = await getScheduleRunsByUser(ctx.user.id, input.limit);
+        return { success: true, runs };
+      }),
+    
+    // Get a single run detail (also includes linked report data)
     getRunDetail: protectedProcedure
       .input(z.object({
         runId: z.number(),
@@ -928,6 +938,7 @@ export const appRouter = router({
                 startedAt: job.startedAt,
                 completedAt: job.completedAt,
                 config: job.config,
+                reportId: job.reportId,
               });
             }
           }

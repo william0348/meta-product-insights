@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Link, useParams } from 'wouter';
+import { Link, useParams, useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft, 
   Clock,
@@ -19,7 +20,6 @@ import {
   TrendingUp,
   Package,
   Hash,
-  ChevronRight,
   History,
   Zap,
   CalendarClock,
@@ -27,27 +27,64 @@ import {
   ShieldAlert,
   Wifi,
   Ban,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
+/**
+ * Unified Reports & History page.
+ * - /reports → shows ALL execution history across all schedules
+ * - /schedule-history/:id → shows history for a specific schedule (filtered view)
+ */
 export default function ScheduleHistory() {
   const params = useParams<{ id: string }>();
   const scheduleId = params.id ? parseInt(params.id) : 0;
+  const isGlobalView = scheduleId === 0;
+  const [, setLocation] = useLocation();
   
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const [viewingReportId, setViewingReportId] = useState<number | null>(null);
+  const [dialogTab, setDialogTab] = useState<string>('overview');
   
-  const { data: historyData, isLoading, error: historyError } = trpc.schedules.getHistory.useQuery(
-    { scheduleId, limit: 50 },
-    { enabled: scheduleId > 0, retry: false }
+  // Global view: fetch all runs for the user
+  const { data: allHistoryData, isLoading: isLoadingAll, error: allHistoryError } = trpc.schedules.getAllHistory.useQuery(
+    { limit: 100 },
+    { enabled: isGlobalView, retry: false }
   );
   
+  // Per-schedule view: fetch runs for a specific schedule
+  const { data: scheduleHistoryData, isLoading: isLoadingSchedule, error: scheduleHistoryError } = trpc.schedules.getHistory.useQuery(
+    { scheduleId, limit: 50 },
+    { enabled: !isGlobalView && scheduleId > 0, retry: false }
+  );
+  
+  // Run detail dialog
   const { data: runDetailData, isLoading: isLoadingDetail } = trpc.schedules.getRunDetail.useQuery(
     { runId: selectedRunId! },
     { enabled: selectedRunId !== null }
   );
   
-  const runs = historyData?.runs || [];
-  const scheduleName = historyData?.scheduleName || 'Schedule';
+  // Report data query (for inline report view)
+  const { data: reportData, isLoading: isLoadingReport } = trpc.reports.get.useQuery(
+    { reportId: viewingReportId! },
+    { enabled: viewingReportId !== null }
+  );
+  
+  const isLoading = isGlobalView ? isLoadingAll : isLoadingSchedule;
+  const historyError = isGlobalView ? allHistoryError : scheduleHistoryError;
+  const runs = isGlobalView 
+    ? (allHistoryData?.runs || []) 
+    : (scheduleHistoryData?.runs || []);
+  const scheduleName = isGlobalView ? 'All Schedules' : (scheduleHistoryData?.scheduleName || 'Schedule');
+  
+  // Stats
+  const completedRuns = runs.filter(r => r.status === 'completed');
+  const failedRuns = runs.filter(r => r.status === 'failed');
+  const runningRuns = runs.filter(r => r.status === 'running');
+  const avgDuration = completedRuns.length > 0
+    ? completedRuns.reduce((sum, r) => sum + (r.durationMs || 0), 0) / completedRuns.length
+    : 0;
   
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -109,25 +146,47 @@ export default function ScheduleHistory() {
     return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
+  // Filter tabs for global view
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const filteredRuns = statusFilter === 'all' 
+    ? runs 
+    : runs.filter(r => r.status === statusFilter);
+
   return (
     <div className="min-h-screen bg-background font-sans">
       {/* Header */}
       <header className="border-b border-border bg-background sticky top-0 z-20">
         <div className="container h-16 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Link href="/schedules">
+            <Link href={isGlobalView ? "/" : "/schedules"}>
               <Button variant="ghost" size="sm" className="h-8">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back
               </Button>
             </Link>
             <div className="bg-primary text-primary-foreground w-8 h-8 flex items-center justify-center font-bold text-lg">
-              H
+              {isGlobalView ? 'R' : 'H'}
             </div>
             <div>
-              <h1 className="text-sm font-bold uppercase tracking-widest">Execution History</h1>
+              <h1 className="text-sm font-bold uppercase tracking-widest">
+                {isGlobalView ? 'Reports & History' : 'Execution History'}
+              </h1>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{scheduleName}</p>
             </div>
+          </div>
+          
+          {/* Quick nav */}
+          <div className="flex items-center gap-2">
+            {!isGlobalView && (
+              <Button variant="ghost" size="sm" onClick={() => setLocation('/reports')} className="text-xs gap-1">
+                <History className="w-3.5 h-3.5" />
+                All History
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => setLocation('/schedules')} className="text-xs gap-1">
+              <CalendarClock className="w-3.5 h-3.5" />
+              Schedules
+            </Button>
           </div>
         </div>
       </header>
@@ -147,11 +206,15 @@ export default function ScheduleHistory() {
             <CardContent className="py-12 text-center text-muted-foreground">
               <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium mb-2">No Execution History</p>
-              <p className="text-sm mb-4">This schedule hasn't been executed yet. Use "Run Now" to trigger it.</p>
-              <Link href="/schedules">
+              <p className="text-sm mb-4">
+                {isGlobalView 
+                  ? 'No reports have been generated yet. Create a schedule or run a report to get started.'
+                  : 'This schedule hasn\'t been executed yet. Use "Run Now" to trigger it.'}
+              </p>
+              <Link href={isGlobalView ? "/" : "/schedules"}>
                 <Button variant="outline">
                   <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Schedules
+                  {isGlobalView ? 'Back to Dashboard' : 'Back to Schedules'}
                 </Button>
               </Link>
             </CardContent>
@@ -159,7 +222,7 @@ export default function ScheduleHistory() {
         ) : (
           <div className="space-y-6">
             {/* Summary Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <Card>
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-center space-x-2 text-muted-foreground mb-1">
@@ -175,9 +238,7 @@ export default function ScheduleHistory() {
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-xs font-medium uppercase tracking-wider">Successful</span>
                   </div>
-                  <p className="text-2xl font-bold text-emerald-600">
-                    {runs.filter(r => r.status === 'completed').length}
-                  </p>
+                  <p className="text-2xl font-bold text-emerald-600">{completedRuns.length}</p>
                 </CardContent>
               </Card>
               <Card>
@@ -186,9 +247,16 @@ export default function ScheduleHistory() {
                     <XCircle className="w-4 h-4" />
                     <span className="text-xs font-medium uppercase tracking-wider">Failed</span>
                   </div>
-                  <p className="text-2xl font-bold text-red-600">
-                    {runs.filter(r => r.status === 'failed').length}
-                  </p>
+                  <p className="text-2xl font-bold text-red-600">{failedRuns.length}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                    <Loader2 className="w-4 h-4" />
+                    <span className="text-xs font-medium uppercase tracking-wider">Running</span>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-600">{runningRuns.length}</p>
                 </CardContent>
               </Card>
               <Card>
@@ -197,118 +265,137 @@ export default function ScheduleHistory() {
                     <Timer className="w-4 h-4" />
                     <span className="text-xs font-medium uppercase tracking-wider">Avg Duration</span>
                   </div>
-                  <p className="text-2xl font-bold">
-                    {formatDuration(
-                      runs.filter(r => r.durationMs).reduce((sum, r) => sum + (r.durationMs || 0), 0) / 
-                      Math.max(runs.filter(r => r.durationMs).length, 1)
-                    )}
-                  </p>
+                  <p className="text-2xl font-bold">{formatDuration(avgDuration)}</p>
                 </CardContent>
               </Card>
             </div>
+            
+            {/* Filter Tabs */}
+            <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+              <TabsList>
+                <TabsTrigger value="all">All ({runs.length})</TabsTrigger>
+                <TabsTrigger value="completed">Completed ({completedRuns.length})</TabsTrigger>
+                <TabsTrigger value="failed">Failed ({failedRuns.length})</TabsTrigger>
+                <TabsTrigger value="running">Running ({runningRuns.length})</TabsTrigger>
+              </TabsList>
+            </Tabs>
             
             {/* Run History List */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <History className="w-4 h-4" />
-                  Execution History
+                  {isGlobalView ? 'All Execution History' : 'Execution History'}
+                  <span className="text-xs font-normal text-muted-foreground ml-2">
+                    {filteredRuns.length} {filteredRuns.length === 1 ? 'run' : 'runs'}
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="divide-y divide-border">
-                  {runs.map((run) => (
-                    <button
-                      key={run.id}
-                      className="w-full text-left px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => setSelectedRunId(run.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          {getStatusBadge(run.status)}
-                          {getTriggerBadge(run.triggerType)}
-                          {/* Retry info */}
-                          {(run.retryCount > 0 || run.nextRetryAt) && (
-                            <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-                              <RefreshCw className="w-2.5 h-2.5 mr-1" />
-                              Retry {run.retryCount}/{run.maxRetries}
-                            </Badge>
-                          )}
-                          {run.nextRetryAt && (
-                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                              <Clock className="w-2.5 h-2.5 mr-1" />
-                              Next retry {formatDistanceToNow(new Date(run.nextRetryAt), { addSuffix: true })}
-                            </Badge>
-                          )}
-                          {run.lastErrorType && (
-                            <Badge variant="outline" className="text-xs">
-                              {run.lastErrorType === 'rate_limit' && <ShieldAlert className="w-2.5 h-2.5 mr-1" />}
-                              {run.lastErrorType === 'timeout' && <Clock className="w-2.5 h-2.5 mr-1" />}
-                              {run.lastErrorType === 'transient' && <Wifi className="w-2.5 h-2.5 mr-1" />}
-                              {run.lastErrorType === 'permanent' && <Ban className="w-2.5 h-2.5 mr-1" />}
-                              {run.lastErrorType}
-                            </Badge>
-                          )}
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                      
-                      <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        {/* Start Time */}
-                        <div>
-                          <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Started</span>
-                          <span className="font-medium">
-                            {format(new Date(run.startedAt), 'MMM d, HH:mm:ss')}
-                          </span>
-                          <span className="text-xs text-muted-foreground block">
-                            {formatDistanceToNow(new Date(run.startedAt), { addSuffix: true })}
-                          </span>
-                        </div>
-                        
-                        {/* Duration */}
-                        <div>
-                          <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Duration</span>
-                          <span className="font-medium flex items-center gap-1">
-                            <Timer className="w-3 h-3 text-muted-foreground" />
-                            {run.status === 'running' ? (
-                              <span className="text-blue-600 animate-pulse">In progress...</span>
-                            ) : (
-                              formatDuration(run.durationMs)
+                {filteredRuns.length === 0 ? (
+                  <div className="py-12 text-center text-muted-foreground">
+                    <p className="text-sm">No runs match this filter.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {filteredRuns.map((run) => (
+                      <button
+                        key={run.id}
+                        className="w-full text-left px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                        onClick={() => { setSelectedRunId(run.id); setDialogTab('overview'); setViewingReportId(null); }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            {getStatusBadge(run.status)}
+                            {getTriggerBadge(run.triggerType)}
+                            {/* Schedule name in global view */}
+                            {isGlobalView && 'scheduleName' in run && (run as any).scheduleName && (
+                              <Badge variant="secondary" className="text-xs">
+                                {(run as any).scheduleName}
+                              </Badge>
                             )}
-                          </span>
-                        </div>
-                        
-                        {/* Items */}
-                        <div>
-                          <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Products</span>
-                          <span className="font-medium flex items-center gap-1">
-                            <Package className="w-3 h-3 text-muted-foreground" />
-                            {(run.totalItems || 0).toLocaleString()}
-                          </span>
-                        </div>
-                        
-                        {/* Jobs */}
-                        <div>
-                          <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Jobs</span>
-                          <span className="font-medium flex items-center gap-1">
-                            <Zap className="w-3 h-3 text-muted-foreground" />
-                            {run.completedJobs || 0}/{run.totalJobs || 0}
-                            {(run.failedJobs || 0) > 0 && (
-                              <span className="text-red-500 text-xs">({run.failedJobs} failed)</span>
+                            {/* Retry info */}
+                            {(run.retryCount > 0 || run.nextRetryAt) && (
+                              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                <RefreshCw className="w-2.5 h-2.5 mr-1" />
+                                Retry {run.retryCount}/{run.maxRetries}
+                              </Badge>
                             )}
-                          </span>
+                            {run.nextRetryAt && (
+                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                <Clock className="w-2.5 h-2.5 mr-1" />
+                                Next retry {formatDistanceToNow(new Date(run.nextRetryAt), { addSuffix: true })}
+                              </Badge>
+                            )}
+                            {run.lastErrorType && (
+                              <Badge variant="outline" className="text-xs">
+                                {run.lastErrorType === 'rate_limit' && <ShieldAlert className="w-2.5 h-2.5 mr-1" />}
+                                {run.lastErrorType === 'timeout' && <Clock className="w-2.5 h-2.5 mr-1" />}
+                                {run.lastErrorType === 'transient' && <Wifi className="w-2.5 h-2.5 mr-1" />}
+                                {run.lastErrorType === 'permanent' && <Ban className="w-2.5 h-2.5 mr-1" />}
+                                {run.lastErrorType}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      
-                      {/* Error Message */}
-                      {run.errorMessage && (
-                        <div className="mt-2 text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded">
-                          {run.errorMessage}
+                        
+                        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          {/* Start Time */}
+                          <div>
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Started</span>
+                            <span className="font-medium">
+                              {format(new Date(run.startedAt), 'MMM d, HH:mm:ss')}
+                            </span>
+                            <span className="text-xs text-muted-foreground block">
+                              {formatDistanceToNow(new Date(run.startedAt), { addSuffix: true })}
+                            </span>
+                          </div>
+                          
+                          {/* Duration */}
+                          <div>
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Duration</span>
+                            <span className="font-medium flex items-center gap-1">
+                              <Timer className="w-3 h-3 text-muted-foreground" />
+                              {run.status === 'running' ? (
+                                <span className="text-blue-600 animate-pulse">In progress...</span>
+                              ) : (
+                                formatDuration(run.durationMs)
+                              )}
+                            </span>
+                          </div>
+                          
+                          {/* Items */}
+                          <div>
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Products</span>
+                            <span className="font-medium flex items-center gap-1">
+                              <Package className="w-3 h-3 text-muted-foreground" />
+                              {(run.totalItems || 0).toLocaleString()}
+                            </span>
+                          </div>
+                          
+                          {/* Jobs */}
+                          <div>
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Jobs</span>
+                            <span className="font-medium flex items-center gap-1">
+                              <Zap className="w-3 h-3 text-muted-foreground" />
+                              {run.completedJobs || 0}/{run.totalJobs || 0}
+                              {(run.failedJobs || 0) > 0 && (
+                                <span className="text-red-500 text-xs">({run.failedJobs} failed)</span>
+                              )}
+                            </span>
+                          </div>
                         </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                        
+                        {/* Error Message */}
+                        {run.errorMessage && (
+                          <div className="mt-2 text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded">
+                            {run.errorMessage}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -316,7 +403,7 @@ export default function ScheduleHistory() {
       </main>
       
       {/* Run Detail Dialog */}
-      <Dialog open={selectedRunId !== null} onOpenChange={(open) => { if (!open) setSelectedRunId(null); }}>
+      <Dialog open={selectedRunId !== null} onOpenChange={(open) => { if (!open) { setSelectedRunId(null); setDialogTab('overview'); setViewingReportId(null); } }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -325,11 +412,130 @@ export default function ScheduleHistory() {
             </DialogTitle>
           </DialogHeader>
           
+          {/* Tabs: Overview vs Report Data */}
+          {runDetailData?.jobDetails?.some(j => j.reportId) && (
+            <Tabs value={dialogTab} onValueChange={(val) => {
+              setDialogTab(val);
+              if (val === 'report' && !viewingReportId) {
+                const firstReportJob = runDetailData?.jobDetails?.find(j => j.reportId);
+                if (firstReportJob?.reportId) setViewingReportId(firstReportJob.reportId);
+              }
+            }} className="mt-2">
+              <TabsList className="w-full">
+                <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
+                <TabsTrigger value="report" className="flex-1">
+                  <FileText className="w-3.5 h-3.5 mr-1" />
+                  Report Data
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
+          
           {isLoadingDetail ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : runDetailData?.run ? (
+            <>
+            {/* Report Data Tab */}
+            {dialogTab === 'report' && (
+              <div className="space-y-4">
+                {isLoadingReport ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : reportData?.report ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold">{reportData.report.name}</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Account: {reportData.report.adAccountId} | {reportData.report.dateStart} → {reportData.report.dateEnd}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Report Stats */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <Card className="bg-muted/30">
+                        <CardContent className="pt-3 pb-3 text-center">
+                          <p className="text-lg font-bold">{reportData.report.totalItems || 0}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase">Products</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-muted/30">
+                        <CardContent className="pt-3 pb-3 text-center">
+                          <p className="text-lg font-bold">{formatSpend(reportData.report.totalSpend)}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase">Total Spend</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-muted/30">
+                        <CardContent className="pt-3 pb-3 text-center">
+                          <p className="text-lg font-bold">{(reportData.report.totalImpressions || 0).toLocaleString()}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase">Impressions</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    
+                    {/* Report Data Table */}
+                    {reportData.report.data && reportData.report.data.length > 0 ? (
+                      <div className="border rounded-lg overflow-hidden">
+                        <div className="overflow-x-auto max-h-[400px]">
+                          <table className="w-full text-xs">
+                            <thead className="bg-secondary sticky top-0">
+                              <tr>
+                                <th className="text-left p-2 font-medium">Product</th>
+                                <th className="text-right p-2 font-medium">Spend</th>
+                                <th className="text-right p-2 font-medium">Impressions</th>
+                                <th className="text-right p-2 font-medium">Clicks</th>
+                                <th className="text-right p-2 font-medium">CTR</th>
+                                <th className="text-right p-2 font-medium">Purchases</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {reportData.report.data.slice(0, 100).map((item: any, idx: number) => (
+                                <tr key={idx} className="border-t hover:bg-secondary/30">
+                                  <td className="p-2">
+                                    <div className="font-medium truncate max-w-[200px]">{item.product_name}</div>
+                                    <div className="text-muted-foreground">{item.product_retailer_id}</div>
+                                  </td>
+                                  <td className="text-right p-2">{formatSpend(item.spend)}</td>
+                                  <td className="text-right p-2">{item.impressions?.toLocaleString()}</td>
+                                  <td className="text-right p-2">{item.link_clicks?.toLocaleString()}</td>
+                                  <td className="text-right p-2">{(item.inline_link_click_ctr || 0).toFixed(2)}%</td>
+                                  <td className="text-right p-2">{item.purchases}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {reportData.report.data.length > 100 && (
+                          <div className="text-center py-2 text-xs text-muted-foreground bg-secondary/30">
+                            Showing 100 of {reportData.report.data.length} items
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <FileText className="w-8 h-8 mx-auto mb-4 opacity-50" />
+                        <p className="text-sm">No data available for this report</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <FileText className="w-8 h-8 mx-auto mb-4 opacity-50" />
+                    <p className="text-sm">Select a job with a linked report to view data</p>
+                    <Button variant="outline" size="sm" className="mt-3" onClick={() => setDialogTab('overview')}>
+                      Back to Overview
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Overview Tab */}
+            {dialogTab === 'overview' && (
             <div className="space-y-6">
               {/* Overview */}
               <div className="grid grid-cols-2 gap-4">
@@ -478,7 +684,7 @@ export default function ScheduleHistory() {
                   <div>
                     <h3 className="text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
                       <Database className="w-4 h-4" />
-                      Batch Jobs ({runDetailData.jobDetails.length})
+                      Linked Jobs
                     </h3>
                     <div className="space-y-2">
                       {runDetailData.jobDetails.map((job) => (
@@ -488,10 +694,27 @@ export default function ScheduleHistory() {
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-mono text-muted-foreground">Job #{job.id}</span>
                                 <Badge variant="outline" className="text-xs">
-                                  {job.jobType === 'report_generation' ? 'Report' : 'Catalog'}
+                                  {job.jobType === 'report_generation' ? 'Report' : 
+                                   (job.jobType as string) === 'report_and_catalog' ? 'Report + Catalog' : 'Catalog'}
                                 </Badge>
                                 {getStatusBadge(job.status)}
                               </div>
+                              {/* View Report button if job has a linked report */}
+                              {job.reportId && (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="h-7 text-xs gap-1"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewingReportId(job.reportId!);
+                                    setDialogTab('report');
+                                  }}
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  View Report
+                                </Button>
+                              )}
                             </div>
                             
                             <div className="grid grid-cols-3 gap-3 text-xs">
@@ -543,6 +766,8 @@ export default function ScheduleHistory() {
                 </>
               )}
             </div>
+            )}
+            </>
           ) : null}
         </DialogContent>
       </Dialog>

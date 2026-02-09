@@ -672,7 +672,7 @@ export default function Home() {
             <Button 
               variant="ghost" 
               size="sm" 
-              onClick={() => setLocation('/saved-reports')}
+              onClick={() => setLocation('/reports')}
               className="gap-2"
             >
               <FileText className="w-4 h-4" />
