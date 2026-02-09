@@ -441,3 +441,16 @@
 - [x] Fix 3: Throttled transient DB error logging to 1 message per minute (was flooding every 5 seconds)
 - [x] Fix 4: Added "no available peers" to isConnectionError detection for automatic connection reset
 - [x] All 99 tests passing
+
+## Migration - Python to Node.js (Production Python Unavailable)
+- [x] Analyze Python worker (report_worker.py) functionality
+- [x] Rewrite Facebook API data fetching in Node.js (async pagination with retry)
+- [x] Rewrite data processing/mapping in Node.js (replace pandas)
+- [x] Rewrite S3 upload in Node.js (using existing storagePut)
+- [x] Rewrite catalog batch update in Node.js (reusing existing batchUpdateProducts)
+- [x] Rewrite post-update catalog verification in Node.js
+- [x] Update report-generator.ts to call Node.js functions directly (removed Python spawn)
+- [x] Remove Python dependencies (postinstall script, @types/papaparse, papaparse)
+- [x] Update progress reporting to use direct DB updates from Node.js
+- [x] Update and pass all tests (99 tests passing)
+- [x] Verify full workflow - server starts cleanly, no Python dependency errors
