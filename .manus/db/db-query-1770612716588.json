@@ -1,0 +1,42 @@
+{
+  "query": "SELECT id, status, jobType, progress, processedItems, statusMessage FROM batch_jobs WHERE id >= 90002 ORDER BY id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SELECT id, status, jobType, progress, processedItems, statusMessage FROM batch_jobs WHERE id >= 90002 ORDER BY id;",
+  "rows": [
+    {
+      "id": "90002",
+      "status": "failed",
+      "jobType": "report_generation",
+      "progress": "0",
+      "processedItems": "0",
+      "statusMessage": "AssertionError: SRE module mismatch"
+    },
+    {
+      "id": "90003",
+      "status": "failed",
+      "jobType": "report_generation",
+      "progress": "53",
+      "processedItems": "6000",
+      "statusMessage": "Fetched 6,000 records..."
+    },
+    {
+      "id": "90004",
+      "status": "failed",
+      "jobType": "report_generation",
+      "progress": "0",
+      "processedItems": "0",
+      "statusMessage": "Failed to spawn Python worker: spawn python3.11 ENOENT"
+    },
+    {
+      "id": "90005",
+      "status": "failed",
+      "jobType": "report_generation",
+      "progress": "0",
+      "processedItems": "0",
+      "statusMessage": "Failed to spawn Python worker: spawn python3.11 ENOENT"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\tjobType\tprogress\tprocessedItems\tstatusMessage\n90002\tfailed\treport_generation\t0\t0\tAssertionError: SRE module mismatch\n90003\tfailed\treport_generation\t53\t6000\tFetched 6,000 records...\n90004\tfailed\treport_generation\t0\t0\tFailed to spawn Python worker: spawn python3.11 ENOENT\n90005\tfailed\treport_generation\t0\t0\tFailed to spawn Python worker: spawn python3.11 ENOENT\n",
+  "stderr": "",
+  "execution_time_ms": 1557
+}

@@ -397,3 +397,22 @@
 - [x] Test Python script independently (syntax, imports, data mapping, DB helper)
 - [x] Test integration with Node.js job processor (99 vitest tests passing)
 - [x] Update vitest tests (report-generator.test.ts with 9 new tests)
+
+## Bug Fix - Python SRE Module Mismatch in Deployment
+- [x] Diagnose SRE module mismatch error: uv python3.11 pointed to Python 3.13.8
+- [x] Fix: Use absolute path /usr/bin/python3.11 -I to avoid uv interference
+- [x] Fix: Added export_format=csv to Facebook API request
+- [x] Fix: DB columns are camelCase, removed snake_case conversion
+- [x] Fix: Added Accept-Encoding header to avoid brotli decoding issues
+- [x] Fix: Added retry logic for transient Facebook API errors
+- [x] Test: Job 90018 completed successfully - 74,286 records fetched and catalog updated
+
+## Feature - Custom Label 4 Toggle + Custom Number Fix
+- [x] Root cause: customNumbers was NOT being passed from scheduler.ts to job config
+- [x] Fix: Added customNumbers to scheduler.ts job config pass-through
+- [x] Add enableCustomLabel4 toggle to schedule form UI (Switch + Input combo)
+- [x] Update drizzle/schema.ts types for enableCustomLabel4 and customNumbers
+- [x] Update routers.ts zod schemas for create/update endpoints
+- [x] Update Python worker to respect enableCustomLabel4 toggle
+- [x] Update scheduler.ts to pass enableCustomLabel4 to job config
+- [x] All 99 tests passing

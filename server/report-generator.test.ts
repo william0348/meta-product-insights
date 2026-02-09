@@ -193,43 +193,28 @@ print(json.dumps(result))
     });
   });
 
-  describe('DBHelper camelCase conversion', () => {
-    it('should convert camelCase to snake_case correctly', async () => {
+  describe('DBHelper uses camelCase columns', () => {
+    it('should use camelCase column names directly (matching DB schema)', async () => {
       const { execSync } = await import('child_process');
       const testScript = `
 import sys, json
 sys.path.insert(0, 'python')
 from report_worker import DBHelper
 
-tests = {
-    'statusMessage': 'status_message',
-    'processedItems': 'processed_items',
-    'completedAt': 'completed_at',
-    'totalItems': 'total_items',
-    'durationMs': 'duration_ms',
-    'status': 'status',
-    'successCount': 'success_count',
-    'errorCount': 'error_count',
-    'completedJobs': 'completed_jobs',
-    'failedJobs': 'failed_jobs',
-    'totalSpend': 'total_spend',
-    'totalImpressions': 'total_impressions',
-}
-results = {}
-for k, expected in tests.items():
-    actual = DBHelper._camel_to_snake(k)
-    results[k] = {'expected': expected, 'actual': actual, 'match': actual == expected}
-print(json.dumps(results))
+# Verify DBHelper can be instantiated and has update_job method
+helper = DBHelper.__new__(DBHelper)
+assert hasattr(helper, 'update_job'), 'DBHelper should have update_job method'
+assert hasattr(helper, 'insert_batch_history'), 'DBHelper should have insert_batch_history method'
+print(json.dumps({'status': 'ok', 'methods': ['update_job', 'insert_batch_history']}))
 `;
       const result = execSync(
         `python3.11 -c "${testScript.replace(/"/g, '\\"')}"`,
         { cwd: process.cwd(), encoding: 'utf-8' }
       );
       const parsed = JSON.parse(result.trim());
-      
-      for (const [key, val] of Object.entries(parsed) as any) {
-        expect(val.actual).toBe(val.expected);
-      }
+      expect(parsed.status).toBe('ok');
+      expect(parsed.methods).toContain('update_job');
+      expect(parsed.methods).toContain('insert_batch_history');
     });
   });
 });

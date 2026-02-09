@@ -687,9 +687,11 @@ export const appRouter = router({
           minCTR: z.string().optional(),
           catalogId: z.string().optional(),
           customLabel4: z.string().optional(),
+          enableCustomLabel4: z.boolean().optional(),
           // For combined workflow (report_and_catalog)
           updateToCatalog: z.boolean().optional(),
           catalogAccessToken: z.string().optional(),
+          customNumbers: z.record(z.string(), z.string()).optional(),
         }),
         // Multi-account configurations
         reportConfigs: z.array(z.object({
@@ -782,6 +784,7 @@ export const appRouter = router({
           minCTR: z.string().optional(),
           catalogId: z.string().optional(),
           customLabel4: z.string().optional(),
+          enableCustomLabel4: z.boolean().optional(),
           updateToCatalog: z.boolean().optional(),
           catalogAccessToken: z.string().optional(),
           customNumbers: z.record(z.string(), z.string()).optional(),

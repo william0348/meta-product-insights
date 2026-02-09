@@ -52,6 +52,7 @@ interface ScheduleFormData {
   minute: string;
   dateRangeType: string;
   customLabel4: string;
+  enableCustomLabel4: boolean;
 }
 
 const defaultFormData: ScheduleFormData = {
@@ -62,6 +63,7 @@ const defaultFormData: ScheduleFormData = {
   minute: '0',
   dateRangeType: 'last_7_days',
   customLabel4: '',
+  enableCustomLabel4: true,
 };
 
 const defaultCustomNumbers: CustomNumberField[] = [
@@ -167,6 +169,7 @@ export default function ScheduledJobs() {
       minute: minute || '0',
       dateRangeType: schedule.config?.dateRangeType || 'last_7_days',
       customLabel4: schedule.config?.customLabel4 || '',
+      enableCustomLabel4: schedule.config?.enableCustomLabel4 !== false, // default true for backward compat
     });
     
     // Set custom numbers
@@ -272,7 +275,10 @@ export default function ScheduledJobs() {
       config.updateToCatalog = true;
       config.catalogId = catalogTokenData?.catalogId;
       config.catalogAccessToken = catalogTokenData?.accessToken;
-      config.customLabel4 = formData.customLabel4 || 'from_scheduled_report';
+      config.enableCustomLabel4 = formData.enableCustomLabel4;
+      if (formData.enableCustomLabel4) {
+        config.customLabel4 = formData.customLabel4 || 'from_scheduled_report';
+      }
       
       // Add custom_number fields (0-4)
       const customNumbersConfig: Record<string, string> = {};
@@ -521,13 +527,22 @@ export default function ScheduledJobs() {
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>Custom Label 4 Value</Label>
-                    <Input
-                      placeholder="e.g., high_performer"
-                      value={formData.customLabel4}
-                      onChange={(e) => setFormData({ ...formData, customLabel4: e.target.value })}
-                    />
-                    <p className="text-[10px] text-muted-foreground">Value to set for custom_label_4</p>
+                    <Label>Custom Label 4</Label>
+                    <div className="flex items-center gap-3 p-2 bg-background rounded border">
+                      <Switch
+                        checked={formData.enableCustomLabel4}
+                        onCheckedChange={(checked) => setFormData({ ...formData, enableCustomLabel4: checked })}
+                      />
+                      <span className="text-sm font-mono w-28">custom_label_4</span>
+                      <Input
+                        placeholder="Value"
+                        value={formData.customLabel4}
+                        onChange={(e) => setFormData({ ...formData, customLabel4: e.target.value })}
+                        disabled={!formData.enableCustomLabel4}
+                        className="flex-1"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Enable and set value for custom_label_4</p>
                   </div>
                 </div>
                 

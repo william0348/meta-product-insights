@@ -249,11 +249,13 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
     // For catalog update
     catalogId?: string;
     customLabel4?: string;
+    enableCustomLabel4?: boolean;
     customNumberField?: string;
     customNumberValue?: string;
     // For combined workflow (report_and_catalog)
     updateToCatalog?: boolean;  // Whether to update to catalog after report generation
     catalogAccessToken?: string; // Catalog access token (if different from report token)
+    customNumbers?: Record<string, string>;
   }>().notNull(),
   
   // Multi-account configurations (array of report configs)

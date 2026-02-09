@@ -128,7 +128,7 @@ class DBHelper:
         set_parts = []
         values = []
         for key, val in kwargs.items():
-            col = self._camel_to_snake(key)
+            col = self._to_col(key)
             set_parts.append(f"`{col}` = %s")
             values.append(val)
         values.append(job_id)
@@ -144,7 +144,7 @@ class DBHelper:
         set_parts = []
         values = []
         for key, val in kwargs.items():
-            col = self._camel_to_snake(key)
+            col = self._to_col(key)
             set_parts.append(f"`{col}` = %s")
             values.append(val)
         values.append(report_id)
@@ -161,13 +161,13 @@ class DBHelper:
         placeholders = []
         values = []
         for key, val in data.items():
-            cols.append(f"`{self._camel_to_snake(key)}`")
+            cols.append(f"`{self._to_col(key)}`")
             placeholders.append("%s")
             if isinstance(val, (dict, list)):
                 values.append(json.dumps(val))
             else:
                 values.append(val)
-        sql = f"INSERT INTO `batch_history` ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
+        sql = f"INSERT INTO `catalog_batch_history` ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
         cursor = self.conn.cursor()
         cursor.execute(sql, values)
         self.conn.commit()
@@ -181,13 +181,13 @@ class DBHelper:
         set_parts = []
         values = []
         for key, val in kwargs.items():
-            col = self._camel_to_snake(key)
+            col = self._to_col(key)
             if isinstance(val, (dict, list)):
                 val = json.dumps(val)
             set_parts.append(f"`{col}` = %s")
             values.append(val)
         values.append(history_id)
-        sql = f"UPDATE `batch_history` SET {', '.join(set_parts)} WHERE `id` = %s"
+        sql = f"UPDATE `catalog_batch_history` SET {', '.join(set_parts)} WHERE `id` = %s"
         cursor = self.conn.cursor()
         cursor.execute(sql, values)
         self.conn.commit()
@@ -208,7 +208,7 @@ class DBHelper:
         set_parts = []
         values = []
         for key, val in kwargs.items():
-            col = self._camel_to_snake(key)
+            col = self._to_col(key)
             set_parts.append(f"`{col}` = %s")
             values.append(val)
         values.append(run_id)
@@ -219,11 +219,9 @@ class DBHelper:
         cursor.close()
 
     @staticmethod
-    def _camel_to_snake(name: str) -> str:
-        """Convert camelCase to snake_case for DB column names."""
-        import re
-        s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
-        return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
+    def _to_col(name: str) -> str:
+        """Return column name as-is. DB columns use camelCase."""
+        return name
 
 
 # ─── S3 Storage Helper ───────────────────────────────────────────────────────
@@ -284,6 +282,7 @@ async def create_report_run(
         "action_breakdowns": json.dumps(["action_type"]),
         "breakdowns": json.dumps([breakdown]),
         "time_increment": "all_days",
+        "export_format": "csv",  # Required for product-level reporting
     }
     if filters:
         params["filtering"] = json.dumps(filters)
@@ -351,16 +350,17 @@ async def fetch_insights_data(
         if after:
             url += f"&after={after}"
 
-        # Retry logic per page
+        # Retry logic per page (handles both network and API errors)
         response_data = None
+        last_error = None
         for retry in range(MAX_PAGE_RETRIES + 1):
             try:
                 async with session.get(
                     url, timeout=aiohttp.ClientTimeout(total=60)
                 ) as resp:
                     response_data = await resp.json()
-                break
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                last_error = e
                 if retry < MAX_PAGE_RETRIES:
                     delay = (2 ** retry) * 2
                     print(
@@ -369,16 +369,37 @@ async def fetch_insights_data(
                         flush=True,
                     )
                     await asyncio.sleep(delay)
+                    continue
                 else:
                     raise
 
-        if response_data is None:
-            raise RuntimeError("Failed to fetch insights page after retries")
+            # Check for API-level errors
+            if response_data and "error" in response_data:
+                err_msg = response_data["error"].get("message", "Failed to fetch insights")
+                err_code = response_data["error"].get("code", 0)
+                is_transient = (
+                    err_code in (1, 2, 4, 17, 32, 190, 368)
+                    or "unknown" in err_msg.lower()
+                    or "temporarily" in err_msg.lower()
+                    or "rate" in err_msg.lower()
+                )
+                if is_transient and retry < MAX_PAGE_RETRIES:
+                    delay = (2 ** retry) * 3
+                    print(
+                        f"[Python] Page {page_count + 1} API error ({err_msg}), "
+                        f"retrying in {delay}s... ({retry + 1}/{MAX_PAGE_RETRIES})",
+                        flush=True,
+                    )
+                    await asyncio.sleep(delay)
+                    response_data = None
+                    continue
+                raise RuntimeError(err_msg)
 
-        if "error" in response_data:
-            raise RuntimeError(
-                response_data["error"].get("message", "Failed to fetch insights")
-            )
+            # Success - break out of retry loop
+            break
+
+        if response_data is None:
+            raise RuntimeError(f"Failed to fetch insights page after {MAX_PAGE_RETRIES} retries")
 
         rows = response_data.get("data", [])
         all_data.extend(rows)
@@ -540,7 +561,12 @@ async def run_worker(config: dict):
     db.connect()
 
     try:
-        async with aiohttp.ClientSession() as session:
+        # Disable auto-decompression and set Accept-Encoding to avoid brotli issues
+        # Some Facebook API responses use brotli (br) which can cause decoding errors
+        async with aiohttp.ClientSession(
+            headers={"Accept-Encoding": "gzip, deflate"},
+            auto_decompress=True,
+        ) as session:
             # ── Step 1: Create report run (with retry) ──
             report_run_id = None
             used_filters = filters
@@ -663,8 +689,9 @@ async def run_worker(config: dict):
                 if retailer_ids:
                     # Build update data
                     update_fields = {}
+                    enable_custom_label_4 = config.get("enableCustomLabel4", True)  # default True for backward compat
                     custom_label_4 = config.get("customLabel4")
-                    if custom_label_4:
+                    if enable_custom_label_4 and custom_label_4:
                         update_fields["custom_label_4"] = custom_label_4
 
                     custom_numbers = config.get("customNumbers", {})

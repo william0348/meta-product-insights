@@ -123,9 +123,22 @@ function runPythonWorker(configPath: string): Promise<PythonWorkerResult> {
     // Resolve the Python script path relative to the project root
     const scriptPath = join(process.cwd(), 'python', 'report_worker.py');
     
-    const child = spawn('python3.11', [scriptPath, '--config', configPath], {
+    // Use absolute path to system Python 3.11 to avoid uv-installed Python 3.13 interference
+    // The uv Python 3.13 causes SRE module mismatch with system-installed packages
+    const pythonPath = '/usr/bin/python3.11';
+    
+    // Clean environment: remove PYTHONPATH and PYTHONHOME that may point to wrong Python
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.PYTHONPATH;
+    delete cleanEnv.PYTHONHOME;
+    // Ensure /usr/bin is at the front of PATH so system Python is found
+    if (cleanEnv.PATH) {
+      cleanEnv.PATH = `/usr/bin:/usr/local/bin:${cleanEnv.PATH}`;
+    }
+    
+    const child = spawn(pythonPath, ['-I', scriptPath, '--config', configPath], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: cleanEnv,
     });
 
     let stdout = '';
