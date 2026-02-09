@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useParams, useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   ArrowLeft, 
   Clock,
@@ -28,14 +30,18 @@ import {
   Wifi,
   Ban,
   FileText,
-  ExternalLink,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Layers,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
 /**
  * Unified Reports & History page.
- * - /reports → shows ALL execution history across all schedules
- * - /schedule-history/:id → shows history for a specific schedule (filtered view)
+ * - /reports → shows ALL execution history across all schedules (global view)
+ *   with two main tabs: "Schedule Runs" and "Catalog Operations"
+ * - /schedule-history/:id → shows history for a specific schedule (filtered view, schedule runs only)
  */
 export default function ScheduleHistory() {
   const params = useParams<{ id: string }>();
@@ -43,32 +49,44 @@ export default function ScheduleHistory() {
   const isGlobalView = scheduleId === 0;
   const [, setLocation] = useLocation();
   
+  // Main section tab (only for global view)
+  const [mainTab, setMainTab] = useState<string>('schedule-runs');
+  
+  // Schedule Runs state
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [viewingReportId, setViewingReportId] = useState<number | null>(null);
   const [dialogTab, setDialogTab] = useState<string>('overview');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   
-  // Global view: fetch all runs for the user
+  // Catalog Operations state
+  const [catalogFilter, setCatalogFilter] = useState('');
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  
+  // ── Schedule Runs queries ──
   const { data: allHistoryData, isLoading: isLoadingAll, error: allHistoryError } = trpc.schedules.getAllHistory.useQuery(
     { limit: 100 },
     { enabled: isGlobalView, retry: false }
   );
   
-  // Per-schedule view: fetch runs for a specific schedule
   const { data: scheduleHistoryData, isLoading: isLoadingSchedule, error: scheduleHistoryError } = trpc.schedules.getHistory.useQuery(
     { scheduleId, limit: 50 },
     { enabled: !isGlobalView && scheduleId > 0, retry: false }
   );
   
-  // Run detail dialog
   const { data: runDetailData, isLoading: isLoadingDetail } = trpc.schedules.getRunDetail.useQuery(
     { runId: selectedRunId! },
     { enabled: selectedRunId !== null }
   );
   
-  // Report data query (for inline report view)
   const { data: reportData, isLoading: isLoadingReport } = trpc.reports.get.useQuery(
     { reportId: viewingReportId! },
     { enabled: viewingReportId !== null }
+  );
+  
+  // ── Catalog Operations query ──
+  const { data: batchData, isLoading: isLoadingBatch } = trpc.batchHistory.getMyHistory.useQuery(
+    { limit: 100 },
+    { enabled: isGlobalView, retry: false }
   );
   
   const isLoading = isGlobalView ? isLoadingAll : isLoadingSchedule;
@@ -78,7 +96,7 @@ export default function ScheduleHistory() {
     : (scheduleHistoryData?.runs || []);
   const scheduleName = isGlobalView ? 'All Schedules' : (scheduleHistoryData?.scheduleName || 'Schedule');
   
-  // Stats
+  // Schedule Runs stats
   const completedRuns = runs.filter(r => r.status === 'completed');
   const failedRuns = runs.filter(r => r.status === 'failed');
   const runningRuns = runs.filter(r => r.status === 'running');
@@ -86,6 +104,20 @@ export default function ScheduleHistory() {
     ? completedRuns.reduce((sum, r) => sum + (r.durationMs || 0), 0) / completedRuns.length
     : 0;
   
+  const filteredRuns = statusFilter === 'all' 
+    ? runs 
+    : runs.filter(r => r.status === statusFilter);
+  
+  // Catalog Operations data
+  const batchHistory = batchData?.history || [];
+  const filteredBatchHistory = catalogFilter
+    ? batchHistory.filter((r: any) => r.catalogId?.toLowerCase().includes(catalogFilter.toLowerCase()))
+    : batchHistory;
+  const batchCompleted = batchHistory.filter((r: any) => r.status === 'completed').length;
+  const batchFailed = batchHistory.filter((r: any) => r.status === 'failed').length;
+  const batchTotalItems = batchHistory.reduce((sum: number, r: any) => sum + (r.totalItems || 0), 0);
+  
+  // ── Helper functions ──
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
@@ -132,6 +164,15 @@ export default function ScheduleHistory() {
     );
   };
   
+  const getOperationBadge = (type: string) => {
+    switch (type) {
+      case 'UPDATE': return <Badge variant="secondary" className="bg-blue-100 text-blue-800">UPDATE</Badge>;
+      case 'DELETE': return <Badge variant="secondary" className="bg-red-100 text-red-800">DELETE</Badge>;
+      case 'CREATE': return <Badge variant="secondary" className="bg-green-100 text-green-800">CREATE</Badge>;
+      default: return <Badge variant="secondary">{type}</Badge>;
+    }
+  };
+  
   const formatDuration = (ms: number | null | undefined) => {
     if (!ms) return '—';
     if (ms < 1000) return `${ms}ms`;
@@ -145,13 +186,17 @@ export default function ScheduleHistory() {
     if (!cents) return '$0.00';
     return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
+  
+  const toggleBatchRow = (id: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
-  // Filter tabs for global view
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const filteredRuns = statusFilter === 'all' 
-    ? runs 
-    : runs.filter(r => r.status === statusFilter);
-
+  // ── Render ──
   return (
     <div className="min-h-screen bg-background font-sans">
       {/* Header */}
@@ -175,7 +220,6 @@ export default function ScheduleHistory() {
             </div>
           </div>
           
-          {/* Quick nav */}
           <div className="flex items-center gap-2">
             {!isGlobalView && (
               <Button variant="ghost" size="sm" onClick={() => setLocation('/reports')} className="text-xs gap-1">
@@ -192,217 +236,437 @@ export default function ScheduleHistory() {
       </header>
 
       <main className="container py-8">
-        {historyError && (
-          <div className="text-sm text-red-600 mb-4 p-3 bg-red-50 rounded border border-red-200">
-            Error loading history: {historyError.message}
-          </div>
+        {/* Global view: main section tabs */}
+        {isGlobalView && (
+          <Tabs value={mainTab} onValueChange={setMainTab} className="mb-6">
+            <TabsList className="w-full max-w-md">
+              <TabsTrigger value="schedule-runs" className="flex-1 gap-1.5">
+                <Zap className="w-3.5 h-3.5" />
+                Schedule Runs
+              </TabsTrigger>
+              <TabsTrigger value="catalog-ops" className="flex-1 gap-1.5">
+                <Layers className="w-3.5 h-3.5" />
+                Catalog Operations
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         )}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : runs.length === 0 ? (
-          <Card className="border-dashed max-w-md mx-auto">
-            <CardContent className="py-12 text-center text-muted-foreground">
-              <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium mb-2">No Execution History</p>
-              <p className="text-sm mb-4">
-                {isGlobalView 
-                  ? 'No reports have been generated yet. Create a schedule or run a report to get started.'
-                  : 'This schedule hasn\'t been executed yet. Use "Run Now" to trigger it.'}
-              </p>
-              <Link href={isGlobalView ? "/" : "/schedules"}>
-                <Button variant="outline">
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  {isGlobalView ? 'Back to Dashboard' : 'Back to Schedules'}
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {/* Summary Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <Card>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center space-x-2 text-muted-foreground mb-1">
-                    <Hash className="w-4 h-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider">Total Runs</span>
-                  </div>
-                  <p className="text-2xl font-bold">{runs.length}</p>
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* SCHEDULE RUNS TAB (or the only view for per-schedule) */}
+        {/* ═══════════════════════════════════════════════ */}
+        {(mainTab === 'schedule-runs' || !isGlobalView) && (
+          <>
+            {historyError && (
+              <div className="text-sm text-red-600 mb-4 p-3 bg-red-50 rounded border border-red-200">
+                Error loading history: {historyError.message}
+              </div>
+            )}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : runs.length === 0 ? (
+              <Card className="border-dashed max-w-md mx-auto">
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium mb-2">No Execution History</p>
+                  <p className="text-sm mb-4">
+                    {isGlobalView 
+                      ? 'No reports have been generated yet. Create a schedule or run a report to get started.'
+                      : 'This schedule hasn\'t been executed yet. Use "Run Now" to trigger it.'}
+                  </p>
+                  <Link href={isGlobalView ? "/" : "/schedules"}>
+                    <Button variant="outline">
+                      <ArrowLeft className="w-4 h-4 mr-2" />
+                      {isGlobalView ? 'Back to Dashboard' : 'Back to Schedules'}
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center space-x-2 text-muted-foreground mb-1">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider">Successful</span>
-                  </div>
-                  <p className="text-2xl font-bold text-emerald-600">{completedRuns.length}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center space-x-2 text-muted-foreground mb-1">
-                    <XCircle className="w-4 h-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider">Failed</span>
-                  </div>
-                  <p className="text-2xl font-bold text-red-600">{failedRuns.length}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center space-x-2 text-muted-foreground mb-1">
-                    <Loader2 className="w-4 h-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider">Running</span>
-                  </div>
-                  <p className="text-2xl font-bold text-blue-600">{runningRuns.length}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center space-x-2 text-muted-foreground mb-1">
-                    <Timer className="w-4 h-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider">Avg Duration</span>
-                  </div>
-                  <p className="text-2xl font-bold">{formatDuration(avgDuration)}</p>
-                </CardContent>
-              </Card>
-            </div>
-            
-            {/* Filter Tabs */}
-            <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-              <TabsList>
-                <TabsTrigger value="all">All ({runs.length})</TabsTrigger>
-                <TabsTrigger value="completed">Completed ({completedRuns.length})</TabsTrigger>
-                <TabsTrigger value="failed">Failed ({failedRuns.length})</TabsTrigger>
-                <TabsTrigger value="running">Running ({runningRuns.length})</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            
-            {/* Run History List */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <History className="w-4 h-4" />
-                  {isGlobalView ? 'All Execution History' : 'Execution History'}
-                  <span className="text-xs font-normal text-muted-foreground ml-2">
-                    {filteredRuns.length} {filteredRuns.length === 1 ? 'run' : 'runs'}
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                {filteredRuns.length === 0 ? (
-                  <div className="py-12 text-center text-muted-foreground">
-                    <p className="text-sm">No runs match this filter.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {filteredRuns.map((run) => (
-                      <button
-                        key={run.id}
-                        className="w-full text-left px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                        onClick={() => { setSelectedRunId(run.id); setDialogTab('overview'); setViewingReportId(null); }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            {getStatusBadge(run.status)}
-                            {getTriggerBadge(run.triggerType)}
-                            {/* Schedule name in global view */}
-                            {isGlobalView && 'scheduleName' in run && (run as any).scheduleName && (
-                              <Badge variant="secondary" className="text-xs">
-                                {(run as any).scheduleName}
-                              </Badge>
+            ) : (
+              <div className="space-y-6">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <Card>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                        <Hash className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase tracking-wider">Total Runs</span>
+                      </div>
+                      <p className="text-2xl font-bold">{runs.length}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                        <CheckCircle className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase tracking-wider">Successful</span>
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-600">{completedRuns.length}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                        <XCircle className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase tracking-wider">Failed</span>
+                      </div>
+                      <p className="text-2xl font-bold text-red-600">{failedRuns.length}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                        <Loader2 className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase tracking-wider">Running</span>
+                      </div>
+                      <p className="text-2xl font-bold text-blue-600">{runningRuns.length}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                        <Timer className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase tracking-wider">Avg Duration</span>
+                      </div>
+                      <p className="text-2xl font-bold">{formatDuration(avgDuration)}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                {/* Filter Tabs */}
+                <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+                  <TabsList>
+                    <TabsTrigger value="all">All ({runs.length})</TabsTrigger>
+                    <TabsTrigger value="completed">Completed ({completedRuns.length})</TabsTrigger>
+                    <TabsTrigger value="failed">Failed ({failedRuns.length})</TabsTrigger>
+                    <TabsTrigger value="running">Running ({runningRuns.length})</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                
+                {/* Run History List */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <History className="w-4 h-4" />
+                      {isGlobalView ? 'All Execution History' : 'Execution History'}
+                      <span className="text-xs font-normal text-muted-foreground ml-2">
+                        {filteredRuns.length} {filteredRuns.length === 1 ? 'run' : 'runs'}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {filteredRuns.length === 0 ? (
+                      <div className="py-12 text-center text-muted-foreground">
+                        <p className="text-sm">No runs match this filter.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {filteredRuns.map((run) => (
+                          <button
+                            key={run.id}
+                            className="w-full text-left px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                            onClick={() => { setSelectedRunId(run.id); setDialogTab('overview'); setViewingReportId(null); }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                {getStatusBadge(run.status)}
+                                {getTriggerBadge(run.triggerType)}
+                                {isGlobalView && 'scheduleName' in run && (run as any).scheduleName && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {(run as any).scheduleName}
+                                  </Badge>
+                                )}
+                                {(run.retryCount > 0 || run.nextRetryAt) && (
+                                  <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                    <RefreshCw className="w-2.5 h-2.5 mr-1" />
+                                    Retry {run.retryCount}/{run.maxRetries}
+                                  </Badge>
+                                )}
+                                {run.nextRetryAt && (
+                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                    <Clock className="w-2.5 h-2.5 mr-1" />
+                                    Next retry {formatDistanceToNow(new Date(run.nextRetryAt), { addSuffix: true })}
+                                  </Badge>
+                                )}
+                                {run.lastErrorType && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {run.lastErrorType === 'rate_limit' && <ShieldAlert className="w-2.5 h-2.5 mr-1" />}
+                                    {run.lastErrorType === 'timeout' && <Clock className="w-2.5 h-2.5 mr-1" />}
+                                    {run.lastErrorType === 'transient' && <Wifi className="w-2.5 h-2.5 mr-1" />}
+                                    {run.lastErrorType === 'permanent' && <Ban className="w-2.5 h-2.5 mr-1" />}
+                                    {run.lastErrorType}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Started</span>
+                                <span className="font-medium">
+                                  {format(new Date(run.startedAt), 'MMM d, HH:mm:ss')}
+                                </span>
+                                <span className="text-xs text-muted-foreground block">
+                                  {formatDistanceToNow(new Date(run.startedAt), { addSuffix: true })}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Duration</span>
+                                <span className="font-medium flex items-center gap-1">
+                                  <Timer className="w-3 h-3 text-muted-foreground" />
+                                  {run.status === 'running' ? (
+                                    <span className="text-blue-600 animate-pulse">In progress...</span>
+                                  ) : (
+                                    formatDuration(run.durationMs)
+                                  )}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Products</span>
+                                <span className="font-medium flex items-center gap-1">
+                                  <Package className="w-3 h-3 text-muted-foreground" />
+                                  {(run.totalItems || 0).toLocaleString()}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Jobs</span>
+                                <span className="font-medium flex items-center gap-1">
+                                  <Zap className="w-3 h-3 text-muted-foreground" />
+                                  {run.completedJobs || 0}/{run.totalJobs || 0}
+                                  {(run.failedJobs || 0) > 0 && (
+                                    <span className="text-red-500 text-xs">({run.failedJobs} failed)</span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            {run.errorMessage && (
+                              <div className="mt-2 text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded">
+                                {run.errorMessage}
+                              </div>
                             )}
-                            {/* Retry info */}
-                            {(run.retryCount > 0 || run.nextRetryAt) && (
-                              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-                                <RefreshCw className="w-2.5 h-2.5 mr-1" />
-                                Retry {run.retryCount}/{run.maxRetries}
-                              </Badge>
-                            )}
-                            {run.nextRetryAt && (
-                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                                <Clock className="w-2.5 h-2.5 mr-1" />
-                                Next retry {formatDistanceToNow(new Date(run.nextRetryAt), { addSuffix: true })}
-                              </Badge>
-                            )}
-                            {run.lastErrorType && (
-                              <Badge variant="outline" className="text-xs">
-                                {run.lastErrorType === 'rate_limit' && <ShieldAlert className="w-2.5 h-2.5 mr-1" />}
-                                {run.lastErrorType === 'timeout' && <Clock className="w-2.5 h-2.5 mr-1" />}
-                                {run.lastErrorType === 'transient' && <Wifi className="w-2.5 h-2.5 mr-1" />}
-                                {run.lastErrorType === 'permanent' && <Ban className="w-2.5 h-2.5 mr-1" />}
-                                {run.lastErrorType}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                          {/* Start Time */}
-                          <div>
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Started</span>
-                            <span className="font-medium">
-                              {format(new Date(run.startedAt), 'MMM d, HH:mm:ss')}
-                            </span>
-                            <span className="text-xs text-muted-foreground block">
-                              {formatDistanceToNow(new Date(run.startedAt), { addSuffix: true })}
-                            </span>
-                          </div>
-                          
-                          {/* Duration */}
-                          <div>
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Duration</span>
-                            <span className="font-medium flex items-center gap-1">
-                              <Timer className="w-3 h-3 text-muted-foreground" />
-                              {run.status === 'running' ? (
-                                <span className="text-blue-600 animate-pulse">In progress...</span>
-                              ) : (
-                                formatDuration(run.durationMs)
-                              )}
-                            </span>
-                          </div>
-                          
-                          {/* Items */}
-                          <div>
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Products</span>
-                            <span className="font-medium flex items-center gap-1">
-                              <Package className="w-3 h-3 text-muted-foreground" />
-                              {(run.totalItems || 0).toLocaleString()}
-                            </span>
-                          </div>
-                          
-                          {/* Jobs */}
-                          <div>
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Jobs</span>
-                            <span className="font-medium flex items-center gap-1">
-                              <Zap className="w-3 h-3 text-muted-foreground" />
-                              {run.completedJobs || 0}/{run.totalJobs || 0}
-                              {(run.failedJobs || 0) > 0 && (
-                                <span className="text-red-500 text-xs">({run.failedJobs} failed)</span>
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        {/* Error Message */}
-                        {run.errorMessage && (
-                          <div className="mt-2 text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded">
-                            {run.errorMessage}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* CATALOG OPERATIONS TAB */}
+        {/* ═══════════════════════════════════════════════ */}
+        {isGlobalView && mainTab === 'catalog-ops' && (
+          <>
+            {isLoadingBatch ? (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : batchHistory.length === 0 ? (
+              <Card className="border-dashed max-w-md mx-auto">
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <Layers className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium mb-2">No Catalog Operations</p>
+                  <p className="text-sm mb-4">
+                    Run a catalog batch update to see history here.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                {/* Catalog Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                        <Hash className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase tracking-wider">Total Ops</span>
+                      </div>
+                      <p className="text-2xl font-bold">{batchHistory.length}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                        <CheckCircle className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase tracking-wider">Completed</span>
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-600">{batchCompleted}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                        <XCircle className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase tracking-wider">Failed</span>
+                      </div>
+                      <p className="text-2xl font-bold text-red-600">{batchFailed}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center space-x-2 text-muted-foreground mb-1">
+                        <Package className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase tracking-wider">Total Items</span>
+                      </div>
+                      <p className="text-2xl font-bold">{batchTotalItems.toLocaleString()}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                {/* Filter */}
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center space-x-4">
+                      <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Filter by Catalog ID..."
+                          value={catalogFilter}
+                          onChange={(e) => setCatalogFilter(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        Showing {filteredBatchHistory.length} records
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                {/* Catalog Operations Table */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-bold uppercase tracking-wider">Operation Log</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {filteredBatchHistory.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Layers className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                        <p>No batch operations match this filter</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-8"></TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Catalog ID</TableHead>
+                              <TableHead>Operation</TableHead>
+                              <TableHead className="text-right">Items</TableHead>
+                              <TableHead className="text-right">Success/Error</TableHead>
+                              <TableHead>Duration</TableHead>
+                              <TableHead>Status</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredBatchHistory.map((record: any) => (
+                              <React.Fragment key={record.id}>
+                                <TableRow 
+                                  className="cursor-pointer hover:bg-secondary/50"
+                                  onClick={() => toggleBatchRow(record.id)}
+                                >
+                                  <TableCell>
+                                    {expandedRows.has(record.id) ? (
+                                      <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                                    ) : (
+                                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs">
+                                    {format(new Date(record.startedAt), 'yyyy-MM-dd HH:mm')}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs">
+                                    {record.catalogId}
+                                  </TableCell>
+                                  <TableCell>
+                                    {getOperationBadge(record.operationType)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono">
+                                    {record.totalItems?.toLocaleString() || 0}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className="text-emerald-600 font-mono">{record.successCount || 0}</span>
+                                    {' / '}
+                                    <span className="text-red-600 font-mono">{record.errorCount || 0}</span>
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs">
+                                    {formatDuration(record.durationMs)}
+                                  </TableCell>
+                                  <TableCell>
+                                    {getStatusBadge(record.status)}
+                                  </TableCell>
+                                </TableRow>
+                                {expandedRows.has(record.id) && (
+                                  <TableRow className="bg-secondary/30">
+                                    <TableCell colSpan={8} className="p-4">
+                                      <div className="space-y-3">
+                                        {record.handles && record.handles.length > 0 && (
+                                          <div>
+                                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Batch Handles</span>
+                                            <div className="flex flex-wrap gap-1">
+                                              {record.handles.map((h: string, idx: number) => (
+                                                <Badge key={idx} variant="outline" className="text-xs font-mono">{h}</Badge>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {record.fields && record.fields.length > 0 && (
+                                          <div>
+                                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Updated Fields</span>
+                                            <div className="flex flex-wrap gap-1">
+                                              {record.fields.map((field: string, idx: number) => (
+                                                <Badge key={idx} variant="outline" className="text-xs">{field}</Badge>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {record.errors && record.errors.length > 0 && (
+                                          <div>
+                                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Errors</span>
+                                            <div className="bg-red-50 border border-red-200 rounded p-2 text-xs text-red-700 max-h-32 overflow-y-auto">
+                                              {record.errors.slice(0, 10).map((err: string, idx: number) => (
+                                                <div key={idx} className="mb-1">{err}</div>
+                                              ))}
+                                              {record.errors.length > 10 && (
+                                                <div className="text-muted-foreground mt-1">...and {record.errors.length - 10} more</div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {record.statusMessage && (
+                                          <div>
+                                            <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Status</span>
+                                            <p className="text-xs text-muted-foreground">{record.statusMessage}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </>
         )}
       </main>
       
+      {/* ═══════════════════════════════════════════════ */}
       {/* Run Detail Dialog */}
+      {/* ═══════════════════════════════════════════════ */}
       <Dialog open={selectedRunId !== null} onOpenChange={(open) => { if (!open) { setSelectedRunId(null); setDialogTab('overview'); setViewingReportId(null); } }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -455,7 +719,6 @@ export default function ScheduleHistory() {
                       </div>
                     </div>
                     
-                    {/* Report Stats */}
                     <div className="grid grid-cols-3 gap-3">
                       <Card className="bg-muted/30">
                         <CardContent className="pt-3 pb-3 text-center">
@@ -477,7 +740,6 @@ export default function ScheduleHistory() {
                       </Card>
                     </div>
                     
-                    {/* Report Data Table */}
                     {reportData.report.data && reportData.report.data.length > 0 ? (
                       <div className="border rounded-lg overflow-hidden">
                         <div className="overflow-x-auto max-h-[400px]">
@@ -537,7 +799,6 @@ export default function ScheduleHistory() {
             {/* Overview Tab */}
             {dialogTab === 'overview' && (
             <div className="space-y-6">
-              {/* Overview */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <span className="text-[10px] font-bold uppercase text-muted-foreground">Trigger</span>
@@ -616,7 +877,7 @@ export default function ScheduleHistory() {
               
               <Separator />
               
-              {/* Aggregated Results */}
+              {/* Results Summary */}
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4" />
@@ -699,7 +960,6 @@ export default function ScheduleHistory() {
                                 </Badge>
                                 {getStatusBadge(job.status)}
                               </div>
-                              {/* View Report button if job has a linked report */}
                               {job.reportId && (
                                 <Button 
                                   variant="outline" 
@@ -720,7 +980,7 @@ export default function ScheduleHistory() {
                             <div className="grid grid-cols-3 gap-3 text-xs">
                               <div>
                                 <span className="text-muted-foreground">Account:</span>
-                                <span className="ml-1 font-mono">{job.config?.adAccountId || job.config?.catalogId || '—'}</span>
+                                <span className="ml-1 font-mono">{(job.config as any)?.accountId || '—'}</span>
                               </div>
                               <div>
                                 <span className="text-muted-foreground">Items:</span>
@@ -744,7 +1004,6 @@ export default function ScheduleHistory() {
                               </p>
                             )}
                             
-                            {/* Timing */}
                             <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                               {job.startedAt && (
                                 <span>

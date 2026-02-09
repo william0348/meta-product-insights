@@ -677,7 +677,7 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
         `**Products:** ${data.length.toLocaleString()}`,
         `**Duration:** ${durationMinutes} minutes`,
         config.updateToCatalog ? `**Catalog Updated:** Yes` : '',
-        `\n[View Reports](/saved-reports)`
+        `\n[View Reports](/reports)`
       ].filter(Boolean).join('\n');
       
       await notifyOwner({

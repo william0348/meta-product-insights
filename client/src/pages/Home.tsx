@@ -11,7 +11,7 @@ import { CatalogUploadModal, CatalogUploadConfig } from '@/components/CatalogUpl
 import { BackgroundJobProgress } from '@/components/BackgroundJobProgress';
 import { trpc } from '@/lib/trpc';
 
-import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, History, FileText, Calendar } from 'lucide-react';
+import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, FileText, Calendar } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -660,15 +660,6 @@ export default function Home() {
               <ShieldCheck className="w-3 h-3 mr-1.5" />
               Secure API Connection
             </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => setLocation('/batch-history')}
-              className="gap-2"
-            >
-              <History className="w-4 h-4" />
-              <span className="hidden sm:inline">History</span>
-            </Button>
             <Button 
               variant="ghost" 
               size="sm" 

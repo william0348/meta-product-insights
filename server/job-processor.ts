@@ -525,7 +525,7 @@ async function processCatalogUpdateJob(job: BatchJob, startTime: number): Promis
       `**Success:** ${successCount.toLocaleString()}`,
       `**Errors:** ${errorCount.toLocaleString()}`,
       `**Duration:** ${durationMinutes} minutes`,
-      `\n[View History](/batch-history)`
+      `\n[View Reports](/reports)`
     ].join('\n');
     
     await notifyOwner({

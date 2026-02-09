@@ -36,7 +36,7 @@ describe("Notification Integration", () => {
         `**Products:** ${productCount.toLocaleString()}`,
         `**Duration:** ${durationMinutes} minutes`,
         updateToCatalog ? `**Catalog Updated:** Yes` : '',
-        `\n[View Reports](/saved-reports)`
+        `\n[View Reports](/reports)`
       ].filter(Boolean).join('\n');
 
       await notifyOwner({
@@ -75,7 +75,7 @@ describe("Notification Integration", () => {
         `**Success:** ${successCount.toLocaleString()}`,
         `**Errors:** ${errorCount.toLocaleString()}`,
         `**Duration:** ${durationMinutes} minutes`,
-        `\n[View History](/batch-history)`
+        `\n[View Reports](/reports)`
       ].join('\n');
 
       await notifyOwner({

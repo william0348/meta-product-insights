@@ -1,12 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
-import BatchHistory from "./pages/BatchHistory";
 import ScheduledJobs from "./pages/ScheduledJobs";
 import ScheduleHistory from "./pages/ScheduleHistory";
 
@@ -16,10 +15,11 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/settings"} component={Settings} />
-      <Route path={"/batch-history"} component={BatchHistory} />
       <Route path={"/reports"} component={ScheduleHistory} />
       <Route path="/schedule-history/:id" component={ScheduleHistory} />
       <Route path={"/schedules"} component={ScheduledJobs} />
+      {/* Redirect old batch-history to unified reports page */}
+      <Route path={"/batch-history"}>{() => <Redirect to="/reports" />}</Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

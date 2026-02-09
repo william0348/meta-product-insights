@@ -363,3 +363,12 @@
 - [x] Update App.tsx routing (removed SavedReports import, added /reports route)
 - [x] SavedReports.tsx kept as reference file but removed from routing
 - [x] All 90 tests passing (5 test files)
+
+## Feature - Remove Batch History & Integrate into Reports
+- [x] Analyze Batch History page features (catalog batch operations, status, errors)
+- [x] Integrate catalog batch history into unified Reports page as a filter/tab
+- [x] Remove History nav link from header
+- [x] Remove /batch-history route from App.tsx (redirect kept for backward compatibility)
+- [x] Keep BatchHistory.tsx file as reference
+- [x] Update tests - all 90 tests passing
+- [x] Update notification links from /saved-reports to /reports in report-generator.ts and test file
