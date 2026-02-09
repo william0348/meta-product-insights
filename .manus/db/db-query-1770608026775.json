@@ -1,0 +1,36 @@
+{
+  "query": "SELECT id, scheduleId, status, triggerType, retryCount, lastErrorType, startedAt, completedAt, durationMs, totalItems, errorMessage FROM schedule_runs ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SELECT id, scheduleId, status, triggerType, retryCount, lastErrorType, startedAt, completedAt, durationMs, totalItems, errorMessage FROM schedule_runs ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "2",
+      "scheduleId": "1",
+      "status": "running",
+      "triggerType": "manual",
+      "retryCount": "0",
+      "lastErrorType": "NULL",
+      "startedAt": "2026-02-08 16:21:56",
+      "completedAt": "NULL",
+      "durationMs": "NULL",
+      "totalItems": "0",
+      "errorMessage": "NULL"
+    },
+    {
+      "id": "1",
+      "scheduleId": "1",
+      "status": "completed",
+      "triggerType": "manual",
+      "retryCount": "0",
+      "lastErrorType": "NULL",
+      "startedAt": "2026-02-08 15:37:21",
+      "completedAt": "2026-02-08 15:47:34",
+      "durationMs": "613310",
+      "totalItems": "73392",
+      "errorMessage": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tscheduleId\tstatus\ttriggerType\tretryCount\tlastErrorType\tstartedAt\tcompletedAt\tdurationMs\ttotalItems\terrorMessage\n2\t1\trunning\tmanual\t0\tNULL\t2026-02-08 16:21:56\tNULL\tNULL\t0\tNULL\n1\t1\tcompleted\tmanual\t0\tNULL\t2026-02-08 15:37:21\t2026-02-08 15:47:34\t613310\t73392\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1596
+}

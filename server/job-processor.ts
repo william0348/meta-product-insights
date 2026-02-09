@@ -30,6 +30,11 @@ const PROCESSOR_INTERVAL_MS = 5000; // Check for new jobs every 5 seconds
 const MAX_CONCURRENT_JOBS = 1; // Process one job at a time to avoid rate limits
 const BATCH_SIZE = 3000; // Items per Facebook API request
 const CONCURRENT_BATCHES = 5; // Parallel batch requests
+const JOB_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes max for any job
+const STALE_PROGRESS_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes without progress update = stale
+
+// Track last known progress for stale detection
+const jobProgressCache = new Map<number, { progress: number; updatedAt: number }>();
 
 /**
  * Start the background job processor
@@ -73,18 +78,79 @@ async function processJobs(): Promise<void> {
   try {
     isProcessing = true;
 
-    // Check for running jobs that might have been interrupted
-    const runningJobs = await getRunningJobs();
+    // Check for running jobs that might have been interrupted or stalled
+    let runningJobs: BatchJob[] = [];
+    try {
+      runningJobs = await getRunningJobs();
+    } catch (dbErr) {
+      console.warn(`[JobProcessor] Failed to query running jobs (DB connection issue), will retry:`, (dbErr as Error).message);
+      return; // Skip this cycle, retry on next interval
+    }
+    
     for (const job of runningJobs) {
-      // If a job has been running for more than 30 minutes, mark it as failed
       const runningTime = Date.now() - (job.startedAt?.getTime() || 0);
-      if (runningTime > 30 * 60 * 1000) {
-        console.log(`[JobProcessor] Job ${job.id} timed out after 30 minutes`);
+      
+      // Track progress for stale detection
+      const cached = jobProgressCache.get(job.id);
+      const currentProgress = job.progress || 0;
+      
+      if (!cached) {
+        jobProgressCache.set(job.id, { progress: currentProgress, updatedAt: Date.now() });
+      } else if (currentProgress > cached.progress) {
+        // Progress was made, update cache
+        jobProgressCache.set(job.id, { progress: currentProgress, updatedAt: Date.now() });
+      }
+      
+      // Check for absolute timeout (60 minutes)
+      const isAbsoluteTimeout = runningTime > JOB_TIMEOUT_MS;
+      
+      // Check for stale progress (no progress change for 15 minutes)
+      const cachedEntry = jobProgressCache.get(job.id);
+      const timeSinceLastProgress = cachedEntry ? Date.now() - cachedEntry.updatedAt : 0;
+      const isStaleProgress = cachedEntry && timeSinceLastProgress > STALE_PROGRESS_TIMEOUT_MS;
+      
+      if (isAbsoluteTimeout || isStaleProgress) {
+        const reason = isAbsoluteTimeout 
+          ? `absolute timeout after ${Math.round(runningTime / 60000)} minutes`
+          : `no progress for ${Math.round(timeSinceLastProgress / 60000)} minutes (stuck at ${currentProgress}%)`;
+        
+        console.log(`[JobProcessor] Job ${job.id} timed out: ${reason}`);
+        
         await updateBatchJob(job.id, {
           status: "failed",
-          statusMessage: "Job timed out after 30 minutes",
+          statusMessage: `Job timed out: ${reason}`,
           completedAt: new Date(),
         });
+        
+        // Also update the associated schedule_run if exists
+        const scheduleRunId = job.config?.scheduleRunId;
+        if (scheduleRunId) {
+          try {
+            const run = await getScheduleRun(scheduleRunId);
+            if (run && run.status === 'running') {
+              const newFailedJobs = (run.failedJobs || 0) + 1;
+              const totalJobsDone = (run.completedJobs || 0) + newFailedJobs;
+              const allDone = totalJobsDone >= (run.totalJobs || 1);
+              
+              await updateScheduleRun(scheduleRunId, {
+                failedJobs: newFailedJobs,
+                status: allDone ? ((run.completedJobs || 0) > 0 ? 'partial' : 'failed') : 'running',
+                errorMessage: `Job timed out: ${reason}`,
+                lastErrorType: 'timeout',
+                ...(allDone ? {
+                  completedAt: new Date(),
+                  durationMs: Date.now() - run.startedAt.getTime(),
+                } : {}),
+              });
+              console.log(`[JobProcessor] Updated schedule run ${scheduleRunId} after job timeout`);
+            }
+          } catch (runErr) {
+            console.warn(`[JobProcessor] Failed to update schedule run after timeout:`, runErr);
+          }
+        }
+        
+        // Clean up progress cache
+        jobProgressCache.delete(job.id);
       }
     }
 
@@ -125,6 +191,9 @@ async function processJob(job: BatchJob): Promise<void> {
     }
   } catch (error: any) {
     console.error(`[JobProcessor] Job ${job.id} failed:`, error);
+    
+    // Clean up progress cache
+    jobProgressCache.delete(job.id);
     
     // Truncate error message to prevent Data Too Long errors in database
     const errorMsg = (error.message || "Unknown error").substring(0, 500);

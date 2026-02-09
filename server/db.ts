@@ -5,18 +5,36 @@ import { and } from "drizzle-orm";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _dbCreatedAt: number = 0;
+const DB_MAX_AGE_MS = 30 * 60 * 1000; // Recreate connection every 30 minutes to avoid stale connections
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
+  const now = Date.now();
+  // Recreate if connection is stale (prevents ECONNRESET from idle connections)
+  if (_db && _dbCreatedAt > 0 && (now - _dbCreatedAt) > DB_MAX_AGE_MS) {
+    console.log("[Database] Refreshing stale connection");
+    _db = null;
+  }
   if (!_db && process.env.DATABASE_URL) {
     try {
       _db = drizzle(process.env.DATABASE_URL);
+      _dbCreatedAt = now;
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
     }
   }
   return _db;
+}
+
+/**
+ * Reset the database connection (call after ECONNRESET or similar errors)
+ */
+export function resetDbConnection(): void {
+  console.log("[Database] Resetting connection due to error");
+  _db = null;
+  _dbCreatedAt = 0;
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -420,8 +438,9 @@ export async function getQueuedJobs(limit: number = 10): Promise<BatchJob[]> {
       .limit(limit);
 
     return result;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Database] Failed to get queued jobs:", error);
+    if (isConnectionError(error)) resetDbConnection();
     return [];
   }
 }
@@ -440,10 +459,19 @@ export async function getRunningJobs(): Promise<BatchJob[]> {
       .where(eq(batchJobs.status, "running"));
 
     return result;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Database] Failed to get running jobs:", error);
+    if (isConnectionError(error)) resetDbConnection();
     return [];
   }
+}
+
+/**
+ * Check if an error is a database connection error (ECONNRESET, ETIMEDOUT, etc.)
+ */
+function isConnectionError(error: any): boolean {
+  const msg = String(error?.message || '') + String(error?.cause?.message || '');
+  return /ECONNRESET|ETIMEDOUT|EPIPE|PROTOCOL_CONNECTION_LOST|ER_CON_COUNT_ERROR/i.test(msg);
 }
 
 

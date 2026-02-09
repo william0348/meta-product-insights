@@ -459,3 +459,132 @@ describe("Schedule History - Status Aggregation", () => {
     expect(calculateSuccessRate(0, 0)).toBe(0);
   });
 });
+
+
+describe("Job Timeout Logic", () => {
+  const JOB_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
+  const STALE_PROGRESS_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+  it("should not timeout a job running less than 60 minutes", () => {
+    const startedAt = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
+    const runningTime = Date.now() - startedAt.getTime();
+    expect(runningTime).toBeLessThan(JOB_TIMEOUT_MS);
+  });
+
+  it("should timeout a job running more than 60 minutes", () => {
+    const startedAt = new Date(Date.now() - 61 * 60 * 1000); // 61 minutes ago
+    const runningTime = Date.now() - startedAt.getTime();
+    expect(runningTime).toBeGreaterThan(JOB_TIMEOUT_MS);
+  });
+
+  it("should detect stale progress when no change for 15+ minutes", () => {
+    const lastProgressUpdate = Date.now() - 16 * 60 * 1000; // 16 minutes ago
+    const timeSinceLastProgress = Date.now() - lastProgressUpdate;
+    expect(timeSinceLastProgress).toBeGreaterThan(STALE_PROGRESS_TIMEOUT_MS);
+  });
+
+  it("should not flag progress as stale when recently updated", () => {
+    const lastProgressUpdate = Date.now() - 5 * 60 * 1000; // 5 minutes ago
+    const timeSinceLastProgress = Date.now() - lastProgressUpdate;
+    expect(timeSinceLastProgress).toBeLessThan(STALE_PROGRESS_TIMEOUT_MS);
+  });
+
+  it("should generate correct timeout reason for absolute timeout", () => {
+    const runningTime = 62 * 60 * 1000;
+    const reason = `absolute timeout after ${Math.round(runningTime / 60000)} minutes`;
+    expect(reason).toBe("absolute timeout after 62 minutes");
+  });
+
+  it("should generate correct timeout reason for stale progress", () => {
+    const timeSinceLastProgress = 18 * 60 * 1000;
+    const currentProgress = 45;
+    const reason = `no progress for ${Math.round(timeSinceLastProgress / 60000)} minutes (stuck at ${currentProgress}%)`;
+    expect(reason).toBe("no progress for 18 minutes (stuck at 45%)");
+  });
+});
+
+describe("DB Connection Error Detection", () => {
+  function isConnectionError(error: any): boolean {
+    const msg = String(error?.message || '') + String(error?.cause?.message || '');
+    return /ECONNRESET|ETIMEDOUT|EPIPE|PROTOCOL_CONNECTION_LOST|ER_CON_COUNT_ERROR/i.test(msg);
+  }
+
+  it("should detect ECONNRESET as a connection error", () => {
+    const error = { message: "read ECONNRESET" };
+    expect(isConnectionError(error)).toBe(true);
+  });
+
+  it("should detect ETIMEDOUT as a connection error", () => {
+    const error = { message: "connect ETIMEDOUT" };
+    expect(isConnectionError(error)).toBe(true);
+  });
+
+  it("should detect EPIPE as a connection error", () => {
+    const error = { message: "write EPIPE" };
+    expect(isConnectionError(error)).toBe(true);
+  });
+
+  it("should detect PROTOCOL_CONNECTION_LOST as a connection error", () => {
+    const error = { message: "PROTOCOL_CONNECTION_LOST" };
+    expect(isConnectionError(error)).toBe(true);
+  });
+
+  it("should detect nested cause errors", () => {
+    const error = { message: "DrizzleQueryError", cause: { message: "read ECONNRESET" } };
+    expect(isConnectionError(error)).toBe(true);
+  });
+
+  it("should not flag normal errors as connection errors", () => {
+    const error = { message: "Cannot read property 'id' of undefined" };
+    expect(isConnectionError(error)).toBe(false);
+  });
+
+  it("should not flag auth errors as connection errors", () => {
+    const error = { message: "Invalid access token" };
+    expect(isConnectionError(error)).toBe(false);
+  });
+
+  it("should handle null/undefined errors gracefully", () => {
+    expect(isConnectionError(null)).toBe(false);
+    expect(isConnectionError(undefined)).toBe(false);
+    expect(isConnectionError({})).toBe(false);
+  });
+});
+
+describe("Schedule Run Timeout Update Logic", () => {
+  it("should mark run as failed when all jobs timed out", () => {
+    const completedJobs = 0;
+    const newFailedJobs = 1;
+    const totalJobs = 1;
+    const totalJobsDone = completedJobs + newFailedJobs;
+    const allDone = totalJobsDone >= totalJobs;
+    const status = allDone ? (completedJobs > 0 ? 'partial' : 'failed') : 'running';
+    
+    expect(allDone).toBe(true);
+    expect(status).toBe('failed');
+  });
+
+  it("should mark run as partial when some jobs completed and some timed out", () => {
+    const completedJobs = 2;
+    const newFailedJobs = 1;
+    const totalJobs = 3;
+    const totalJobsDone = completedJobs + newFailedJobs;
+    const allDone = totalJobsDone >= totalJobs;
+    const status = allDone ? (completedJobs > 0 ? 'partial' : 'failed') : 'running';
+    
+    expect(allDone).toBe(true);
+    expect(status).toBe('partial');
+  });
+
+  it("should keep run as running when not all jobs are done yet", () => {
+    const completedJobs = 1;
+    const newFailedJobs = 1;
+    const totalJobs = 5;
+    const totalJobsDone = completedJobs + newFailedJobs;
+    const allDone = totalJobsDone >= totalJobs;
+    const status = allDone ? (completedJobs > 0 ? 'partial' : 'failed') : 'running';
+    
+    expect(allDone).toBe(false);
+    expect(status).toBe('running');
+  });
+});

@@ -333,3 +333,16 @@
 - [x] Write comprehensive error-classifier.test.ts with 42 tests covering all error categories
 - [x] Fix calculateRetryDelay to use ?? instead of || for permanent error base delay (0)
 - [x] All 73 tests passing (5 test files)
+
+## Bug Investigation - Scheduled Report Stuck/Running Forever
+- [x] Diagnose why scheduled reports run indefinitely
+- [x] Verify scheduler and job processor are executing server-side (confirmed: both start on server boot)
+- [x] Fix root cause of stuck jobs
+- [x] Root cause 1: 30-minute timeout too short for combined report+catalog workflow (73k items takes ~15-25 min)
+- [x] Root cause 2: Timed-out jobs didn't update schedule_run status (left in 'running' forever)
+- [x] Root cause 3: DB ECONNRESET errors caused job processor to silently fail
+- [x] Fix: Increased timeout to 60 minutes absolute + 15 minutes stale progress detection
+- [x] Fix: Timeout now properly updates both batch_job AND schedule_run status
+- [x] Fix: Added DB connection auto-recovery (resetDbConnection on ECONNRESET/ETIMEDOUT/EPIPE)
+- [x] Fix: Added stale connection refresh (recreate after 30 min idle)
+- [x] All 90 tests passing (5 test files)
