@@ -36,6 +36,7 @@ const STALE_PROGRESS_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes without progress
 // Track last known progress for stale detection
 // We track both `progress` and `processedItems` to avoid false stale timeouts
 const jobProgressCache = new Map<number, { progress: number; processedItems: number; updatedAt: number }>();
+let lastTransientLogTime: number | null = null;
 
 /**
  * Start the background job processor
@@ -84,7 +85,16 @@ async function processJobs(): Promise<void> {
     try {
       runningJobs = await getRunningJobs();
     } catch (dbErr) {
-      console.warn(`[JobProcessor] Failed to query running jobs (DB connection issue), will retry:`, (dbErr as Error).message);
+      const errMsg = (dbErr as Error).message || '';
+      const isTransient = errMsg.includes('no available peers') || errMsg.includes('ECONNRESET') || errMsg.includes('ETIMEDOUT');
+      if (isTransient) {
+        if (!lastTransientLogTime || Date.now() - lastTransientLogTime > 60000) {
+          console.warn(`[JobProcessor] DB temporarily unavailable, will retry: ${errMsg.substring(0, 100)}`);
+          lastTransientLogTime = Date.now();
+        }
+      } else {
+        console.warn(`[JobProcessor] Failed to query running jobs:`, errMsg);
+      }
       return; // Skip this cycle, retry on next interval
     }
     
@@ -158,14 +168,34 @@ async function processJobs(): Promise<void> {
     }
 
     // Get queued jobs
-    const queuedJobs = await getQueuedJobs(MAX_CONCURRENT_JOBS);
+    let queuedJobs: BatchJob[] = [];
+    try {
+      queuedJobs = await getQueuedJobs(MAX_CONCURRENT_JOBS);
+    } catch (dbErr) {
+      const errMsg = (dbErr as Error).message || '';
+      // Only log once per minute for transient DB errors to reduce noise
+      const isTransient = errMsg.includes('no available peers') || errMsg.includes('ECONNRESET') || errMsg.includes('ETIMEDOUT');
+      if (isTransient) {
+        if (!lastTransientLogTime || Date.now() - lastTransientLogTime > 60000) {
+          console.warn(`[JobProcessor] DB temporarily unavailable, will retry: ${errMsg.substring(0, 100)}`);
+          lastTransientLogTime = Date.now();
+        }
+      } else {
+        console.warn(`[JobProcessor] Failed to query queued jobs:`, errMsg);
+      }
+      return;
+    }
     
     for (const job of queuedJobs) {
       console.log(`[JobProcessor] Processing job ${job.id} (${job.jobType})`);
       await processJob(job);
     }
   } catch (error) {
-    console.error("[JobProcessor] Error in processing loop:", error);
+    const errMsg = (error as Error).message || '';
+    const isTransient = errMsg.includes('no available peers') || errMsg.includes('ECONNRESET') || errMsg.includes('ETIMEDOUT');
+    if (!isTransient) {
+      console.error("[JobProcessor] Error in processing loop:", error);
+    }
   } finally {
     isProcessing = false;
   }

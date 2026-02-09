@@ -31,8 +31,13 @@ export async function getDb() {
 /**
  * Reset the database connection (call after ECONNRESET or similar errors)
  */
+let _lastResetLog = 0;
 export function resetDbConnection(): void {
-  console.log("[Database] Resetting connection due to error");
+  const now = Date.now();
+  if (now - _lastResetLog > 60000) {
+    console.log("[Database] Resetting connection due to error");
+    _lastResetLog = now;
+  }
   _db = null;
   _dbCreatedAt = 0;
 }
@@ -439,7 +444,7 @@ export async function getQueuedJobs(limit: number = 10): Promise<BatchJob[]> {
 
     return result;
   } catch (error: any) {
-    console.error("[Database] Failed to get queued jobs:", error);
+    logDbError('Failed to get queued jobs', error);
     if (isConnectionError(error)) resetDbConnection();
     return [];
   }
@@ -460,7 +465,7 @@ export async function getRunningJobs(): Promise<BatchJob[]> {
 
     return result;
   } catch (error: any) {
-    console.error("[Database] Failed to get running jobs:", error);
+    logDbError('Failed to get running jobs', error);
     if (isConnectionError(error)) resetDbConnection();
     return [];
   }
@@ -471,7 +476,23 @@ export async function getRunningJobs(): Promise<BatchJob[]> {
  */
 function isConnectionError(error: any): boolean {
   const msg = String(error?.message || '') + String(error?.cause?.message || '');
-  return /ECONNRESET|ETIMEDOUT|EPIPE|PROTOCOL_CONNECTION_LOST|ER_CON_COUNT_ERROR/i.test(msg);
+  return /ECONNRESET|ETIMEDOUT|EPIPE|PROTOCOL_CONNECTION_LOST|ER_CON_COUNT_ERROR|no available peers/i.test(msg);
+}
+
+// Throttle transient DB error logging to once per minute
+let _lastDbTransientLog = 0;
+function logDbError(context: string, error: any): void {
+  const msg = String(error?.message || '') + String(error?.cause?.message || '');
+  const isTransient = /no available peers|ECONNRESET|ETIMEDOUT/i.test(msg);
+  if (isTransient) {
+    const now = Date.now();
+    if (now - _lastDbTransientLog > 60000) {
+      console.warn(`[Database] ${context}: DB temporarily unavailable (${msg.substring(0, 80)})`);
+      _lastDbTransientLog = now;
+    }
+  } else {
+    console.error(`[Database] ${context}:`, error);
+  }
 }
 
 
@@ -704,7 +725,8 @@ export async function getDueScheduledJobs(): Promise<ScheduledJob[]> {
 
     return result;
   } catch (error) {
-    console.error("[Database] Failed to get due scheduled jobs:", error);
+    logDbError('Failed to get due scheduled jobs', error);
+    if (isConnectionError(error)) resetDbConnection();
     return [];
   }
 }
@@ -912,7 +934,8 @@ export async function getRetryableScheduleRuns(): Promise<ScheduleRun[]> {
 
     return result;
   } catch (error) {
-    console.error("[Database] Failed to get retryable schedule runs:", error);
+    logDbError('Failed to get retryable schedule runs', error);
+    if (isConnectionError(error)) resetDbConnection();
     return [];
   }
 }

@@ -432,3 +432,12 @@
 - [x] Cache resolved path for performance
 - [x] Add Python dependency auto-install in package.json postinstall
 - [x] All 99 tests passing
+
+## Bug Fix - OAuth Login Error
+- [x] Investigate OAuth login error on published site
+- [x] Root cause: TiDB DB cluster "no available peers" transient error during OAuth callback upsertUser
+- [x] Fix 1: Added retry logic (3 retries, exponential backoff) to OAuth callback for transient DB errors
+- [x] Fix 2: OAuth callback now redirects to /?login_error=1 instead of showing raw JSON on failure
+- [x] Fix 3: Throttled transient DB error logging to 1 message per minute (was flooding every 5 seconds)
+- [x] Fix 4: Added "no available peers" to isConnectionError detection for automatic connection reset
+- [x] All 99 tests passing

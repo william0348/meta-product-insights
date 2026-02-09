@@ -468,7 +468,12 @@ async function checkScheduledJobs(): Promise<void> {
     }
     
   } catch (error) {
-    console.error('[Scheduler] Error checking scheduled jobs:', error);
+    const errMsg = (error as Error).message || '';
+    const causeMsg = String((error as any)?.cause?.message || '');
+    const isTransient = /no available peers|ECONNRESET|ETIMEDOUT/i.test(errMsg + causeMsg);
+    if (!isTransient) {
+      console.error('[Scheduler] Error checking scheduled jobs:', error);
+    }
   }
 }
 
