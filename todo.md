@@ -459,3 +459,11 @@
 - [x] Diagnose publish/deployment failure: lockfile contained stale papaparse/@types/papaparse entries not in package.json
 - [x] Fix: Regenerated pnpm-lock.yaml from clean package.json
 - [x] Verified: build succeeds, 99 tests passing
+
+## Investigation - Schedule Run Failures
+- [x] Queried 20 most recent schedule runs from database
+- [x] Root cause 1 (15/17 failures): Python not available in production - `spawn python3.11 ENOENT` → FIXED by Node.js migration
+- [x] Root cause 2 (1 failure): Job 180001 stuck at 59% (18K records fetched) → TCP-level hang during Facebook API pagination
+- [x] Fix: Added AbortController with 90s hard timeout to prevent hanging requests
+- [x] Fix: Increased MAX_PAGE_RETRIES from 3 to 5 with exponential backoff up to 64s
+- [x] All 99 tests passing

@@ -37,7 +37,7 @@ import { nanoid } from "nanoid";
 const GRAPH_API_VERSION = "v22.0";
 const FB_CATALOG_API_VERSION = "v24.0";
 const PAGE_SIZE = 1000;
-const MAX_PAGE_RETRIES = 3;
+const MAX_PAGE_RETRIES = 5;
 const MAX_REPORT_RETRIES = 2;
 const POLL_INTERVAL_MS = 5_000;
 const MAX_POLL_ATTEMPTS = 120; // ~10 minutes max
@@ -242,21 +242,32 @@ async function fetchInsightsData(
       `?access_token=${accessToken}&limit=${PAGE_SIZE}`;
     if (after) url += `&after=${after}`;
 
-    // Per-page retry
+    // Per-page retry with AbortController to prevent hanging requests
     let responseData: any = null;
     for (let retry = 0; retry <= MAX_PAGE_RETRIES; retry++) {
       try {
-        const { data } = await axios.get(url, {
-          timeout: 60_000,
-          headers: { "Accept-Encoding": "gzip, deflate" },
-        });
-        responseData = data;
+        // Use AbortController with 90s hard timeout to prevent TCP-level hangs
+        // where the connection stays alive but no data flows
+        const controller = new AbortController();
+        const abortTimer = setTimeout(() => controller.abort(), 90_000);
+        try {
+          const { data } = await axios.get(url, {
+            timeout: 60_000,
+            signal: controller.signal,
+            headers: { "Accept-Encoding": "gzip, deflate" },
+          });
+          responseData = data;
+        } finally {
+          clearTimeout(abortTimer);
+        }
       } catch (err: any) {
+        const errDetail = err.code || err.message || 'unknown';
         if (retry < MAX_PAGE_RETRIES) {
-          const delay = 2 ** retry * 2_000;
+          // Use longer backoff for later retries (up to ~64s)
+          const delay = Math.min(2 ** retry * 2_000, 64_000);
           console.log(
-            `[ReportWorker] Page ${pageCount + 1} fetch failed (${err.code || err.message}), ` +
-              `retrying in ${delay}ms… (${retry + 1}/${MAX_PAGE_RETRIES})`,
+            `[ReportWorker] Page ${pageCount + 1} fetch failed (${errDetail}), ` +
+              `retrying in ${delay / 1000}s… (${retry + 1}/${MAX_PAGE_RETRIES})`,
           );
           await sleep(delay);
           continue;
