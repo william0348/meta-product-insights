@@ -467,3 +467,18 @@
 - [x] Fix: Added AbortController with 90s hard timeout to prevent hanging requests
 - [x] Fix: Increased MAX_PAGE_RETRIES from 3 to 5 with exponential backoff up to 64s
 - [x] All 99 tests passing
+
+## Bug Fix - Publish Failure (Feb 16)
+- [x] Diagnosed: lockfile was stale after papaparse removal
+- [x] Fixed: regenerated pnpm-lock.yaml
+
+## Bug Fix - Production Run Now Stuck at 59% (Feb 19)
+- [x] Root cause: Facebook API rate limiting or TCP hang at page 18 (18K records), stale detection killed job
+- [x] Fix 1: Reduced timeouts - AbortController 60s (was 90s), axios 45s (was 60s)
+- [x] Fix 2: Added Facebook rate limit header detection (x-business-use-case-usage, x-app-usage)
+- [x] Fix 3: Rate limit errors use longer backoff (30s-300s) vs transient errors (3s-60s)
+- [x] Fix 4: Added heartbeat callback - worker sends statusMessage updates during retries/waits
+- [x] Fix 5: Job Processor now tracks statusMessage changes as activity (prevents false stale detection)
+- [x] Fix 6: Increased stale progress timeout from 15 min to 25 min
+- [x] Fix 7: Added error code 80004 (rate limit) to transient error detection
+- [x] All 99 tests passing

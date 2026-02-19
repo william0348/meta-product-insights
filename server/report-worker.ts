@@ -231,6 +231,7 @@ async function fetchInsightsData(
   reportRunId: string,
   accessToken: string,
   onProgress?: (loaded: number) => Promise<void>,
+  onHeartbeat?: (message: string) => Promise<void>,
 ): Promise<any[]> {
   const allData: any[] = [];
   let after: string | null = null;
@@ -246,22 +247,49 @@ async function fetchInsightsData(
     let responseData: any = null;
     for (let retry = 0; retry <= MAX_PAGE_RETRIES; retry++) {
       try {
-        // Use AbortController with 90s hard timeout to prevent TCP-level hangs
-        // where the connection stays alive but no data flows
+        // Use AbortController with 60s hard timeout to prevent TCP-level hangs
         const controller = new AbortController();
-        const abortTimer = setTimeout(() => controller.abort(), 90_000);
+        const abortTimer = setTimeout(() => controller.abort(), 60_000);
         try {
-          const { data } = await axios.get(url, {
-            timeout: 60_000,
+          const resp = await axios.get(url, {
+            timeout: 45_000,
             signal: controller.signal,
             headers: { "Accept-Encoding": "gzip, deflate" },
           });
-          responseData = data;
+          responseData = resp.data;
+
+          // Check Facebook rate limit headers
+          const usageHeader = resp.headers?.['x-business-use-case-usage'] || resp.headers?.['x-app-usage'];
+          if (usageHeader) {
+            try {
+              const usage = typeof usageHeader === 'string' ? JSON.parse(usageHeader) : usageHeader;
+              // Check if any account is near the rate limit
+              const values = Object.values(usage) as any[];
+              for (const val of values) {
+                const entries = Array.isArray(val) ? val : [val];
+                for (const entry of entries) {
+                  const callPct = entry.call_count ?? entry.total_cputime ?? 0;
+                  if (callPct > 75) {
+                    const waitSec = Math.min(Math.ceil(callPct / 10) * 5, 120);
+                    console.log(
+                      `[ReportWorker] Rate limit approaching (${callPct}%), waiting ${waitSec}s…`,
+                    );
+                    if (onHeartbeat) await onHeartbeat(`Rate limit cooldown (${callPct}%)…`);
+                    await sleep(waitSec * 1000);
+                  }
+                }
+              }
+            } catch { /* ignore parse errors */ }
+          }
         } finally {
           clearTimeout(abortTimer);
         }
       } catch (err: any) {
         const errDetail = err.code || err.message || 'unknown';
+        // Send heartbeat during retries so Job Processor knows we're still alive
+        if (onHeartbeat) {
+          await onHeartbeat(`Page ${pageCount + 1} retry ${retry + 1}/${MAX_PAGE_RETRIES}: ${errDetail}`);
+        }
         if (retry < MAX_PAGE_RETRIES) {
           // Use longer backoff for later retries (up to ~64s)
           const delay = Math.min(2 ** retry * 2_000, 64_000);
@@ -275,20 +303,27 @@ async function fetchInsightsData(
         throw err;
       }
 
-      // API-level errors
+      // API-level errors (Facebook returns 200 with error body)
       if (responseData?.error) {
         const errMsg = responseData.error.message || "Failed to fetch insights";
         const errCode = responseData.error.code ?? 0;
         const isTransient =
-          [1, 2, 4, 17, 32, 190, 368].includes(errCode) ||
-          /unknown|temporarily|rate/i.test(errMsg);
+          [1, 2, 4, 17, 32, 80004, 190, 368].includes(errCode) ||
+          /unknown|temporarily|rate|throttl/i.test(errMsg);
 
         if (isTransient && retry < MAX_PAGE_RETRIES) {
-          const delay = 2 ** retry * 3_000;
+          // Rate limit errors need longer backoff
+          const isRateLimit = errCode === 80004 || errCode === 4 || errCode === 32 || /rate|throttl/i.test(errMsg);
+          const delay = isRateLimit
+            ? Math.min(2 ** retry * 30_000, 300_000) // 30s, 60s, 120s, 240s, 300s for rate limits
+            : Math.min(2 ** retry * 3_000, 60_000);  // 3s, 6s, 12s, 24s, 48s for other transient
           console.log(
-            `[ReportWorker] Page ${pageCount + 1} API error (${errMsg}), ` +
-              `retrying in ${delay}ms… (${retry + 1}/${MAX_PAGE_RETRIES})`,
+            `[ReportWorker] Page ${pageCount + 1} API error code=${errCode} (${errMsg}), ` +
+              `retrying in ${delay / 1000}s… (${retry + 1}/${MAX_PAGE_RETRIES})`,
           );
+          if (onHeartbeat) {
+            await onHeartbeat(`API error on page ${pageCount + 1}, retrying in ${delay / 1000}s…`);
+          }
           await sleep(delay);
           responseData = null;
           continue;
@@ -568,6 +603,17 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
           processedItems: loaded,
           statusMessage: `Fetched ${loaded.toLocaleString()} records…`,
         });
+      },
+      // Heartbeat callback: updates statusMessage during retries/rate-limit waits
+      // so the Job Processor's stale-progress detector doesn't kill us
+      async (heartbeatMsg) => {
+        try {
+          await updateBatchJob(jobId, {
+            statusMessage: heartbeatMsg,
+          });
+        } catch {
+          // Ignore DB errors in heartbeat — best effort
+        }
       },
     );
 

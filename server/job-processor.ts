@@ -31,11 +31,13 @@ const MAX_CONCURRENT_JOBS = 1; // Process one job at a time to avoid rate limits
 const BATCH_SIZE = 3000; // Items per Facebook API request
 const CONCURRENT_BATCHES = 5; // Parallel batch requests
 const JOB_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes max for any job
-const STALE_PROGRESS_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes without progress update = stale
+const STALE_PROGRESS_TIMEOUT_MS = 25 * 60 * 1000; // 25 minutes without progress update = stale (increased from 15 to accommodate rate limit waits)
 
 // Track last known progress for stale detection
-// We track both `progress` and `processedItems` to avoid false stale timeouts
-const jobProgressCache = new Map<number, { progress: number; processedItems: number; updatedAt: number }>();
+// We track `progress`, `processedItems`, AND `statusMessage` to detect activity
+// The statusMessage check is critical: during retries/rate-limit waits, the worker
+// sends heartbeat messages that update statusMessage without changing progress%
+const jobProgressCache = new Map<number, { progress: number; processedItems: number; statusMessage: string; updatedAt: number }>();
 let lastTransientLogTime: number | null = null;
 
 /**
@@ -106,12 +108,17 @@ async function processJobs(): Promise<void> {
       const cached = jobProgressCache.get(job.id);
       const currentProgress = job.progress || 0;
       const currentProcessedItems = job.processedItems || 0;
+      const currentStatusMessage = job.statusMessage || '';
       
       if (!cached) {
-        jobProgressCache.set(job.id, { progress: currentProgress, processedItems: currentProcessedItems, updatedAt: Date.now() });
-      } else if (currentProgress > cached.progress || currentProcessedItems > cached.processedItems) {
-        // Progress was made (either progress % or processedItems count increased), update cache
-        jobProgressCache.set(job.id, { progress: currentProgress, processedItems: currentProcessedItems, updatedAt: Date.now() });
+        jobProgressCache.set(job.id, { progress: currentProgress, processedItems: currentProcessedItems, statusMessage: currentStatusMessage, updatedAt: Date.now() });
+      } else if (
+        currentProgress > cached.progress ||
+        currentProcessedItems > cached.processedItems ||
+        currentStatusMessage !== cached.statusMessage  // Heartbeat messages count as activity
+      ) {
+        // Activity detected (progress %, processedItems, or statusMessage changed), update cache
+        jobProgressCache.set(job.id, { progress: currentProgress, processedItems: currentProcessedItems, statusMessage: currentStatusMessage, updatedAt: Date.now() });
       }
       
       // Check for absolute timeout (60 minutes)
