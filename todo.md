@@ -482,3 +482,15 @@
 - [x] Fix 6: Increased stale progress timeout from 15 min to 25 min
 - [x] Fix 7: Added error code 80004 (rate limit) to transient error detection
 - [x] All 99 tests passing
+
+## Feature - Custom Label 0-4 for Catalog Update (same as Custom Number 0-4)
+- [x] Analyze existing Custom Number 0-4 implementation across all layers
+- [x] Add customLabels field to report-generator.ts ReportConfig interface
+- [x] Update report-worker.ts to handle custom_label_0 to custom_label_4 in catalog update (merge mode)
+- [x] Update report-worker.ts verifyCatalogUpdate to verify custom_label fields
+- [x] Update scheduler.ts to pass customLabels to job config
+- [x] Update routers.ts zod schemas for create/update schedule endpoints
+- [x] Update drizzle/schema.ts config types to include customLabels
+- [x] Update catalog.ts fetchProducts to include custom_label_0-3 fields
+- [x] Add Custom Label 0-4 toggle + input UI in ScheduledJobs page
+- [x] All 99 tests passing

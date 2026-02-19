@@ -102,6 +102,7 @@ export interface WorkerConfig {
   customLabel4?: string;
   enableCustomLabel4?: boolean;
   customNumbers?: Record<string, string>;
+  customLabels?: Record<string, string>;
   // Schedule
   scheduleRunId?: number;
 }
@@ -441,8 +442,8 @@ async function verifyCatalogUpdate(
   for (const [fieldName, fieldValue] of Object.entries(updateFields)) {
     try {
       let filterParam: string;
-      if (fieldName === "custom_label_4") {
-        filterParam = JSON.stringify({ custom_label_4: { eq: String(fieldValue) } });
+      if (fieldName.startsWith("custom_label_")) {
+        filterParam = JSON.stringify({ [fieldName]: { eq: String(fieldValue) } });
       } else if (fieldName.startsWith("custom_number_")) {
         filterParam = JSON.stringify({ [fieldName]: { eq: Number(fieldValue) } });
       } else {
@@ -678,6 +679,12 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
             updateFields[key] = parseFloat(value);
           }
         }
+        const customLabels = config.customLabels ?? {};
+        for (const [key, value] of Object.entries(customLabels)) {
+          if (value && String(value).trim()) {
+            updateFields[key] = String(value).trim();
+          }
+        }
 
         // Create batch history record
         const updatedFieldNames = Object.keys(updateFields);
@@ -690,9 +697,9 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
           updatedFields: updatedFieldNames,
           updateCriteria: {
             sourceField: "scheduled_report",
-            targetField: "custom_label_4, custom_number_0-4",
+            targetField: "custom_label_0-4, custom_number_0-4",
             condition: `reportId=${reportId}`,
-            description: `Scheduled report update: customLabel4=${config.customLabel4 || "N/A"}, customNumbers=${JSON.stringify(customNumbers)}`,
+            description: `Scheduled report update: customLabel4=${config.customLabel4 || "N/A"}, customLabels=${JSON.stringify(customLabels)}, customNumbers=${JSON.stringify(customNumbers)}`,
           },
           status: "processing",
         });

@@ -104,7 +104,7 @@ const fetchProductBatch = async (
 
   const encodedFilter = encodeURIComponent(JSON.stringify(filter));
   const fields =
-    'id,retailer_id,name,custom_label_4,tags,custom_number_0,custom_number_1,custom_number_2,custom_number_3,custom_number_4';
+    'id,retailer_id,name,custom_label_0,custom_label_1,custom_label_2,custom_label_3,custom_label_4,tags,custom_number_0,custom_number_1,custom_number_2,custom_number_3,custom_number_4';
 
   let lastError: any;
   for (let attempt = 0; attempt < maxRetries; attempt++) {

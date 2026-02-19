@@ -278,6 +278,7 @@ export async function processScheduledJob(
             (jobConfig as any).customLabel4 = schedule.config?.customLabel4;
             (jobConfig as any).enableCustomLabel4 = schedule.config?.enableCustomLabel4 !== false; // default true for backward compat
             (jobConfig as any).customNumbers = schedule.config?.customNumbers;
+            (jobConfig as any).customLabels = schedule.config?.customLabels;
           }
         }
         

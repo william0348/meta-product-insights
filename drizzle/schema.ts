@@ -130,6 +130,7 @@ export const batchJobs = mysqlTable("batch_jobs", {
     catalogAccessToken?: string;
     dateRangeType?: string;
     customNumbers?: Record<string, string>;
+    customLabels?: Record<string, string>;
   }>().notNull(),
   
   // Progress tracking
@@ -256,6 +257,7 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
     updateToCatalog?: boolean;  // Whether to update to catalog after report generation
     catalogAccessToken?: string; // Catalog access token (if different from report token)
     customNumbers?: Record<string, string>;
+    customLabels?: Record<string, string>;
   }>().notNull(),
   
   // Multi-account configurations (array of report configs)

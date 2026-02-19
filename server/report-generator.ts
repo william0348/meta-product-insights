@@ -37,6 +37,8 @@ interface ReportConfig {
   enableCustomLabel4?: boolean;
   // Custom number fields (0-4)
   customNumbers?: Record<string, string>;
+  // Custom label fields (0-4)
+  customLabels?: Record<string, string>;
   // Schedule tracking
   scheduleId?: number;
   scheduleName?: string;
@@ -183,6 +185,7 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
     customLabel4: config.customLabel4,
     enableCustomLabel4: config.enableCustomLabel4,
     customNumbers: config.customNumbers,
+    customLabels: config.customLabels,
     scheduleRunId: config.scheduleRunId,
   };
 

@@ -692,6 +692,7 @@ export const appRouter = router({
           updateToCatalog: z.boolean().optional(),
           catalogAccessToken: z.string().optional(),
           customNumbers: z.record(z.string(), z.string()).optional(),
+          customLabels: z.record(z.string(), z.string()).optional(),
         }),
         // Multi-account configurations
         reportConfigs: z.array(z.object({
@@ -788,6 +789,7 @@ export const appRouter = router({
           updateToCatalog: z.boolean().optional(),
           catalogAccessToken: z.string().optional(),
           customNumbers: z.record(z.string(), z.string()).optional(),
+          customLabels: z.record(z.string(), z.string()).optional(),
         }).optional(),
         // Multi-account configurations
         reportConfigs: z.array(z.object({

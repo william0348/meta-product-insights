@@ -43,6 +43,11 @@ interface CustomNumberField {
   value: string;
 }
 
+interface CustomLabelField {
+  enabled: boolean;
+  value: string;
+}
+
 // Type for schedule form data
 interface ScheduleFormData {
   name: string;
@@ -74,11 +79,20 @@ const defaultCustomNumbers: CustomNumberField[] = [
   { enabled: false, value: '' },
 ];
 
+const defaultCustomLabels: CustomLabelField[] = [
+  { enabled: false, value: '' },
+  { enabled: false, value: '' },
+  { enabled: false, value: '' },
+  { enabled: false, value: '' },
+  { enabled: false, value: '' },
+];
+
 export default function ScheduledJobs() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
   const [formData, setFormData] = useState<ScheduleFormData>(defaultFormData);
   const [customNumbers, setCustomNumbers] = useState<CustomNumberField[]>(defaultCustomNumbers);
+  const [customLabels, setCustomLabels] = useState<CustomLabelField[]>(defaultCustomLabels);
   const [reportConfigs, setReportConfigs] = useState<ReportConfig[]>([
     { name: '', adAccountId: '', minSpend: '', minCTR: '' }
   ]);
@@ -136,6 +150,7 @@ export default function ScheduledJobs() {
   const resetForm = () => {
     setFormData(defaultFormData);
     setCustomNumbers(defaultCustomNumbers);
+    setCustomLabels(defaultCustomLabels);
     setReportConfigs([{ name: '', adAccountId: '', minSpend: '', minCTR: '' }]);
     setEditingScheduleId(null);
   };
@@ -183,6 +198,18 @@ export default function ScheduledJobs() {
       };
     });
     setCustomNumbers(newCustomNumbers);
+    
+    // Set custom labels
+    const configCustomLabels = schedule.config?.customLabels || {};
+    const newCustomLabels = defaultCustomLabels.map((_, index) => {
+      const key = `custom_label_${index}`;
+      const value = configCustomLabels[key];
+      return {
+        enabled: value !== undefined && value !== '',
+        value: value?.toString() || '',
+      };
+    });
+    setCustomLabels(newCustomLabels);
     
     // Set report configs
     if (schedule.reportConfigs && Array.isArray(schedule.reportConfigs) && schedule.reportConfigs.length > 0) {
@@ -288,6 +315,15 @@ export default function ScheduledJobs() {
         }
       });
       config.customNumbers = customNumbersConfig;
+      
+      // Add custom_label fields (0-4)
+      const customLabelsConfig: Record<string, string> = {};
+      customLabels.forEach((cl, index) => {
+        if (cl.enabled && cl.value.trim()) {
+          customLabelsConfig[`custom_label_${index}`] = cl.value.trim();
+        }
+      });
+      config.customLabels = customLabelsConfig;
     }
     
     if (editingScheduleId) {
@@ -573,6 +609,40 @@ export default function ScheduledJobs() {
                             setCustomNumbers(updated);
                           }}
                           disabled={!cn.enabled}
+                          className="flex-1"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Custom Label Fields (0-4) */}
+                <div className="space-y-3">
+                  <Label>Custom Label Fields</Label>
+                  <p className="text-xs text-muted-foreground">Enable and set values for custom_label_0 to custom_label_4</p>
+                  
+                  <div className="grid grid-cols-1 gap-2">
+                    {customLabels.map((cl, index) => (
+                      <div key={index} className="flex items-center gap-3 p-2 bg-background rounded border">
+                        <Switch
+                          checked={cl.enabled}
+                          onCheckedChange={(checked) => {
+                            const updated = [...customLabels];
+                            updated[index] = { ...updated[index], enabled: checked };
+                            setCustomLabels(updated);
+                          }}
+                        />
+                        <span className="text-sm font-mono w-32">custom_label_{index}</span>
+                        <Input
+                          type="text"
+                          placeholder="Label value"
+                          value={cl.value}
+                          onChange={(e) => {
+                            const updated = [...customLabels];
+                            updated[index] = { ...updated[index], value: e.target.value };
+                            setCustomLabels(updated);
+                          }}
+                          disabled={!cl.enabled}
                           className="flex-1"
                         />
                       </div>
