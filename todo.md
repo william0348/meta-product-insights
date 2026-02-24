@@ -494,3 +494,15 @@
 - [x] Update catalog.ts fetchProducts to include custom_label_0-3 fields
 - [x] Add Custom Label 0-4 toggle + input UI in ScheduledJobs page
 - [x] All 99 tests passing
+
+## Bug Fix - Job Stuck at 65% Timeout (Feb 24)
+- [x] Analyze Feb 19 failed run (65% stuck, 40m 23s duration)
+- [x] Check current running job (Feb 24) status
+- [x] Identify root cause: DB writes failing during retries, job-processor kills worker based on stale DB progress
+- [x] Fix 1: In-memory heartbeat tracking (workerHeartbeats Map) — worker updates on every retry/wait, independent of DB
+- [x] Fix 2: Job-processor checks in-memory heartbeat before killing stale jobs (5-min grace window)
+- [x] Fix 3: Increased STALE_PROGRESS_TIMEOUT from 25min to 35min
+- [x] Fix 4: Reduced AbortController timeout from 60s to 30s (faster failure detection, more retry attempts)
+- [x] Fix 5: Increased MAX_PAGE_RETRIES from 5 to 8 for more retry opportunities
+- [x] Fix 6: Clean up workerHeartbeats on job completion/timeout/failure
+- [ ] Test and verify fix in production (Run Now)

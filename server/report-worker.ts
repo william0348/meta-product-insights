@@ -32,12 +32,21 @@ import {
 } from "./catalog";
 import { nanoid } from "nanoid";
 
+// ─── In-Memory Heartbeat ──────────────────────────────────────────────────
+// This map is checked by job-processor.ts to detect worker liveness
+// even when DB writes fail. Updated on every retry/wait/progress.
+export const workerHeartbeats = new Map<number, number>(); // jobId -> timestamp
+
+function touchHeartbeat(jobId: number) {
+  workerHeartbeats.set(jobId, Date.now());
+}
+
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const GRAPH_API_VERSION = "v22.0";
 const FB_CATALOG_API_VERSION = "v24.0";
 const PAGE_SIZE = 1000;
-const MAX_PAGE_RETRIES = 5;
+const MAX_PAGE_RETRIES = 8;
 const MAX_REPORT_RETRIES = 2;
 const POLL_INTERVAL_MS = 5_000;
 const MAX_POLL_ATTEMPTS = 120; // ~10 minutes max
@@ -248,12 +257,13 @@ async function fetchInsightsData(
     let responseData: any = null;
     for (let retry = 0; retry <= MAX_PAGE_RETRIES; retry++) {
       try {
-        // Use AbortController with 60s hard timeout to prevent TCP-level hangs
+        // Use AbortController with 30s hard timeout to prevent TCP-level hangs
+        // Reduced from 60s — faster detection means more retries within the stale window
         const controller = new AbortController();
-        const abortTimer = setTimeout(() => controller.abort(), 60_000);
+        const abortTimer = setTimeout(() => controller.abort(), 30_000);
         try {
           const resp = await axios.get(url, {
-            timeout: 45_000,
+            timeout: 25_000,
             signal: controller.signal,
             headers: { "Accept-Encoding": "gzip, deflate" },
           });
@@ -514,6 +524,10 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
     breakdown = "product_id",
   } = config;
 
+  const numericJobId = typeof jobId === 'string' ? parseInt(jobId) : jobId;
+  // Register in-memory heartbeat so job-processor knows we're alive
+  touchHeartbeat(numericJobId);
+
   try {
     // ── Step 1: Create report run (with retry) ──
     let reportRunId: string = "";
@@ -597,6 +611,7 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
       reportRunId,
       accessToken,
       async (loaded) => {
+        touchHeartbeat(numericJobId); // Always update in-memory heartbeat
         const fetchPct = Math.min(Math.floor((loaded / estimatedTotal) * 40), 40);
         const totalPct = 50 + fetchPct; // 50-90%
         await updateBatchJob(jobId, {
@@ -606,14 +621,16 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
         });
       },
       // Heartbeat callback: updates statusMessage during retries/rate-limit waits
-      // so the Job Processor's stale-progress detector doesn't kill us
+      // Always updates in-memory heartbeat even if DB write fails
       async (heartbeatMsg) => {
+        touchHeartbeat(numericJobId); // Always update in-memory heartbeat
         try {
           await updateBatchJob(jobId, {
             statusMessage: heartbeatMsg,
           });
         } catch {
-          // Ignore DB errors in heartbeat — best effort
+          // DB write failed but in-memory heartbeat was updated — job processor won't kill us
+          console.log(`[ReportWorker] Heartbeat DB write failed (in-memory OK): ${heartbeatMsg}`);
         }
       },
     );
@@ -856,6 +873,9 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
       }
     }
 
+    // Clean up in-memory heartbeat
+    workerHeartbeats.delete(numericJobId);
+
     return {
       success: true,
       jobId,
@@ -879,6 +899,9 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
     } catch {
       // ignore
     }
+
+    // Clean up in-memory heartbeat
+    workerHeartbeats.delete(numericJobId);
 
     return { success: false, jobId, error: errorMsg };
   }

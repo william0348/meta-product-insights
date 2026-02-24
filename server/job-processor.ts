@@ -19,6 +19,7 @@ import {
 import { notifyOwner } from "./_core/notification";
 import { batchUpdateProducts, fetchProductsByRetailerIds, checkBatchRequestStatus } from "./catalog";
 import { processReportGenerationJob } from "./report-generator";
+import { workerHeartbeats } from "./report-worker";
 import { BatchJob } from "../drizzle/schema";
 
 // Job processor state
@@ -31,7 +32,7 @@ const MAX_CONCURRENT_JOBS = 1; // Process one job at a time to avoid rate limits
 const BATCH_SIZE = 3000; // Items per Facebook API request
 const CONCURRENT_BATCHES = 5; // Parallel batch requests
 const JOB_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes max for any job
-const STALE_PROGRESS_TIMEOUT_MS = 25 * 60 * 1000; // 25 minutes without progress update = stale (increased from 15 to accommodate rate limit waits)
+const STALE_PROGRESS_TIMEOUT_MS = 35 * 60 * 1000; // 35 minutes without progress update = stale (increased to accommodate rate limit waits + in-memory heartbeat fallback)
 
 // Track last known progress for stale detection
 // We track `progress`, `processedItems`, AND `statusMessage` to detect activity
@@ -124,10 +125,33 @@ async function processJobs(): Promise<void> {
       // Check for absolute timeout (60 minutes)
       const isAbsoluteTimeout = runningTime > JOB_TIMEOUT_MS;
       
-      // Check for stale progress (no progress change for 15 minutes)
+      // Check for stale progress (no DB-level progress change for STALE_PROGRESS_TIMEOUT_MS)
       const cachedEntry = jobProgressCache.get(job.id);
       const timeSinceLastProgress = cachedEntry ? Date.now() - cachedEntry.updatedAt : 0;
-      const isStaleProgress = cachedEntry && timeSinceLastProgress > STALE_PROGRESS_TIMEOUT_MS;
+      let isStaleProgress = cachedEntry && timeSinceLastProgress > STALE_PROGRESS_TIMEOUT_MS;
+
+      // CRITICAL: Also check in-memory heartbeat from the worker process.
+      // Even if DB writes fail, the worker updates workerHeartbeats on every retry/wait.
+      // If the in-memory heartbeat is recent (< 5 min), the worker is still alive — don't kill it.
+      if (isStaleProgress) {
+        const lastHeartbeat = workerHeartbeats.get(job.id);
+        if (lastHeartbeat) {
+          const timeSinceHeartbeat = Date.now() - lastHeartbeat;
+          if (timeSinceHeartbeat < 5 * 60 * 1000) {
+            // Worker is still alive (heartbeat within 5 min), don't kill
+            console.log(
+              `[JobProcessor] Job ${job.id} DB-stale for ${Math.round(timeSinceLastProgress / 60000)}min ` +
+              `but in-memory heartbeat ${Math.round(timeSinceHeartbeat / 1000)}s ago — keeping alive`,
+            );
+            isStaleProgress = false;
+          } else {
+            console.log(
+              `[JobProcessor] Job ${job.id} both DB-stale (${Math.round(timeSinceLastProgress / 60000)}min) ` +
+              `and in-memory heartbeat stale (${Math.round(timeSinceHeartbeat / 60000)}min) — will timeout`,
+            );
+          }
+        }
+      }
       
       if (isAbsoluteTimeout || isStaleProgress) {
         const reason = isAbsoluteTimeout 
@@ -169,8 +193,9 @@ async function processJobs(): Promise<void> {
           }
         }
         
-        // Clean up progress cache
+        // Clean up progress cache and in-memory heartbeat
         jobProgressCache.delete(job.id);
+        workerHeartbeats.delete(job.id);
       }
     }
 
