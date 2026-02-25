@@ -32,7 +32,7 @@ const MAX_CONCURRENT_JOBS = 1; // Process one job at a time to avoid rate limits
 const BATCH_SIZE = 3000; // Items per Facebook API request
 const CONCURRENT_BATCHES = 5; // Parallel batch requests
 const JOB_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes max for any job
-const STALE_PROGRESS_TIMEOUT_MS = 35 * 60 * 1000; // 35 minutes without progress update = stale (increased to accommodate rate limit waits + in-memory heartbeat fallback)
+const STALE_PROGRESS_TIMEOUT_MS = 45 * 60 * 1000; // 45 minutes without progress update = stale (allows for mega retries: 3 × 6min = 18min extra)
 
 // Track last known progress for stale detection
 // We track `progress`, `processedItems`, AND `statusMessage` to detect activity

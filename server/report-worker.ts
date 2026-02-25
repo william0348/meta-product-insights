@@ -47,6 +47,8 @@ const GRAPH_API_VERSION = "v22.0";
 const FB_CATALOG_API_VERSION = "v24.0";
 const PAGE_SIZE = 1000;
 const MAX_PAGE_RETRIES = 8;
+const MAX_MEGA_RETRIES = 3;   // After exhausting per-page retries, wait & retry the whole page
+const MEGA_RETRY_DELAY_MS = 120_000; // 2 minutes between mega retries
 const MAX_REPORT_RETRIES = 2;
 const POLL_INTERVAL_MS = 5_000;
 const MAX_POLL_ATTEMPTS = 120; // ~10 minutes max
@@ -253,101 +255,150 @@ async function fetchInsightsData(
       `?access_token=${accessToken}&limit=${PAGE_SIZE}`;
     if (after) url += `&after=${after}`;
 
-    // Per-page retry with AbortController to prevent hanging requests
+    // ── Mega Retry Loop ──────────────────────────────────────────────
+    // If all per-page retries fail, wait 2 min and try the entire page
+    // again from scratch. This handles prolonged Facebook API outages
+    // or rate limit windows that exceed the per-page retry budget.
     let responseData: any = null;
-    for (let retry = 0; retry <= MAX_PAGE_RETRIES; retry++) {
-      try {
-        // Use AbortController with 30s hard timeout to prevent TCP-level hangs
-        // Reduced from 60s — faster detection means more retries within the stale window
-        const controller = new AbortController();
-        const abortTimer = setTimeout(() => controller.abort(), 30_000);
-        try {
-          const resp = await axios.get(url, {
-            timeout: 25_000,
-            signal: controller.signal,
-            headers: { "Accept-Encoding": "gzip, deflate" },
-          });
-          responseData = resp.data;
+    let megaRetryCount = 0;
 
-          // Check Facebook rate limit headers
-          const usageHeader = resp.headers?.['x-business-use-case-usage'] || resp.headers?.['x-app-usage'];
-          if (usageHeader) {
-            try {
-              const usage = typeof usageHeader === 'string' ? JSON.parse(usageHeader) : usageHeader;
-              // Check if any account is near the rate limit
-              const values = Object.values(usage) as any[];
-              for (const val of values) {
-                const entries = Array.isArray(val) ? val : [val];
-                for (const entry of entries) {
-                  const callPct = entry.call_count ?? entry.total_cputime ?? 0;
-                  if (callPct > 75) {
-                    const waitSec = Math.min(Math.ceil(callPct / 10) * 5, 120);
-                    console.log(
-                      `[ReportWorker] Rate limit approaching (${callPct}%), waiting ${waitSec}s…`,
-                    );
-                    if (onHeartbeat) await onHeartbeat(`Rate limit cooldown (${callPct}%)…`);
-                    await sleep(waitSec * 1000);
+    while (megaRetryCount <= MAX_MEGA_RETRIES) {
+      let pageSuccess = false;
+
+      // ── Per-page retry loop ──────────────────────────────────────
+      for (let retry = 0; retry <= MAX_PAGE_RETRIES; retry++) {
+        try {
+          // Use AbortController with 30s hard timeout to prevent TCP-level hangs
+          const controller = new AbortController();
+          const abortTimer = setTimeout(() => controller.abort(), 30_000);
+          try {
+            const resp = await axios.get(url, {
+              timeout: 25_000,
+              signal: controller.signal,
+              headers: { "Accept-Encoding": "gzip, deflate" },
+            });
+            responseData = resp.data;
+
+            // Check Facebook rate limit headers
+            const usageHeader = resp.headers?.['x-business-use-case-usage'] || resp.headers?.['x-app-usage'];
+            if (usageHeader) {
+              try {
+                const usage = typeof usageHeader === 'string' ? JSON.parse(usageHeader) : usageHeader;
+                const values = Object.values(usage) as any[];
+                for (const val of values) {
+                  const entries = Array.isArray(val) ? val : [val];
+                  for (const entry of entries) {
+                    const callPct = entry.call_count ?? entry.total_cputime ?? 0;
+                    if (callPct > 75) {
+                      const waitSec = Math.min(Math.ceil(callPct / 10) * 5, 120);
+                      console.log(
+                        `[ReportWorker] Rate limit approaching (${callPct}%), waiting ${waitSec}s…`,
+                      );
+                      if (onHeartbeat) await onHeartbeat(`Rate limit cooldown (${callPct}%)…`);
+                      await sleep(waitSec * 1000);
+                    }
                   }
                 }
-              }
-            } catch { /* ignore parse errors */ }
+              } catch { /* ignore parse errors */ }
+            }
+          } finally {
+            clearTimeout(abortTimer);
           }
-        } finally {
-          clearTimeout(abortTimer);
-        }
-      } catch (err: any) {
-        const errDetail = err.code || err.message || 'unknown';
-        // Send heartbeat during retries so Job Processor knows we're still alive
-        if (onHeartbeat) {
-          await onHeartbeat(`Page ${pageCount + 1} retry ${retry + 1}/${MAX_PAGE_RETRIES}: ${errDetail}`);
-        }
-        if (retry < MAX_PAGE_RETRIES) {
-          // Use longer backoff for later retries (up to ~64s)
-          const delay = Math.min(2 ** retry * 2_000, 64_000);
-          console.log(
-            `[ReportWorker] Page ${pageCount + 1} fetch failed (${errDetail}), ` +
-              `retrying in ${delay / 1000}s… (${retry + 1}/${MAX_PAGE_RETRIES})`,
-          );
-          await sleep(delay);
-          continue;
-        }
-        throw err;
-      }
-
-      // API-level errors (Facebook returns 200 with error body)
-      if (responseData?.error) {
-        const errMsg = responseData.error.message || "Failed to fetch insights";
-        const errCode = responseData.error.code ?? 0;
-        const isTransient =
-          [1, 2, 4, 17, 32, 80004, 190, 368].includes(errCode) ||
-          /unknown|temporarily|rate|throttl/i.test(errMsg);
-
-        if (isTransient && retry < MAX_PAGE_RETRIES) {
-          // Rate limit errors need longer backoff
-          const isRateLimit = errCode === 80004 || errCode === 4 || errCode === 32 || /rate|throttl/i.test(errMsg);
-          const delay = isRateLimit
-            ? Math.min(2 ** retry * 30_000, 300_000) // 30s, 60s, 120s, 240s, 300s for rate limits
-            : Math.min(2 ** retry * 3_000, 60_000);  // 3s, 6s, 12s, 24s, 48s for other transient
-          console.log(
-            `[ReportWorker] Page ${pageCount + 1} API error code=${errCode} (${errMsg}), ` +
-              `retrying in ${delay / 1000}s… (${retry + 1}/${MAX_PAGE_RETRIES})`,
-          );
+        } catch (err: any) {
+          const errDetail = err.code || err.message || 'unknown';
           if (onHeartbeat) {
-            await onHeartbeat(`API error on page ${pageCount + 1}, retrying in ${delay / 1000}s…`);
+            await onHeartbeat(`Page ${pageCount + 1} retry ${retry + 1}/${MAX_PAGE_RETRIES}: ${errDetail}`);
           }
-          await sleep(delay);
-          responseData = null;
-          continue;
+          if (retry < MAX_PAGE_RETRIES) {
+            const delay = Math.min(2 ** retry * 2_000, 64_000);
+            console.log(
+              `[ReportWorker] Page ${pageCount + 1} fetch failed (${errDetail}), ` +
+                `retrying in ${delay / 1000}s… (${retry + 1}/${MAX_PAGE_RETRIES})`,
+            );
+            await sleep(delay);
+            continue;
+          }
+          // All per-page retries exhausted — fall through to mega retry
+          break;
         }
-        throw new Error(errMsg);
+
+        // API-level errors (Facebook returns 200 with error body)
+        if (responseData?.error) {
+          const errMsg = responseData.error.message || "Failed to fetch insights";
+          const errCode = responseData.error.code ?? 0;
+          const isTransient =
+            [1, 2, 4, 17, 32, 80004, 190, 368].includes(errCode) ||
+            /unknown|temporarily|rate|throttl/i.test(errMsg);
+
+          if (isTransient && retry < MAX_PAGE_RETRIES) {
+            const isRateLimit = errCode === 80004 || errCode === 4 || errCode === 32 || /rate|throttl/i.test(errMsg);
+            const delay = isRateLimit
+              ? Math.min(2 ** retry * 30_000, 300_000)
+              : Math.min(2 ** retry * 3_000, 60_000);
+            console.log(
+              `[ReportWorker] Page ${pageCount + 1} API error code=${errCode} (${errMsg}), ` +
+                `retrying in ${delay / 1000}s… (${retry + 1}/${MAX_PAGE_RETRIES})`,
+            );
+            if (onHeartbeat) {
+              await onHeartbeat(`API error on page ${pageCount + 1}, retrying in ${delay / 1000}s…`);
+            }
+            await sleep(delay);
+            responseData = null;
+            continue;
+          }
+          // Non-transient or exhausted retries — fall through to mega retry
+          responseData = null;
+          break;
+        }
+
+        pageSuccess = true;
+        break; // success
+      }
+      // ── End per-page retry loop ────────────────────────────────────
+
+      if (pageSuccess && responseData) {
+        break; // Got data, exit mega retry loop
       }
 
-      break; // success
+      // Per-page retries exhausted — attempt mega retry
+      if (megaRetryCount < MAX_MEGA_RETRIES) {
+        megaRetryCount++;
+        const megaDelay = MEGA_RETRY_DELAY_MS * megaRetryCount; // 2min, 4min, 6min
+        console.log(
+          `[ReportWorker] Page ${pageCount + 1}: all ${MAX_PAGE_RETRIES} retries exhausted. ` +
+            `Mega retry ${megaRetryCount}/${MAX_MEGA_RETRIES} in ${megaDelay / 1000}s…`,
+        );
+        if (onHeartbeat) {
+          await onHeartbeat(
+            `Page ${pageCount + 1}: extended cooldown ${megaDelay / 1000}s (mega retry ${megaRetryCount}/${MAX_MEGA_RETRIES})`,
+          );
+        }
+        // Send heartbeat every 30s during the long wait
+        const intervals = Math.floor(megaDelay / 30_000);
+        for (let i = 0; i < intervals; i++) {
+          await sleep(30_000);
+          if (onHeartbeat) {
+            await onHeartbeat(
+              `Page ${pageCount + 1}: waiting… (${(i + 1) * 30}s / ${megaDelay / 1000}s)`,
+            );
+          }
+        }
+        const remainder = megaDelay % 30_000;
+        if (remainder > 0) await sleep(remainder);
+        responseData = null;
+        continue; // Retry the whole page
+      }
+
+      // All mega retries exhausted
+      throw new Error(
+        `Failed to fetch page ${pageCount + 1} after ${MAX_PAGE_RETRIES} retries × ${MAX_MEGA_RETRIES} mega retries`,
+      );
     }
+    // ── End Mega Retry Loop ──────────────────────────────────────────
 
     if (!responseData) {
       throw new Error(
-        `Failed to fetch insights page after ${MAX_PAGE_RETRIES} retries`,
+        `Failed to fetch insights page ${pageCount + 1} after all retries`,
       );
     }
 

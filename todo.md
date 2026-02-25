@@ -523,3 +523,10 @@
 - [x] Set up Manus cron task every Monday 07:00 UTC+8 to trigger schedule Run Now
 - [x] Monitor job status until completion or failure
 - [x] Report results back to user
+
+## Bug Fix - Deeper Pagination Reliability (Feb 25)
+- [x] Implement "mega retry" loop: after exhausting 8 per-page retries, wait 2-6 min then retry the whole page again (up to 3 mega retries)
+- [x] Update heartbeat every 30s during mega retry wait so job-processor doesn't kill the job
+- [x] Update DB progress message during mega retries so user sees what's happening
+- [x] Increased STALE_PROGRESS_TIMEOUT from 35min to 45min to accommodate mega retries
+- [x] All 99 tests passing
