@@ -68,13 +68,17 @@ async function startServer() {
   server.listen(finalPort, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${finalPort}/`);
     
-    // Start the background job processor after server is ready
-    // This runs in the same process and will continue processing jobs
-    // even if the browser is closed
-    startJobProcessor();
-    
-    // Start the scheduler for recurring tasks (weekly reports, etc.)
-    startScheduler();
+    // Start the background job processor and scheduler ONLY in production.
+    // In development (tsx watch), file changes trigger hot-reload which kills
+    // running worker processes mid-job, leaving jobs orphaned in 'running' state.
+    // Since dev and production share the same database, the dev server's scheduler
+    // can steal jobs from production, then tsx restarts kill them → timeout failures.
+    if (process.env.NODE_ENV !== "development") {
+      startJobProcessor();
+      startScheduler();
+    } else {
+      console.log("[Dev] Scheduler & JobProcessor disabled in development mode to avoid conflicts with production");
+    }
   });
 }
 

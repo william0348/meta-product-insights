@@ -506,3 +506,20 @@
 - [x] Fix 5: Increased MAX_PAGE_RETRIES from 5 to 8 for more retry opportunities
 - [x] Fix 6: Clean up workerHeartbeats on job completion/timeout/failure
 - [ ] Test and verify fix in production (Run Now)
+
+## Bug Fix - Auto Schedule Still Fails (Feb 24 16:02)
+- [x] Investigate why auto-scheduled job fails but manual Run Now succeeds
+- [x] Query recent schedule_runs and batch_jobs for Feb 24 auto run
+- [x] Compare auto vs manual trigger differences
+- [x] Root cause: Dev server (sandbox) tsx hot-reload killed worker mid-job
+- [x] Dev server log confirms: Page 1 fetched at 08:05:00, tsx restart at 08:05:07 (file change detected)
+- [x] Both dev server and production server share same DB, both run scheduler/job-processor
+- [x] Dev server's scheduler picked up the auto job, tsx killed it during data fetch
+- [x] Fix: Disabled scheduler & job processor in development mode (NODE_ENV=development)
+- [x] Production server continues to run scheduler & job processor normally
+- [x] All 99 tests passing
+
+## Feature - Weekly Manus Scheduled Task for Report Monitoring
+- [x] Set up Manus cron task every Monday 07:00 UTC+8 to trigger schedule Run Now
+- [x] Monitor job status until completion or failure
+- [x] Report results back to user
