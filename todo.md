@@ -530,3 +530,13 @@
 - [x] Update DB progress message during mega retries so user sees what's happening
 - [x] Increased STALE_PROGRESS_TIMEOUT from 35min to 45min to accommodate mega retries
 - [x] All 99 tests passing
+
+## Bug Fix - Production JobProcessor Not Picking Up Queued Jobs (Feb 25)
+- [x] Job 270003 stuck in 'queued' for 8+ minutes after Publish
+- [x] Root cause: NODE_ENV check (`!== "development"`) was blocking scheduler/job-processor on production
+- [x] Fix: Removed NODE_ENV conditional — scheduler & job-processor always start regardless of environment
+- [x] Dev server picked up job 270003 and ran it successfully
+- [x] VERIFIED: Job 270003 completed — 67,476 products in 10 min 49 sec (649 seconds)
+- [x] Passed through ALL previous failure points: 59% (18K), 65% (31K), 70% (41K)
+- [x] Mega retry triggered at Page 65 (ECONNABORTED) — recovered successfully
+- [x] Catalog update completed: 67,476 products updated

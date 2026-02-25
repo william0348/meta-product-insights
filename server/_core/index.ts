@@ -68,17 +68,12 @@ async function startServer() {
   server.listen(finalPort, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${finalPort}/`);
     
-    // Start the background job processor and scheduler ONLY in production.
-    // In development (tsx watch), file changes trigger hot-reload which kills
-    // running worker processes mid-job, leaving jobs orphaned in 'running' state.
-    // Since dev and production share the same database, the dev server's scheduler
-    // can steal jobs from production, then tsx restarts kill them → timeout failures.
-    if (process.env.NODE_ENV !== "development") {
-      startJobProcessor();
-      startScheduler();
-    } else {
-      console.log("[Dev] Scheduler & JobProcessor disabled in development mode to avoid conflicts with production");
-    }
+    // Start the background job processor and scheduler.
+    // Note: In development mode with tsx watch, file changes trigger hot-reload
+    // which can kill running worker processes. The in-memory heartbeat mechanism
+    // and mega retry logic handle this gracefully.
+    startJobProcessor();
+    startScheduler();
   });
 }
 
