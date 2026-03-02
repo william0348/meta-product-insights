@@ -540,3 +540,15 @@
 - [x] Passed through ALL previous failure points: 59% (18K), 65% (31K), 70% (41K)
 - [x] Mega retry triggered at Page 65 (ECONNABORTED) — recovered successfully
 - [x] Catalog update completed: 67,476 products updated
+
+## Feature - Manus Agent API for Schedule Execution
+- [x] Create public REST API endpoints for Manus Agent
+- [x] GET /api/agent/schedules — List all enabled schedules
+- [x] POST /api/agent/trigger/:scheduleId — Trigger Run Now
+- [x] GET /api/agent/status/:runId — Check run status with job details
+- [x] GET /api/agent/latest/:scheduleId — Get latest run for a schedule
+- [x] Secure with Bearer token auth (AGENT_API_KEY env var)
+- [x] 13 unit tests passing (agent-api.test.ts)
+- [x] Live API verified on dev server
+- [x] All 112 tests passing
+- [ ] Set up Manus scheduled task to call the API weekly

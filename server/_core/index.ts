@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startJobProcessor } from "../job-processor";
 import { startScheduler } from "../scheduler";
+import { agentRouter } from "../agent-api";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,6 +38,9 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  // Agent API (for Manus Agent external access)
+  app.use("/api/agent", agentRouter);
+
   // tRPC API
   app.use(
     "/api/trpc",
