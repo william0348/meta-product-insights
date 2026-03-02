@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory, createBatchJob, getBatchJob, getBatchJobsByUser, updateBatchJob, createSavedReport, getSavedReport, getSavedReportsByUser, deleteSavedReport, createScheduledJob, getScheduledJob, getScheduledJobsByUser, updateScheduledJob, deleteScheduledJob, getScheduleRunsByScheduleId, getScheduleRun, getScheduleRunsByUser } from "./db";
+import { saveUserToken, getUserToken, deleteUserToken, createBatchHistoryRecord, updateBatchHistoryRecord, getBatchHistoryByUser, getBatchHistoryByCatalog, getAllBatchHistory, createBatchJob, getBatchJob, getBatchJobsByUser, updateBatchJob, createSavedReport, getSavedReport, getSavedReportsByUser, deleteSavedReport, createScheduledJob, getScheduledJob, getScheduledJobsByUser, updateScheduledJob, deleteScheduledJob, getScheduleRunsByScheduleId, getScheduleRun, getScheduleRunsByUser, updateScheduleRun } from "./db";
 import { z } from "zod";
 import axios from "axios";
 import { fetchProductsByRetailerIds, batchUpdateProducts, checkBatchRequestStatus, BatchRequestItem } from "./catalog";
@@ -873,6 +873,56 @@ export const appRouter = router({
         await processScheduledJob(schedule, 'manual');
         
         console.log(`[Schedules] Manual run triggered for schedule ${input.scheduleId}`);
+        
+        return { success: true };
+      }),
+    
+    // Cancel a running job
+    cancelJob: protectedProcedure
+      .input(z.object({
+        jobId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const job = await getBatchJob(input.jobId);
+        
+        if (!job) {
+          throw new Error('Job not found');
+        }
+        
+        if (job.userId !== ctx.user.id) {
+          throw new Error('Access denied');
+        }
+        
+        if (job.status !== 'running' && job.status !== 'queued') {
+          throw new Error(`Cannot cancel job with status: ${job.status}`);
+        }
+        
+        // Mark job as failed/cancelled
+        await updateBatchJob(input.jobId, {
+          status: 'failed',
+          statusMessage: 'Cancelled by user',
+          completedAt: new Date(),
+        });
+        
+        // Also update the associated schedule_run if exists
+        const scheduleRunId = job.config?.scheduleRunId;
+        if (scheduleRunId) {
+          try {
+            const run = await getScheduleRun(scheduleRunId);
+            if (run && run.status === 'running') {
+              await updateScheduleRun(scheduleRunId, {
+                status: 'failed',
+                errorMessage: 'Cancelled by user',
+                completedAt: new Date(),
+                durationMs: Date.now() - run.startedAt.getTime(),
+              });
+            }
+          } catch (err) {
+            console.warn('[Schedules] Failed to update schedule run after cancel:', err);
+          }
+        }
+        
+        console.log(`[Schedules] Job ${input.jobId} cancelled by user ${ctx.user.id}`);
         
         return { success: true };
       }),

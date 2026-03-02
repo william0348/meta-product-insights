@@ -18,6 +18,8 @@ import {
   getScheduleRun, 
   getBatchJob,
   getScheduleRunsByScheduleId,
+  updateBatchJob,
+  updateScheduleRun,
 } from "./db";
 import { processScheduledJob } from "./scheduler";
 
@@ -248,6 +250,65 @@ agentRouter.get("/latest/:scheduleId", async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("[AgentAPI] Error getting latest run:", error.message);
     res.status(500).json({ error: "Failed to get latest run", details: error.message });
+  }
+});
+
+// --- POST /api/agent/cancel/:jobId ---
+// Cancel a running or queued job
+agentRouter.post("/cancel/:jobId", async (req: Request, res: Response) => {
+  try {
+    const jobId = parseInt(req.params.jobId, 10);
+    if (isNaN(jobId)) {
+      res.status(400).json({ error: "Invalid jobId" });
+      return;
+    }
+
+    const job = await getBatchJob(jobId);
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+
+    if (job.status !== "running" && job.status !== "queued") {
+      res.status(400).json({ error: `Cannot cancel job with status: ${job.status}` });
+      return;
+    }
+
+    // Mark job as cancelled
+    await updateBatchJob(jobId, {
+      status: "failed",
+      statusMessage: "Cancelled via Agent API",
+      completedAt: new Date(),
+    });
+
+    // Also update the associated schedule_run if exists
+    const scheduleRunId = job.config?.scheduleRunId;
+    if (scheduleRunId) {
+      try {
+        const run = await getScheduleRun(scheduleRunId);
+        if (run && run.status === "running") {
+          await updateScheduleRun(scheduleRunId, {
+            status: "failed",
+            errorMessage: "Cancelled via Agent API",
+            completedAt: new Date(),
+            durationMs: Date.now() - run.startedAt.getTime(),
+          });
+        }
+      } catch (err) {
+        console.warn("[AgentAPI] Failed to update schedule run after cancel:", err);
+      }
+    }
+
+    console.log(`[AgentAPI] Job ${jobId} cancelled`);
+
+    res.json({
+      success: true,
+      message: `Job ${jobId} cancelled successfully`,
+      jobId,
+    });
+  } catch (error: any) {
+    console.error("[AgentAPI] Error cancelling job:", error.message);
+    res.status(500).json({ error: "Failed to cancel job", details: error.message });
   }
 });
 

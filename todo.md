@@ -569,3 +569,10 @@
 - [x] Root cause: JOB_TIMEOUT_MS was 60 minutes — too short when Facebook API rate limits cause extended retries
 - [x] Fix: Increased JOB_TIMEOUT_MS from 60 to 90 minutes
 - [x] All 112 tests passing
+
+## Feature - Cancel Job Button (Mar 2)
+- [x] Add cancelJob tRPC endpoint (protectedProcedure) to mark running job as cancelled
+- [x] Add cancel endpoint to Agent API (POST /api/agent/cancel/:jobId)
+- [x] Add Cancel button to Reports page for running jobs
+- [x] Make report-worker check cancellation status during pagination loop
+- [x] Test and verify - 112 tests passing, TypeScript clean

@@ -24,6 +24,7 @@ import {
   updateBatchHistoryRecord,
   getScheduleRun,
   updateScheduleRun,
+  getBatchJob,
 } from "./db";
 import {
   batchUpdateProducts,
@@ -244,12 +245,21 @@ async function fetchInsightsData(
   accessToken: string,
   onProgress?: (loaded: number) => Promise<void>,
   onHeartbeat?: (message: string) => Promise<void>,
+  checkCancelled?: () => Promise<boolean>,
 ): Promise<any[]> {
   const allData: any[] = [];
   let after: string | null = null;
   let pageCount = 0;
 
   while (true) {
+    // Check if job was cancelled by user
+    if (checkCancelled) {
+      const cancelled = await checkCancelled();
+      if (cancelled) {
+        console.log(`[ReportWorker] Job cancelled by user during data fetch at page ${pageCount + 1} (${allData.length} records fetched)`);
+        throw new Error('Job cancelled by user');
+      }
+    }
     let url =
       `https://graph.facebook.com/${GRAPH_API_VERSION}/${reportRunId}/insights` +
       `?access_token=${accessToken}&limit=${PAGE_SIZE}`;
@@ -684,6 +694,15 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
           console.log(`[ReportWorker] Heartbeat DB write failed (in-memory OK): ${heartbeatMsg}`);
         }
       },
+      // Cancellation check: queries DB to see if job was cancelled by user
+      async () => {
+        try {
+          const currentJob = await getBatchJob(numericJobId);
+          return currentJob?.status === 'failed' && (currentJob?.statusMessage === 'Cancelled by user' || currentJob?.statusMessage === 'Cancelled via Agent API');
+        } catch {
+          return false; // If DB check fails, don't cancel — let the job continue
+        }
+      },
     );
 
     // ── Step 4: Map data ──
@@ -939,16 +958,31 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
     };
   } catch (error: any) {
     const errorMsg = String(error.message || "Unknown error").substring(0, 500);
-    console.error(`[ReportWorker] Job ${jobId} failed: ${errorMsg}`);
+    const isCancelled = errorMsg.includes('Job cancelled by user') || errorMsg.includes('Cancelled via Agent API');
+    console.error(`[ReportWorker] Job ${jobId} ${isCancelled ? 'cancelled' : 'failed'}: ${errorMsg}`);
 
-    // Update saved report as failed
+    // Update saved report as failed (but don't overwrite cancel status on the batch job)
     try {
       await updateSavedReport(reportId, {
         status: "failed",
-        errorMessage: errorMsg,
+        errorMessage: isCancelled ? 'Cancelled by user' : errorMsg,
       });
     } catch {
       // ignore
+    }
+
+    // If cancelled, the batch job status was already set by the cancel endpoint.
+    // Don't overwrite it. Only update if it's a real failure.
+    if (!isCancelled) {
+      try {
+        await updateBatchJob(jobId, {
+          status: 'failed',
+          statusMessage: errorMsg,
+          completedAt: new Date(),
+        });
+      } catch {
+        // ignore
+      }
     }
 
     // Clean up in-memory heartbeat

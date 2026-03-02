@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   Wifi,
   Ban,
+  StopCircle,
   FileText,
   Search,
   ChevronDown,
@@ -36,6 +37,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
 
 /**
  * Unified Reports & History page.
@@ -83,6 +85,30 @@ export default function ScheduleHistory() {
     { enabled: viewingReportId !== null }
   );
   
+  // ── Cancel mutation ──
+  const [cancellingJobId, setCancellingJobId] = useState<number | null>(null);
+  const utils = trpc.useUtils();
+  const cancelJobMutation = trpc.schedules.cancelJob.useMutation({
+    onSuccess: () => {
+      toast.success('Job cancelled successfully');
+      setCancellingJobId(null);
+      // Invalidate queries to refresh the list
+      utils.schedules.getAllHistory.invalidate();
+      utils.schedules.getHistory.invalidate();
+      if (selectedRunId) utils.schedules.getRunDetail.invalidate({ runId: selectedRunId });
+    },
+    onError: (err) => {
+      toast.error(`Failed to cancel job: ${err.message}`);
+      setCancellingJobId(null);
+    },
+  });
+
+  const handleCancelJob = (jobId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setCancellingJobId(jobId);
+    cancelJobMutation.mutate({ jobId });
+  };
+
   // ── Catalog Operations query ──
   const { data: batchData, isLoading: isLoadingBatch } = trpc.batchHistory.getMyHistory.useQuery(
     { limit: 100 },
@@ -364,7 +390,7 @@ export default function ScheduleHistory() {
                     ) : (
                       <div className="divide-y divide-border">
                         {filteredRuns.map((run) => (
-                          <button
+                          <div
                             key={run.id}
                             className="w-full text-left px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
                             onClick={() => { setSelectedRunId(run.id); setDialogTab('overview'); setViewingReportId(null); }}
@@ -447,7 +473,27 @@ export default function ScheduleHistory() {
                                 {run.errorMessage}
                               </div>
                             )}
-                          </button>
+
+                            {/* Cancel button for running jobs */}
+                            {run.status === 'running' && run.jobIds && run.jobIds.length > 0 && (
+                              <div className="mt-3 flex justify-end">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                                  disabled={cancellingJobId !== null}
+                                  onClick={(e) => handleCancelJob(run.jobIds![0], e)}
+                                >
+                                  {cancellingJobId === run.jobIds![0] ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <StopCircle className="w-3 h-3" />
+                                  )}
+                                  Cancel Job
+                                </Button>
+                              </div>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}
@@ -697,6 +743,25 @@ export default function ScheduleHistory() {
             <DialogTitle className="flex items-center gap-2">
               Run Detail
               {runDetailData?.run && getStatusBadge(runDetailData.run.status)}
+              {runDetailData?.run?.status === 'running' && runDetailData?.jobDetails && runDetailData.jobDetails.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto h-7 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                  disabled={cancellingJobId !== null}
+                  onClick={() => {
+                    const runningJob = runDetailData.jobDetails?.find(j => j.status === 'running') || runDetailData.jobDetails?.[0];
+                    if (runningJob) handleCancelJob(runningJob.id);
+                  }}
+                >
+                  {cancellingJobId !== null ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <StopCircle className="w-3 h-3" />
+                  )}
+                  Cancel
+                </Button>
+              )}
             </DialogTitle>
           </DialogHeader>
           
