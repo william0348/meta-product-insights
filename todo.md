@@ -552,3 +552,20 @@
 - [x] Live API verified on dev server
 - [x] All 112 tests passing
 - [ ] Set up Manus scheduled task to call the API weekly
+
+## Bug Fix - Agent API OAuth Bypass (Mar 2)
+- [x] Agent API returns HTML login page instead of JSON on production — SPA catch-all in vite.ts intercepts /api/agent/* requests
+- [x] Fix: Added /api/* exclusion to both setupVite and serveStatic catch-all routes in vite.ts
+- [x] Verified: Agent API returns JSON with proper API key auth, no browser login needed
+- [ ] Test and save checkpoint
+
+## Bug Fix - Agent API OAuth Bypass (Mar 2)
+- [x] Agent API returns HTML login page instead of JSON on production — SPA catch-all in vite.ts intercepts /api/agent/* requests
+- [x] Fix: Added /api/* exclusion to both setupVite and serveStatic catch-all routes in vite.ts
+- [x] Verified: Agent API returns JSON with proper API key auth, no browser login needed
+
+## Bug Fix - Job Absolute Timeout 60 Minutes (Mar 2)
+- [x] Latest scheduled job 330001 failed at 70% / 41K records: "absolute timeout after 60 minutes"
+- [x] Root cause: JOB_TIMEOUT_MS was 60 minutes — too short when Facebook API rate limits cause extended retries
+- [x] Fix: Increased JOB_TIMEOUT_MS from 60 to 90 minutes
+- [x] All 112 tests passing
