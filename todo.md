@@ -576,3 +576,9 @@
 - [x] Add Cancel button to Reports page for running jobs
 - [x] Make report-worker check cancellation status during pagination loop
 - [x] Test and verify - 112 tests passing, TypeScript clean
+
+## Bug Fix - Report State Lost on Navigation (Mar 3)
+- [x] Running report state (progress, data, job status) disappears when navigating away from Home page and coming back
+- [x] Persist report state across navigation using React Context (ReportProvider) at App level
+- [x] Poll interval ref persists in context so polling continues during navigation
+- [x] All 112 tests passing, TypeScript clean

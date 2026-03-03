@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { ReportProvider } from "./contexts/ReportContext";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import ScheduledJobs from "./pages/ScheduledJobs";
@@ -41,7 +42,9 @@ function App() {
       >
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <ReportProvider>
+            <Router />
+          </ReportProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
