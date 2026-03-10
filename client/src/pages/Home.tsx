@@ -12,7 +12,7 @@ import { BackgroundJobProgress } from '@/components/BackgroundJobProgress';
 import { trpc } from '@/lib/trpc';
 import { useReportState } from '@/contexts/ReportContext';
 
-import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, FileText, Calendar } from 'lucide-react';
+import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, FileText, Calendar, BookOpen } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -427,6 +427,15 @@ export default function Home() {
             >
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">Settings</span>
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setLocation('/help')}
+              className="gap-2"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">Guide</span>
             </Button>
           </div>
         </div>

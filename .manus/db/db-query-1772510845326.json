@@ -1,0 +1,55 @@
+{
+  "query": "SELECT id, jobType, status, totalItems, processedItems, successCount, errorCount, \n       JSON_EXTRACT(config, '$.customNumberField') as customNumberField,\n       JSON_EXTRACT(config, '$.customNumberValue') as customNumberValue,\n       JSON_EXTRACT(config, '$.customLabel4') as customLabel4,\n       JSON_EXTRACT(config, '$.catalogId') as catalogId,\n       JSON_EXTRACT(config, '$.updateCriteria.description') as updateDescription,\n       createdAt\nFROM batch_jobs \nWHERE jobType = 'catalog_update' \nORDER BY createdAt DESC \nLIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SELECT id, jobType, status, totalItems, processedItems, successCount, errorCount, \n       JSON_EXTRACT(config, '$.customNumberField') as customNumberField,\n       JSON_EXTRACT(config, '$.customNumberValue') as customNumberValue,\n       JSON_EXTRACT(config, '$.customLabel4') as customLabel4,\n       JSON_EXTRACT(config, '$.catalogId') as catalogId,\n       JSON_EXTRACT(config, '$.updateCriteria.description') as updateDescription,\n       createdAt\nFROM batch_jobs \nWHERE jobType = 'catalog_update' \nORDER BY createdAt DESC \nLIMIT 20;",
+  "rows": [
+    {
+      "id": "240002",
+      "jobType": "catalog_update",
+      "status": "failed",
+      "totalItems": "156375",
+      "processedItems": "15000",
+      "successCount": "15000",
+      "errorCount": "0",
+      "customNumberField": "\"custom_number_1\"",
+      "customNumberValue": "\"6666\"",
+      "customLabel4": "\"\"",
+      "catalogId": "\"1018344599336327\"",
+      "updateDescription": "\"Set custom_number_1 = 6666\"",
+      "createdAt": "2026-02-24 08:59:45"
+    },
+    {
+      "id": "60003",
+      "jobType": "catalog_update",
+      "status": "completed",
+      "totalItems": "37000",
+      "processedItems": "37000",
+      "successCount": "37000",
+      "errorCount": "6772",
+      "customNumberField": "\"custom_number_1\"",
+      "customNumberValue": "\"6666\"",
+      "customLabel4": "\"\"",
+      "catalogId": "\"1018344599336327\"",
+      "updateDescription": "\"Set custom_number_1 = 6666\"",
+      "createdAt": "2026-02-08 10:30:17"
+    },
+    {
+      "id": "1",
+      "jobType": "catalog_update",
+      "status": "completed",
+      "totalItems": "55294",
+      "processedItems": "55294",
+      "successCount": "55294",
+      "errorCount": "8972",
+      "customNumberField": "\"custom_number_1\"",
+      "customNumberValue": "\"6666\"",
+      "customLabel4": "\"\"",
+      "catalogId": "\"1018344599336327\"",
+      "updateDescription": "\"Set custom_number_1 = 6666\"",
+      "createdAt": "2026-02-05 16:06:42"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tjobType\tstatus\ttotalItems\tprocessedItems\tsuccessCount\terrorCount\tcustomNumberField\tcustomNumberValue\tcustomLabel4\tcatalogId\tupdateDescription\tcreatedAt\n240002\tcatalog_update\tfailed\t156375\t15000\t15000\t0\t\"custom_number_1\"\t\"6666\"\t\"\"\t\"1018344599336327\"\t\"Set custom_number_1 = 6666\"\t2026-02-24 08:59:45\n60003\tcatalog_update\tcompleted\t37000\t37000\t37000\t6772\t\"custom_number_1\"\t\"6666\"\t\"\"\t\"1018344599336327\"\t\"Set custom_number_1 = 6666\"\t2026-02-08 10:30:17\n1\tcatalog_update\tcompleted\t55294\t55294\t55294\t8972\t\"custom_number_1\"\t\"6666\"\t\"\"\t\"1018344599336327\"\t\"Set custom_number_1 = 6666\"\t2026-02-05 16:06:42\n",
+  "stderr": "",
+  "execution_time_ms": 2075
+}

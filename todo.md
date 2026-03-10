@@ -582,3 +582,9 @@
 - [x] Persist report state across navigation using React Context (ReportProvider) at App level
 - [x] Poll interval ref persists in context so polling continues during navigation
 - [x] All 112 tests passing, TypeScript clean
+
+## Help/Guide Page
+- [x] Create Help page with tool usage instructions (Overview tab with quick start guide)
+- [x] Add webhook URL setup guide for scheduled tasks (Webhook & Scheduling tab with step-by-step + cURL examples)
+- [x] Add one-click copyable Manus prompts for other users (5 prompt cards with Copy button)
+- [x] Register Help page route in App.tsx and navigation (Guide button in header)

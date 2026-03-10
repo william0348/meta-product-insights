@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import ScheduledJobs from "./pages/ScheduledJobs";
 import ScheduleHistory from "./pages/ScheduleHistory";
+import Help from "./pages/Help";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -19,6 +20,7 @@ function Router() {
       <Route path={"/reports"} component={ScheduleHistory} />
       <Route path="/schedule-history/:id" component={ScheduleHistory} />
       <Route path={"/schedules"} component={ScheduledJobs} />
+      <Route path={"/help"} component={Help} />
       {/* Redirect old batch-history to unified reports page */}
       <Route path={"/batch-history"}>{() => <Redirect to="/reports" />}</Route>
       <Route path={"/404"} component={NotFound} />
