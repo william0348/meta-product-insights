@@ -32,6 +32,8 @@ export const appRouter = router({
         adAccountId: z.string().optional(),
         minSpend: z.string().optional(),
         minCTR: z.string().optional(),
+        maxSpend: z.string().optional(),
+        maxCVR: z.string().optional(),
         batchSize: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -41,6 +43,8 @@ export const appRouter = router({
           adAccountId: input.adAccountId,
           minSpend: input.minSpend,
           minCTR: input.minCTR,
+          maxSpend: input.maxSpend,
+          maxCVR: input.maxCVR,
           batchSize: input.batchSize,
         });
         return { success: true };
@@ -55,7 +59,7 @@ export const appRouter = router({
         const userId = ctx.user.id;
         const token = await getUserToken(userId, input.tokenType);
         if (!token) {
-          return { found: false, accessToken: null, catalogId: null, adAccountId: null, minSpend: null, minCTR: null, batchSize: null };
+          return { found: false, accessToken: null, catalogId: null, adAccountId: null, minSpend: null, minCTR: null, maxSpend: null, maxCVR: null, batchSize: null };
         }
         return {
           found: true,
@@ -64,6 +68,8 @@ export const appRouter = router({
           adAccountId: token.adAccountId,
           minSpend: token.minSpend,
           minCTR: token.minCTR,
+          maxSpend: token.maxSpend,
+          maxCVR: token.maxCVR,
           batchSize: token.batchSize,
         };
       }),
@@ -545,6 +551,8 @@ export const appRouter = router({
         breakdown: z.string().optional().default('product_id'),
         minSpend: z.string().optional(),
         minCTR: z.string().optional(),
+        maxSpend: z.string().optional(),
+        maxCVR: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
@@ -563,6 +571,8 @@ export const appRouter = router({
             breakdown: input.breakdown,
             minSpend: input.minSpend,
             minCTR: input.minCTR,
+            maxSpend: input.maxSpend,
+            maxCVR: input.maxCVR,
           },
         });
         
@@ -685,6 +695,8 @@ export const appRouter = router({
           breakdown: z.string().optional(),
           minSpend: z.string().optional(),
           minCTR: z.string().optional(),
+          maxSpend: z.string().optional(),
+          maxCVR: z.string().optional(),
           catalogId: z.string().optional(),
           customLabel4: z.string().optional(),
           enableCustomLabel4: z.boolean().optional(),
@@ -702,6 +714,8 @@ export const appRouter = router({
           dateRangeType: z.string().optional(),
           minSpend: z.string().optional(),
           minCTR: z.string().optional(),
+          maxSpend: z.string().optional(),
+          maxCVR: z.string().optional(),
           level: z.string().optional(),
           breakdown: z.string().optional(),
         })).optional(),
@@ -783,6 +797,8 @@ export const appRouter = router({
           breakdown: z.string().optional(),
           minSpend: z.string().optional(),
           minCTR: z.string().optional(),
+          maxSpend: z.string().optional(),
+          maxCVR: z.string().optional(),
           catalogId: z.string().optional(),
           customLabel4: z.string().optional(),
           enableCustomLabel4: z.boolean().optional(),
@@ -799,6 +815,8 @@ export const appRouter = router({
           dateRangeType: z.string().optional(),
           minSpend: z.string().optional(),
           minCTR: z.string().optional(),
+          maxSpend: z.string().optional(),
+          maxCVR: z.string().optional(),
           level: z.string().optional(),
           breakdown: z.string().optional(),
         })).optional(),

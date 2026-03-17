@@ -588,3 +588,13 @@
 - [x] Add webhook URL setup guide for scheduled tasks (Webhook & Scheduling tab with step-by-step + cURL examples)
 - [x] Add one-click copyable Manus prompts for other users (5 prompt cards with Copy button)
 - [x] Register Help page route in App.tsx and navigation (Guide button in header)
+
+## Add Max CVR and Max Spend Filters
+- [x] Add Max Spend (spend less than) filter to Home page ReportConfigForm
+- [x] Add Max CVR (CVR less than) filter to Home page ReportConfigForm
+- [x] Add Max Spend and Max CVR to Schedule form (per-account config)
+- [x] Update backend: schema, routers, report-generator, scheduler, report-worker
+- [x] maxSpend: API-level LESS_THAN filter on spend field
+- [x] maxCVR: Post-processing filter in report-worker (CVR is calculated, not native API field)
+- [x] Save maxSpend/maxCVR to user token defaults
+- [x] All 112 tests passing, TypeScript clean

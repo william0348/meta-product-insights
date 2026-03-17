@@ -54,6 +54,8 @@ export default function Home() {
   const [savedAdAccountId, setSavedAdAccountId] = useState<string | null>(null);
   const [savedMinSpend, setSavedMinSpend] = useState<string | null>(null);
   const [savedMinCTR, setSavedMinCTR] = useState<string | null>(null);
+  const [savedMaxSpend, setSavedMaxSpend] = useState<string | null>(null);
+  const [savedMaxCVR, setSavedMaxCVR] = useState<string | null>(null);
   const [savedBatchSize, setSavedBatchSize] = useState<number>(2000);
   
   // Token mutations
@@ -76,6 +78,8 @@ export default function Home() {
       setSavedAdAccountId(adsTokenData.adAccountId);
       setSavedMinSpend(adsTokenData.minSpend);
       setSavedMinCTR(adsTokenData.minCTR);
+      setSavedMaxSpend(adsTokenData.maxSpend);
+      setSavedMaxCVR(adsTokenData.maxCVR);
     }
   }, [adsTokenData]);
   
@@ -117,6 +121,16 @@ export default function Home() {
         });
       }
       
+      if (config.maxSpend && parseFloat(config.maxSpend) > 0) {
+        apiFilters.push({
+          field: 'spend',
+          operator: 'LESS_THAN',
+          value: parseFloat(config.maxSpend)
+        });
+      }
+      // Note: maxCVR is a post-processing filter (CVR is calculated, not a native API field)
+      // It will be applied after data download in the filter logic
+      
       // 2. Create Report Run with filters
       const response = await facebookApiService.createReportRun(
         config.accountId, 
@@ -138,9 +152,15 @@ export default function Home() {
           tokenType: "ads_management",
           accessToken: config.accessToken,
           adAccountId: config.accountId,
+          minSpend: config.minSpend || undefined,
+          minCTR: config.minCTR || undefined,
+          maxSpend: config.maxSpend || undefined,
+          maxCVR: config.maxCVR || undefined,
         });
         setSavedAdsToken(config.accessToken);
         setSavedAdAccountId(config.accountId);
+        setSavedMaxSpend(config.maxSpend || null);
+        setSavedMaxCVR(config.maxCVR || null);
       } catch (e) {
         console.warn("[Token Save] Could not save ads token:", e);
       }
@@ -454,6 +474,8 @@ export default function Home() {
               defaultAccountId={savedAdAccountId || undefined}
               defaultMinSpend={savedMinSpend || undefined}
               defaultMinCTR={savedMinCTR || undefined}
+              defaultMaxSpend={savedMaxSpend || undefined}
+              defaultMaxCVR={savedMaxCVR || undefined}
             />
             
             {/* Background Job Progress */}

@@ -107,6 +107,8 @@ export interface WorkerConfig {
   level?: string;
   breakdown?: string;
   filters?: Array<{ field: string; operator: string; value: any }> | null;
+  // Post-processing filters (applied after data download)
+  maxCVR?: number; // Filter out items with CVR >= this value
   // Catalog
   updateToCatalog?: boolean;
   catalogId?: string;
@@ -707,7 +709,17 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
 
     // ── Step 4: Map data ──
     console.log(`[ReportWorker] Mapping ${rawData.length} rows…`);
-    const mappedData = rawData.map(mapRowToProductInsight);
+    let mappedData = rawData.map(mapRowToProductInsight);
+
+    // ── Step 4b: Post-processing filters ──
+    // maxCVR filter: remove items with CVR >= maxCVR (keep only items below the threshold)
+    if (config.maxCVR != null && config.maxCVR > 0) {
+      const beforeCount = mappedData.length;
+      mappedData = mappedData.filter((item) => item.cvr < config.maxCVR!);
+      console.log(
+        `[ReportWorker] maxCVR filter (< ${config.maxCVR}%): ${beforeCount} → ${mappedData.length} items (removed ${beforeCount - mappedData.length})`,
+      );
+    }
 
     let totalSpend = 0;
     let totalImpressions = 0;

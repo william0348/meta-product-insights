@@ -18,7 +18,9 @@ const formSchema = z.object({
   level: z.string(),
   breakdown: z.string(),
   minSpend: z.string().optional(),
-  minCTR: z.string().optional()
+  minCTR: z.string().optional(),
+  maxSpend: z.string().optional(),
+  maxCVR: z.string().optional()
 });
 
 interface Props {
@@ -28,9 +30,11 @@ interface Props {
   defaultAccountId?: string;
   defaultMinSpend?: string;
   defaultMinCTR?: string;
+  defaultMaxSpend?: string;
+  defaultMaxCVR?: string;
 }
 
-export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defaultToken, defaultAccountId, defaultMinSpend, defaultMinCTR }) => {
+export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defaultToken, defaultAccountId, defaultMinSpend, defaultMinCTR, defaultMaxSpend, defaultMaxCVR }) => {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -42,7 +46,9 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
       level: 'account',
       breakdown: 'product_id',
       minSpend: '',
-      minCTR: ''
+      minCTR: '',
+      maxSpend: '',
+      maxCVR: ''
     }
   });
 
@@ -71,6 +77,18 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
       form.setValue('minCTR', defaultMinCTR);
     }
   }, [defaultMinCTR, form]);
+
+  useEffect(() => {
+    if (defaultMaxSpend) {
+      form.setValue('maxSpend', defaultMaxSpend);
+    }
+  }, [defaultMaxSpend, form]);
+
+  useEffect(() => {
+    if (defaultMaxCVR) {
+      form.setValue('maxCVR', defaultMaxCVR);
+    }
+  }, [defaultMaxCVR, form]);
 
   return (
     <Card className="border-0 shadow-none bg-secondary/30 rounded-none">
@@ -250,6 +268,28 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
 
                 <FormField
                   control={form.control}
+                  name="maxSpend"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Max Spend ($)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g., 5000" 
+                          {...field} 
+                          className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
                   name="minCTR"
                   render={({ field }) => (
                     <FormItem>
@@ -259,6 +299,26 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
                           type="number"
                           step="0.01"
                           placeholder="e.g., 1.5" 
+                          {...field} 
+                          className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="maxCVR"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Max CVR (%)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g., 10" 
                           {...field} 
                           className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10"
                         />

@@ -103,6 +103,8 @@ export interface ReportConfig {
   breakdown: string;
   minSpend?: string; // Minimum spend filter
   minCTR?: string; // Minimum CTR filter
+  maxSpend?: string; // Maximum spend filter (spend less than)
+  maxCVR?: string; // Maximum CVR filter (CVR less than)
   apiFilters?: Array<{field: string, operator: string, value: any}>; // Filters applied at API level before CSV generation
 }
 

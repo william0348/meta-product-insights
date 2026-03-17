@@ -35,6 +35,8 @@ export const userTokens = mysqlTable("user_tokens", {
   adAccountId: varchar("adAccountId", { length: 64 }), // Only for ads tokens
   minSpend: varchar("minSpend", { length: 32 }), // Default min spend filter
   minCTR: varchar("minCTR", { length: 32 }), // Default min CTR filter
+  maxSpend: varchar("maxSpend", { length: 32 }), // Default max spend filter (spend less than)
+  maxCVR: varchar("maxCVR", { length: 32 }), // Default max CVR filter (CVR less than)
   batchSize: int("batchSize"), // Catalog batch upload size (1000-2000)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -119,6 +121,8 @@ export const batchJobs = mysqlTable("batch_jobs", {
     breakdown?: string;
     minSpend?: string;
     minCTR?: string;
+    maxSpend?: string;
+    maxCVR?: string;
     // Schedule tracking
     scheduleId?: number;
     scheduleName?: string;
@@ -247,6 +251,8 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
     breakdown?: string;
     minSpend?: string;
     minCTR?: string;
+    maxSpend?: string;
+    maxCVR?: string;
     // For catalog update
     catalogId?: string;
     customLabel4?: string;
@@ -269,6 +275,8 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
     dateRangeType?: string;  // Optional: Override date range
     minSpend?: string;       // Optional: Min spend filter
     minCTR?: string;         // Optional: Min CTR filter
+    maxSpend?: string;       // Optional: Max spend filter
+    maxCVR?: string;         // Optional: Max CVR filter
     level?: string;          // Optional: Report level
     breakdown?: string;      // Optional: Breakdown type
   }>>(),

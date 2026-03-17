@@ -28,6 +28,8 @@ interface ReportConfig {
   breakdown?: string;
   minSpend?: string;
   minCTR?: string;
+  maxSpend?: string;
+  maxCVR?: string;
   dateRangeType?: string;
   // For combined workflow (report + catalog update)
   updateToCatalog?: boolean;
@@ -141,6 +143,10 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
   if (config.minCTR) {
     filters.push({ field: 'inline_link_click_ctr', operator: 'GREATER_THAN', value: parseFloat(config.minCTR) });
   }
+  if (config.maxSpend) {
+    filters.push({ field: 'spend', operator: 'LESS_THAN', value: parseFloat(config.maxSpend) });
+  }
+  // Note: maxCVR is applied as post-processing filter since CVR is a calculated field
 
   // Create saved report record
   const reportId = await createSavedReport({
@@ -179,6 +185,7 @@ export async function processReportGenerationJob(job: BatchJob, startTime: numbe
     level,
     breakdown,
     filters: filters.length > 0 ? filters : null,
+    maxCVR: config.maxCVR ? parseFloat(config.maxCVR) : undefined,
     updateToCatalog: config.updateToCatalog || false,
     catalogId: config.catalogId,
     catalogAccessToken: config.catalogAccessToken,

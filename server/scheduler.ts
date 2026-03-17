@@ -33,6 +33,8 @@ interface ReportConfig {
   dateRangeType?: string;
   minSpend?: string;
   minCTR?: string;
+  maxSpend?: string;
+  maxCVR?: string;
   level?: string;
   breakdown?: string;
 }
@@ -127,6 +129,8 @@ function getReportConfigs(schedule: ScheduledJob): ReportConfig[] {
           dateRangeType: rc.dateRangeType || schedule.config?.dateRangeType,
           minSpend: rc.minSpend,
           minCTR: rc.minCTR,
+          maxSpend: rc.maxSpend,
+          maxCVR: rc.maxCVR,
           level: rc.level || schedule.config?.level,
           breakdown: rc.breakdown || schedule.config?.breakdown,
         });
@@ -142,6 +146,8 @@ function getReportConfigs(schedule: ScheduledJob): ReportConfig[] {
       dateRangeType: schedule.config.dateRangeType,
       minSpend: schedule.config.minSpend,
       minCTR: schedule.config.minCTR,
+      maxSpend: schedule.config.maxSpend,
+      maxCVR: schedule.config.maxCVR,
       level: schedule.config.level,
       breakdown: schedule.config.breakdown,
     });
@@ -257,6 +263,8 @@ export async function processScheduledJob(
           breakdown: config.breakdown || 'product_id',
           minSpend: config.minSpend || adsToken.minSpend || undefined,
           minCTR: config.minCTR || adsToken.minCTR || undefined,
+          maxSpend: config.maxSpend || adsToken.maxSpend || undefined,
+          maxCVR: config.maxCVR || adsToken.maxCVR || undefined,
           // Add metadata for tracking
           configIndex: i,
           configName: config.name || `Config ${i + 1}`,
