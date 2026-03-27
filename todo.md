@@ -605,3 +605,15 @@
 - [x] Supports trigger_all, trigger (specific schedule), and status actions
 - [x] Local test passed, 112 tests passing
 - [ ] Verify on published domain after checkpoint + publish
+
+## Manus Scheduled Task (Weekly Automation)
+- [x] Create Python trigger script (trigger-schedules.py) that connects to DB and sets nextRunAt to NOW
+- [x] Fix monitoring query bug - batch_jobs doesn't have scheduleId column, use schedule_runs.jobIds instead
+- [x] Test script successfully - server woke up, scheduler picked up jobs, Job #660007 completed with 24,550 products
+- [x] Upload trigger script to CDN for scheduled task use
+- [x] Configure Manus Scheduled Task (every Monday 06:00 UTC / 14:00 UTC+8)
+- [x] Update Help page - Webhook & Scheduling tab with new "Automated Scheduling" documentation
+- [x] Update Help page - Manus Prompts tab with database-direct trigger prompt
+- [x] Update Help page - Added "How It Works" 6-step flow diagram
+- [x] Update Help page - Added "Why Not Direct Webhook?" explanation (OAuth proxy blocks external calls)
+- [x] Upgrade project to web-db-user template (tRPC + Manus Auth + Database)
