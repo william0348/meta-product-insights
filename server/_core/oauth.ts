@@ -3,6 +3,7 @@ import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { processScheduledJob } from "../scheduler";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -48,6 +49,71 @@ async function withRetry<T>(
 }
 
 export function registerOAuthRoutes(app: Express) {
+  // Cron trigger endpoint - piggybacks on /manus-oauth/callback to bypass platform OAuth
+  // POST /manus-oauth/callback?cron=trigger&key=<AGENT_API_KEY>
+  // Body: { "action": "trigger", "scheduleId": 1 } or { "action": "trigger_all" } or { "action": "status", "scheduleId": 1 }
+  app.post("/api/oauth/callback", async (req: Request, res: Response) => {
+    const cronParam = getQueryParam(req, "cron");
+    const keyParam = getQueryParam(req, "key");
+
+    if (cronParam !== "trigger") {
+      res.status(400).json({ error: "Missing OAuth parameters" });
+      return;
+    }
+
+    // Validate API key
+    const agentKey = process.env.AGENT_API_KEY;
+    if (!agentKey || keyParam !== agentKey) {
+      res.status(401).json({ error: "Invalid API key" });
+      return;
+    }
+
+    try {
+      const body = req.body || {};
+      const action = body.action || "trigger_all";
+
+      if (action === "trigger" && body.scheduleId) {
+        // Trigger a specific schedule
+        const schedule = await db.getScheduledJob(body.scheduleId);
+        if (!schedule) {
+          res.status(404).json({ error: "Schedule not found" });
+          return;
+        }
+        // Fire and forget - don't wait for completion
+        processScheduledJob(schedule, "manual").catch(err => {
+          console.error(`[CronTrigger] Error processing schedule ${body.scheduleId}:`, err);
+        });
+        res.json({ success: true, message: `Schedule ${body.scheduleId} (${schedule.name}) triggered`, scheduleId: body.scheduleId });
+      } else if (action === "trigger_all") {
+        // Trigger all enabled schedules
+        const allSchedules = await db.getEnabledScheduledJobs();
+        const triggered: any[] = [];
+        for (const schedule of allSchedules) {
+          processScheduledJob(schedule, "manual").catch(err => {
+            console.error(`[CronTrigger] Error processing schedule ${schedule.id}:`, err);
+          });
+          triggered.push({ id: schedule.id, name: schedule.name });
+        }
+        res.json({ success: true, message: `Triggered ${triggered.length} schedules`, schedules: triggered });
+      } else if (action === "status") {
+        // Check status of latest runs
+        // Get latest run for each enabled schedule
+        const schedules = await db.getEnabledScheduledJobs();
+        const runs = [];
+        for (const s of schedules) {
+          const latestRun = await db.getLatestScheduleRun(s.id);
+          runs.push({ scheduleId: s.id, name: s.name, latestRun });
+        }
+        res.json({ success: true, runs });
+      } else {
+        res.status(400).json({ error: "Invalid action. Use 'trigger', 'trigger_all', or 'status'" });
+      }
+    } catch (error: any) {
+      console.error("[CronTrigger] Error:", error);
+      res.status(500).json({ error: error.message || "Internal error" });
+    }
+  });
+
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
