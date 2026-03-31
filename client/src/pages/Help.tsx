@@ -273,9 +273,10 @@ export default function Help() {
                 <div>
                   <p className="text-sm font-bold text-emerald-800">Current Schedule (Active)</p>
                   <p className="text-xs text-emerald-700 mt-1">
-                    A Manus Scheduled Task runs <strong>every Monday at 06:00 UTC (14:00 UTC+8)</strong>. It triggers all enabled schedules
-                    (CTR 9% and CVR 1%) by updating their <code>nextRunAt</code> to NOW, then pings the server to wake it up.
+                    A Manus Scheduled Task runs <strong>daily at 01:30 UTC (09:30 AM GMT+8)</strong>. It triggers all enabled schedules
+                    by updating their <code>nextRunAt</code> to NOW, then pings the server to wake it up.
                     The server's internal scheduler picks up the due jobs within 60 seconds and processes them automatically.
+                    This runs after the daily catalog "Replace" feed completes, ensuring custom_number values persist.
                   </p>
                 </div>
               </div>
@@ -285,7 +286,7 @@ export default function Help() {
             <div className="bg-zinc-50 border border-zinc-200 p-5 mb-8">
               <div className="space-y-3">
                 {[
-                  ['Manus Schedule fires at 06:00 UTC every Monday', 'A fresh sandbox downloads and runs the trigger Python script'],
+                  ['Manus Schedule fires at 01:30 UTC daily (09:30 AM GMT+8)', 'A fresh sandbox downloads and runs the trigger Python script'],
                   ['Script pings the app URL to wake up the server', 'The server may be hibernating; an HTTP request wakes it up'],
                   ['Script connects to database and sets nextRunAt = NOW()', 'All enabled schedules get their nextRunAt updated'],
                   ["Server's internal scheduler detects due jobs", 'The scheduler checks every 60 seconds for jobs where nextRunAt <= NOW'],
@@ -361,15 +362,29 @@ export default function Help() {
               Replace the placeholder values (marked with <code className="bg-secondary px-1">&lt;...&gt;</code>) with your actual values before running.
             </p>
 
-            <div className="bg-blue-50 border border-blue-200 p-4 mb-8">
+            <div className="bg-emerald-50 border border-emerald-200 p-4 mb-8">
               <div className="flex items-start gap-2">
-                <Shield className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <Zap className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-bold text-blue-800">Automated Schedule Already Active</p>
-                  <p className="text-xs text-blue-700 mt-1">
-                    A weekly Manus Scheduled Task is already configured and running every Monday at 06:00 UTC.
-                    The prompts below are for <strong>ad-hoc use</strong> — triggering reports manually, checking status, or running one-off analysis.
-                    They use the <code>/manus-schedule-runner</code> skill to run a Python script that connects directly to the database.
+                  <p className="text-sm font-bold text-emerald-800">Set Up Your Own Daily Schedule</p>
+                  <p className="text-xs text-emerald-700 mt-1">
+                    Each user needs to set up their own Manus Scheduled Task to trigger their schedules daily.
+                    Copy the <strong>first prompt below</strong> and paste it into a new Manus conversation to create your daily automation.
+                    You will need your app's <strong>DATABASE_URL</strong> from the Settings &gt; Secrets page.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 p-4 mb-6">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-amber-800">Important: Why Daily Schedule is Required</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    If your catalog has a daily <strong>"Replace" feed</strong> (取代), it will reset <code>custom_number</code> fields to 0.
+                    The daily schedule runs <strong>after</strong> the feed completes, re-applying your custom_number values.
+                    Set the schedule time to <strong>1+ hour after your last daily feed</strong> to ensure values persist.
                   </p>
                 </div>
               </div>
@@ -377,8 +392,40 @@ export default function Help() {
 
             <div className="space-y-6">
               <ManusPromptCard
+                title="⭐ Set Up Daily Manus Schedule (Required)"
+                description="Create a daily Manus Scheduled Task that automatically triggers all your enabled schedules. Copy this prompt and paste it into a NEW Manus conversation."
+                prompt={`/manus-schedule-runner
+
+Please set up a DAILY Manus Scheduled Task for Meta Product Insights.
+
+**What it does**: Every day at 09:30 AM GMT+8 (01:30 UTC), it runs a Python script that:
+1. Wakes up the app server
+2. Connects to the database and sets all enabled schedules' nextRunAt to NOW
+3. Pings the server so the internal scheduler picks up the due jobs
+4. Monitors job progress for up to 60 minutes
+5. Sends a notification with results
+
+**Setup Steps**:
+1. Install dependency: sudo pip3 install pymysql
+2. Download script: curl -o /home/ubuntu/job.py "https://files.manuscdn.com/user_upload_by_module/session_file/310519663317876169/NJObsoWICqHadvmK.py"
+3. Test run with env vars:
+   APP_URL='${appDomain}' DATABASE_URL='<YOUR_DATABASE_URL>' BUILT_IN_FORGE_API_URL='<YOUR_FORGE_API_URL>' BUILT_IN_FORGE_API_KEY='<YOUR_FORGE_API_KEY>' python3.11 /home/ubuntu/job.py
+4. If test succeeds, create the Manus Schedule with cron: 0 30 1 * * * (daily 01:30 UTC = 09:30 AM GMT+8)
+
+**Environment Variables** (find these in the app's Settings > Secrets page):
+- DATABASE_URL: The MySQL/TiDB connection string
+- BUILT_IN_FORGE_API_URL: The Manus built-in API URL
+- BUILT_IN_FORGE_API_KEY: The Manus built-in API key
+- APP_URL: ${appDomain}
+
+**IMPORTANT**: Adjust the schedule time based on your catalog feed schedule. The script should run AFTER your daily "Replace" feed completes (typically 1+ hour after the last feed starts).
+
+Please test the script first, then create the scheduled task.`}
+              />
+
+              <ManusPromptCard
                 title="On-Demand Trigger (Database-Direct)"
-                description="Trigger all enabled schedules immediately by running the Python trigger script. This is the same script used by the weekly Manus Schedule."
+                description="Trigger all enabled schedules immediately by running the Python trigger script. This is the same script used by the daily Manus Schedule."
                 prompt={`/manus-schedule-runner
 
 Please run the Meta Product Insights trigger script.

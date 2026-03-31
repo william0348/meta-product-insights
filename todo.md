@@ -617,3 +617,17 @@
 - [x] Update Help page - Added "How It Works" 6-step flow diagram
 - [x] Update Help page - Added "Why Not Direct Webhook?" explanation (OAuth proxy blocks external calls)
 - [x] Upgrade project to web-db-user template (tRPC + Manus Auth + Database)
+
+## Bug Fix - Scheduled Jobs Not Updating Catalog via Batch API
+- [x] Investigate why completed scheduled jobs did not send products to catalog via batch API
+- [x] Root cause: momo XML feeds (daily "取代" mode) overwrite custom_number fields back to 0 because feeds don't include those fields
+- [x] Confirmed: batch API updates DO succeed, but daily feed replace afterwards resets values
+- [x] Verified: cn1=6666 had 32,292 products, cn2=8888 had 50,674 products in catalog
+- [x] Changed Manus schedule from weekly to daily 09:30 AM GMT+8 (after feed replace completes)
+
+## Multi-User Schedule Support
+- [x] Design architecture for other users to create schedules via UI (already supported - all enabled schedules are triggered)
+- [x] Ensure existing Manus daily trigger works for all users' schedules (confirmed - getDueScheduledJobs queries all enabled schedules)
+- [x] Add one-click copyable Manus Prompt to Help page for other users to set up their own Manus Scheduled Task
+- [x] Updated Webhook tab to reflect daily schedule (01:30 UTC / 09:30 AM GMT+8)
+- [x] Added info boxes explaining why daily schedule is required (feed Replace resets custom_number)
