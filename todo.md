@@ -631,3 +631,18 @@
 - [x] Add one-click copyable Manus Prompt to Help page for other users to set up their own Manus Scheduled Task
 - [x] Updated Webhook tab to reflect daily schedule (01:30 UTC / 09:30 AM GMT+8)
 - [x] Added info boxes explaining why daily schedule is required (feed Replace resets custom_number)
+
+## Fix Stuck Daily Schedule (2026-04-01)
+- [x] Update Manus Scheduled Task prompt to include full DATABASE_URL
+- [x] Re-trigger today's schedules manually
+- [x] Verify jobs complete successfully
+
+## Fix Schedule Timeout Failures (2026-04-07)
+- [x] Add keep-alive endpoint to prevent server sleep during long jobs (GET /api/agent/keepalive)
+- [x] Add stale job recovery endpoint (POST /api/agent/recover) + trigger script handles recovery via DB
+- [x] Upgrade trigger script v2 with continuous keep-alive ping every 30s and DB-based monitoring (up to 130 min)
+- [x] Update Help page Manus Prompt with new trigger script v2 CDN URL
+- [x] Increase JOB_TIMEOUT_MS from 90 to 120 minutes
+- [x] Test DB connection, keep-alive ping, and stale job recovery — all working
+- [x] All 112 tests passing
+- [ ] Deploy (save checkpoint + publish)

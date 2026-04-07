@@ -312,4 +312,104 @@ agentRouter.post("/cancel/:jobId", async (req: Request, res: Response) => {
   }
 });
 
+// --- GET /api/agent/keepalive ---
+// Lightweight keep-alive ping to prevent server from going to sleep
+// Returns current running job status so the trigger script knows when to stop
+agentRouter.get("/keepalive", async (_req: Request, res: Response) => {
+  try {
+    // Get all running jobs
+    const { getRunningJobs } = await import("./db");
+    let runningJobs: any[] = [];
+    try {
+      runningJobs = await getRunningJobs();
+    } catch {
+      // DB might be temporarily unavailable
+    }
+
+    const jobSummary = runningJobs.map(j => ({
+      id: j.id,
+      progress: j.progress,
+      processedItems: j.processedItems,
+      statusMessage: j.statusMessage?.substring(0, 100),
+      startedAt: j.startedAt,
+      updatedAt: j.updatedAt,
+    }));
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      runningJobs: jobSummary.length,
+      jobs: jobSummary,
+    });
+  } catch (error: any) {
+    // Even on error, return 200 to keep the server alive
+    res.json({
+      success: false,
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      runningJobs: 0,
+      jobs: [],
+    });
+  }
+});
+
+// --- POST /api/agent/recover ---
+// Clean up stale "running" jobs that were interrupted by server sleep
+// Called by trigger script before starting new jobs
+agentRouter.post("/recover", async (_req: Request, res: Response) => {
+  try {
+    const { getRunningJobs } = await import("./db");
+    const runningJobs = await getRunningJobs();
+    const recovered: number[] = [];
+    const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without update = stale
+
+    for (const job of runningJobs) {
+      const lastUpdate = job.updatedAt?.getTime() || job.startedAt?.getTime() || 0;
+      const timeSinceUpdate = Date.now() - lastUpdate;
+
+      if (timeSinceUpdate > STALE_THRESHOLD_MS) {
+        console.log(
+          `[AgentAPI] Recovering stale job ${job.id}: last update ${Math.round(timeSinceUpdate / 60000)}min ago`
+        );
+        await updateBatchJob(job.id, {
+          status: "failed",
+          statusMessage: `Job recovered: server went to sleep (last update ${Math.round(timeSinceUpdate / 60000)}min ago)`,
+          completedAt: new Date(),
+        });
+
+        // Update associated schedule_run
+        const scheduleRunId = job.config?.scheduleRunId;
+        if (scheduleRunId) {
+          try {
+            const run = await getScheduleRun(scheduleRunId);
+            if (run && run.status === "running") {
+              await updateScheduleRun(scheduleRunId, {
+                failedJobs: (run.failedJobs || 0) + 1,
+                status: "failed",
+                errorMessage: "Job recovered: server went to sleep during execution",
+                completedAt: new Date(),
+                durationMs: Date.now() - run.startedAt.getTime(),
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }
+        recovered.push(job.id);
+      }
+    }
+
+    res.json({
+      success: true,
+      recoveredJobs: recovered,
+      message: recovered.length > 0
+        ? `Recovered ${recovered.length} stale job(s): ${recovered.join(", ")}`
+        : "No stale jobs found",
+    });
+  } catch (error: any) {
+    console.error("[AgentAPI] Error recovering jobs:", error.message);
+    res.status(500).json({ error: "Failed to recover jobs", details: error.message });
+  }
+});
+
 export { agentRouter };

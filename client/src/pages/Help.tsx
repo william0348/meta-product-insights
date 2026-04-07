@@ -263,8 +263,8 @@ export default function Help() {
           <TabsContent value="webhook" className="mt-0">
             <SectionTitle icon={Webhook} title="Automated Scheduling" />
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              This tool uses a <strong>Manus Scheduled Task</strong> with a Python script to automatically trigger report generation and catalog updates every week.
-              The script connects directly to the database, sets schedules as "due", and wakes up the app server to process them.
+              This tool uses a <strong>Manus Scheduled Task</strong> with a Python script (v2 Keep-Alive Edition) to automatically trigger report generation and catalog updates daily.
+              The script sets schedules as "due" in the database, then keeps the server alive with <strong>continuous HTTP pings every 30 seconds</strong> until all jobs complete.
             </p>
 
             <div className="bg-emerald-50 border border-emerald-200 p-4 mb-6">
@@ -274,8 +274,8 @@ export default function Help() {
                   <p className="text-sm font-bold text-emerald-800">Current Schedule (Active)</p>
                   <p className="text-xs text-emerald-700 mt-1">
                     A Manus Scheduled Task runs <strong>daily at 01:30 UTC (09:30 AM GMT+8)</strong>. It triggers all enabled schedules
-                    by updating their <code>nextRunAt</code> to NOW, then pings the server to wake it up.
-                    The server's internal scheduler picks up the due jobs within 60 seconds and processes them automatically.
+                    by setting nextRunAt=NOW in the database, then keeps the server alive with <strong>HTTP pings every 30 seconds</strong> until all jobs complete (up to 130 minutes).
+                    This prevents server sleep during long-running jobs (e.g., CVR schedules with 150K+ products).
                     This runs after the daily catalog "Replace" feed completes, ensuring custom_number values persist.
                   </p>
                 </div>
@@ -286,12 +286,12 @@ export default function Help() {
             <div className="bg-zinc-50 border border-zinc-200 p-5 mb-8">
               <div className="space-y-3">
                 {[
-                  ['Manus Schedule fires at 01:30 UTC daily (09:30 AM GMT+8)', 'A fresh sandbox downloads and runs the trigger Python script'],
-                  ['Script pings the app URL to wake up the server', 'The server may be hibernating; an HTTP request wakes it up'],
-                  ['Script connects to database and sets nextRunAt = NOW()', 'All enabled schedules get their nextRunAt updated'],
-                  ["Server's internal scheduler detects due jobs", 'The scheduler checks every 60 seconds for jobs where nextRunAt <= NOW'],
-                  ['Job processor executes reports and catalog updates', 'Each schedule creates batch jobs that fetch data from Facebook API'],
-                  ['Script monitors progress and sends notification', 'Monitors up to 60 minutes, then sends an owner notification with results'],
+                  ['Manus Schedule fires at 01:30 UTC daily (09:30 AM GMT+8)', 'A fresh sandbox downloads and runs the trigger Python script v2'],
+                  ['Script pings the app URL to wake up the server', 'The server may be hibernating; an HTTP request wakes it up (5 retries)'],
+                  ['Script recovers stale jobs from previous runs', 'Cleans up any jobs stuck in "running" state from server sleep'],
+                  ['Script triggers all enabled schedules via Agent API', 'Uses POST /api/agent/trigger/:id for each enabled schedule'],
+                  ['Keep-alive pings every 30s prevent server sleep', 'GET /api/agent/keepalive keeps the server active during long jobs'],
+                  ['Script monitors job progress until completion', 'Monitors up to 130 minutes, then sends notification with results'],
                 ].map(([title, desc], i) => (
                   <div key={i} className="flex items-start gap-3">
                     <div className="flex-shrink-0 w-6 h-6 bg-primary text-primary-foreground flex items-center justify-center font-bold text-xs">{i + 1}</div>
@@ -393,30 +393,30 @@ export default function Help() {
             <div className="space-y-6">
               <ManusPromptCard
                 title="⭐ Set Up Daily Manus Schedule (Required)"
-                description="Create a daily Manus Scheduled Task that automatically triggers all your enabled schedules. Copy this prompt and paste it into a NEW Manus conversation."
+                description="Create a daily Manus Scheduled Task that automatically triggers all your enabled schedules. Uses Agent API with keep-alive pings to prevent server sleep. Copy this prompt and paste it into a NEW Manus conversation."
                 prompt={`/manus-schedule-runner
 
 Please set up a DAILY Manus Scheduled Task for Meta Product Insights.
 
-**What it does**: Every day at 09:30 AM GMT+8 (01:30 UTC), it runs a Python script that:
-1. Wakes up the app server
-2. Connects to the database and sets all enabled schedules' nextRunAt to NOW
-3. Pings the server so the internal scheduler picks up the due jobs
-4. Monitors job progress for up to 60 minutes
-5. Sends a notification with results
+**What it does**: Every day at 09:30 AM GMT+8 (01:30 UTC), it runs a Python script (v2 Keep-Alive Edition) that:
+1. Wakes up the app server (with retries)
+2. Recovers any stale jobs from previous runs
+3. Triggers all enabled schedules via the Agent API
+4. Keeps the server alive with pings every 30 seconds (prevents server sleep)
+5. Monitors job progress for up to 130 minutes
+6. Sends a completion notification with results
 
 **Setup Steps**:
-1. Install dependency: sudo pip3 install pymysql
-2. Download script: curl -o /home/ubuntu/job.py "https://files.manuscdn.com/user_upload_by_module/session_file/310519663317876169/NJObsoWICqHadvmK.py"
+1. Install dependency: sudo pip3 install pymysql requests
+2. Download script: curl -o /home/ubuntu/job.py "https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/XjmCsZvNQQQCDKpp3FwrY5/trigger-schedule-v2_b5e9040b.py"
 3. Test run with env vars:
-   APP_URL='${appDomain}' DATABASE_URL='<YOUR_DATABASE_URL>' BUILT_IN_FORGE_API_URL='<YOUR_FORGE_API_URL>' BUILT_IN_FORGE_API_KEY='<YOUR_FORGE_API_KEY>' python3.11 /home/ubuntu/job.py
+   DATABASE_URL='<YOUR_DATABASE_URL>' BUILT_IN_FORGE_API_URL='<YOUR_FORGE_API_URL>' BUILT_IN_FORGE_API_KEY='<YOUR_FORGE_API_KEY>' python3.11 /home/ubuntu/job.py
 4. If test succeeds, create the Manus Schedule with cron: 0 30 1 * * * (daily 01:30 UTC = 09:30 AM GMT+8)
 
 **Environment Variables** (find these in the app's Settings > Secrets page):
 - DATABASE_URL: The MySQL/TiDB connection string
 - BUILT_IN_FORGE_API_URL: The Manus built-in API URL
 - BUILT_IN_FORGE_API_KEY: The Manus built-in API key
-- APP_URL: ${appDomain}
 
 **IMPORTANT**: Adjust the schedule time based on your catalog feed schedule. The script should run AFTER your daily "Replace" feed completes (typically 1+ hour after the last feed starts).
 
@@ -424,18 +424,18 @@ Please test the script first, then create the scheduled task.`}
               />
 
               <ManusPromptCard
-                title="On-Demand Trigger (Database-Direct)"
-                description="Trigger all enabled schedules immediately by running the Python trigger script. This is the same script used by the daily Manus Schedule."
+                title="On-Demand Trigger (Agent API)"
+                description="Trigger all enabled schedules immediately using the v2 trigger script with keep-alive. This is the same script used by the daily Manus Schedule."
                 prompt={`/manus-schedule-runner
 
 Please run the Meta Product Insights trigger script.
 
 Do NOT create any project. Do NOT write any code. Just run these 3 shell commands:
 
-1. sudo pip3 install pymysql
-2. curl -o /home/ubuntu/job.py "https://files.manuscdn.com/user_upload_by_module/session_file/310519663317876169/NJObsoWICqHadvmK.py"
-3. Run with env vars (timeout 3600s):
-   APP_URL='${appDomain}' python3.11 /home/ubuntu/job.py
+1. sudo pip3 install pymysql requests
+2. curl -o /home/ubuntu/job.py "https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/XjmCsZvNQQQCDKpp3FwrY5/trigger-schedule-v2_b5e9040b.py"
+3. Run with env vars (timeout 9000s):
+   DATABASE_URL='<YOUR_DATABASE_URL>' BUILT_IN_FORGE_API_URL='<YOUR_FORGE_API_URL>' BUILT_IN_FORGE_API_KEY='<YOUR_FORGE_API_KEY>' python3.11 /home/ubuntu/job.py
 
 Note: You will need to provide the DATABASE_URL, BUILT_IN_FORGE_API_URL, and BUILT_IN_FORGE_API_KEY env vars from the app's Secrets settings.
 
