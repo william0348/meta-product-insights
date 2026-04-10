@@ -645,4 +645,13 @@
 - [x] Increase JOB_TIMEOUT_MS from 90 to 120 minutes
 - [x] Test DB connection, keep-alive ping, and stale job recovery — all working
 - [x] All 112 tests passing
-- [ ] Deploy (save checkpoint + publish)
+- [x] Deploy (save checkpoint + publish)
+
+## Fix Trigger Script v2 - Early Exit Bug (2026-04-10)
+- [x] Root cause: completion detection exits after 2 min with no jobs — scheduler ticks every 60s, so jobs may not exist yet
+- [x] Fix: increase grace period from 2 min to 5 min, require jobs_seen > 0 before declaring "all done"
+- [x] Add 10-min fallback: if no jobs seen after 10 min, exit with warning
+- [x] Upload fixed script to CDN (trigger-schedule-v2_a9b5520f.py)
+- [x] Update Help.tsx CDN URLs to new version
+- [x] Update skill reference template
+- [x] Save checkpoint and deploy

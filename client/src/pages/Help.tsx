@@ -408,7 +408,7 @@ Please set up a DAILY Manus Scheduled Task for Meta Product Insights.
 
 **Setup Steps**:
 1. Install dependency: sudo pip3 install pymysql requests
-2. Download script: curl -o /home/ubuntu/job.py "https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/XjmCsZvNQQQCDKpp3FwrY5/trigger-schedule-v2_b5e9040b.py"
+2. Download script: curl -o /home/ubuntu/job.py "https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/XjmCsZvNQQQCDKpp3FwrY5/trigger-schedule-v2_a9b5520f.py"
 3. Test run with env vars:
    DATABASE_URL='<YOUR_DATABASE_URL>' BUILT_IN_FORGE_API_URL='<YOUR_FORGE_API_URL>' BUILT_IN_FORGE_API_KEY='<YOUR_FORGE_API_KEY>' python3.11 /home/ubuntu/job.py
 4. If test succeeds, create the Manus Schedule with cron: 0 30 1 * * * (daily 01:30 UTC = 09:30 AM GMT+8)
@@ -433,7 +433,7 @@ Please run the Meta Product Insights trigger script.
 Do NOT create any project. Do NOT write any code. Just run these 3 shell commands:
 
 1. sudo pip3 install pymysql requests
-2. curl -o /home/ubuntu/job.py "https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/XjmCsZvNQQQCDKpp3FwrY5/trigger-schedule-v2_b5e9040b.py"
+2. curl -o /home/ubuntu/job.py "https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/XjmCsZvNQQQCDKpp3FwrY5/trigger-schedule-v2_a9b5520f.py"
 3. Run with env vars (timeout 9000s):
    DATABASE_URL='<YOUR_DATABASE_URL>' BUILT_IN_FORGE_API_URL='<YOUR_FORGE_API_URL>' BUILT_IN_FORGE_API_KEY='<YOUR_FORGE_API_KEY>' python3.11 /home/ubuntu/job.py
 
