@@ -31,8 +31,8 @@ const PROCESSOR_INTERVAL_MS = 5000; // Check for new jobs every 5 seconds
 const MAX_CONCURRENT_JOBS = 1; // Process one job at a time to avoid rate limits
 const BATCH_SIZE = 3000; // Items per Facebook API request
 const CONCURRENT_BATCHES = 5; // Parallel batch requests
-const JOB_TIMEOUT_MS = 120 * 60 * 1000; // 120 minutes max for any job (increased from 90 to handle large CVR datasets with 150K+ products)
-const STALE_PROGRESS_TIMEOUT_MS = 45 * 60 * 1000; // 45 minutes without progress update = stale (allows for mega retries: 3 × 6min = 18min extra)
+const JOB_TIMEOUT_MS = 240 * 60 * 1000; // 240 minutes max for any job (doubled from 120 to handle large CVR datasets with 150K+ products)
+const STALE_PROGRESS_TIMEOUT_MS = 90 * 60 * 1000; // 90 minutes without progress update = stale (doubled from 45, allows for mega retries: 3 × 6min = 18min extra)
 
 // Track last known progress for stale detection
 // We track `progress`, `processedItems`, AND `statusMessage` to detect activity

@@ -655,3 +655,10 @@
 - [x] Update Help.tsx CDN URLs to new version
 - [x] Update skill reference template
 - [x] Save checkpoint and deploy
+
+## Double All Time Constants (2026-04-10)
+- [x] Double trigger script v2 time constants (keepalive, poll, max wait, stale threshold, grace period, etc.)
+- [x] Double server-side JOB_TIMEOUT_MS (120 → 240 min) and STALE_PROGRESS_TIMEOUT_MS (45 → 90 min)
+- [x] Upload updated script and update Help.tsx CDN URLs + timeout (9000s → 18000s)
+- [x] All 112 tests passing
+- [x] Save checkpoint and deploy
