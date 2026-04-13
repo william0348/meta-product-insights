@@ -669,3 +669,13 @@
 - [x] Excel export with Rank, conversion metrics, ROAS, spend, CTR, CVR columns
 - [x] All 112 tests passing, no TypeScript errors
 - [x] Save checkpoint and deploy
+
+## Integrate Top Conversion into Schedule Creation (2026-04-13)
+- [x] Add topConversionLimit field to ScheduleFormData, defaultFormData, openEditDialog, handleSubmit
+- [x] Add topConversionLimit to scheduledJobs config type in schema.ts
+- [x] Add Top Conversion Limit selector UI in Schedule creation dialog (after Date Range)
+- [x] Add topConversionLimit to WorkerConfig in report-worker.ts
+- [x] Add topConversionLimit filtering logic in report-worker.ts (sort by purchases + catalog_purchases desc, slice top N)
+- [x] Pass topConversionLimit from schedule.config to jobConfig in scheduler.ts
+- [x] All 112 tests passing, no TypeScript errors
+- [x] Save checkpoint and deploy

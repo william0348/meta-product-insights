@@ -264,6 +264,8 @@ export const scheduledJobs = mysqlTable("scheduled_jobs", {
     catalogAccessToken?: string; // Catalog access token (if different from report token)
     customNumbers?: Record<string, string>;
     customLabels?: Record<string, string>;
+    // Top conversion limit
+    topConversionLimit?: number; // Keep only top N products sorted by total conversions
   }>().notNull(),
   
   // Multi-account configurations (array of report configs)

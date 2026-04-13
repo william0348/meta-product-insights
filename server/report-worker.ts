@@ -109,6 +109,7 @@ export interface WorkerConfig {
   filters?: Array<{ field: string; operator: string; value: any }> | null;
   // Post-processing filters (applied after data download)
   maxCVR?: number; // Filter out items with CVR >= this value
+  topConversionLimit?: number; // Keep only top N products sorted by total conversions (purchases + catalog_purchases)
   // Catalog
   updateToCatalog?: boolean;
   catalogId?: string;
@@ -718,6 +719,20 @@ export async function runReportWorker(config: WorkerConfig): Promise<WorkerResul
       mappedData = mappedData.filter((item) => item.cvr < config.maxCVR!);
       console.log(
         `[ReportWorker] maxCVR filter (< ${config.maxCVR}%): ${beforeCount} → ${mappedData.length} items (removed ${beforeCount - mappedData.length})`,
+      );
+    }
+
+    // topConversionLimit filter: sort by total conversions and keep only top N
+    if (config.topConversionLimit != null && config.topConversionLimit > 0) {
+      const beforeCount = mappedData.length;
+      mappedData.sort((a, b) => {
+        const aConversions = (a.purchases || 0) + (a.catalog_purchases || 0);
+        const bConversions = (b.purchases || 0) + (b.catalog_purchases || 0);
+        return bConversions - aConversions;
+      });
+      mappedData = mappedData.slice(0, config.topConversionLimit);
+      console.log(
+        `[ReportWorker] topConversionLimit (top ${config.topConversionLimit}): ${beforeCount} → ${mappedData.length} items`,
       );
     }
 

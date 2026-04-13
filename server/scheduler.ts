@@ -265,6 +265,7 @@ export async function processScheduledJob(
           minCTR: config.minCTR || adsToken.minCTR || undefined,
           maxSpend: config.maxSpend || adsToken.maxSpend || undefined,
           maxCVR: config.maxCVR || adsToken.maxCVR || undefined,
+          topConversionLimit: schedule.config?.topConversionLimit || undefined,
           // Add metadata for tracking
           configIndex: i,
           configName: config.name || `Config ${i + 1}`,

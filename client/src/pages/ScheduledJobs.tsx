@@ -58,6 +58,7 @@ interface ScheduleFormData {
   hour: string;
   minute: string;
   dateRangeType: string;
+  topConversionLimit: string; // 'all' | '5000' | '10000'
   customLabel4: string;
   enableCustomLabel4: boolean;
 }
@@ -69,6 +70,7 @@ const defaultFormData: ScheduleFormData = {
   hour: '9',
   minute: '0',
   dateRangeType: 'last_7_days',
+  topConversionLimit: 'all',
   customLabel4: '',
   enableCustomLabel4: true,
 };
@@ -185,6 +187,7 @@ export default function ScheduledJobs() {
       hour: hour || '9',
       minute: minute || '0',
       dateRangeType: schedule.config?.dateRangeType || 'last_7_days',
+      topConversionLimit: schedule.config?.topConversionLimit || 'all',
       customLabel4: schedule.config?.customLabel4 || '',
       enableCustomLabel4: schedule.config?.enableCustomLabel4 !== false, // default true for backward compat
     });
@@ -307,6 +310,7 @@ export default function ScheduledJobs() {
       minCTR: validConfigs[0].minCTR || undefined,
       maxSpend: validConfigs[0].maxSpend || undefined,
       maxCVR: validConfigs[0].maxCVR || undefined,
+      topConversionLimit: formData.topConversionLimit !== 'all' ? parseInt(formData.topConversionLimit) : undefined,
     };
     
     // Add catalog settings for combined workflow
@@ -551,6 +555,27 @@ export default function ScheduledJobs() {
                   <SelectItem value="last_month">Last Month</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            
+            {/* Top Conversion Limit */}
+            <div className="space-y-2">
+              <Label>Top Conversion Limit</Label>
+              <Select
+                value={formData.topConversionLimit}
+                onValueChange={(value) => setFormData({ ...formData, topConversionLimit: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Products (No Limit)</SelectItem>
+                  <SelectItem value="5000">Top 5,000 by Conversion</SelectItem>
+                  <SelectItem value="10000">Top 10,000 by Conversion</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                Limit saved report to top N products sorted by total conversions (Ad Purchases + Catalog Purchases) descending
+              </p>
             </div>
             
             {/* Catalog Update Settings - only show for combined workflow */}
