@@ -187,7 +187,7 @@ export default function ScheduledJobs() {
       hour: hour || '9',
       minute: minute || '0',
       dateRangeType: schedule.config?.dateRangeType || 'last_7_days',
-      topConversionLimit: schedule.config?.topConversionLimit || 'all',
+      topConversionLimit: schedule.config?.topConversionLimit ? String(schedule.config.topConversionLimit) : 'all',
       customLabel4: schedule.config?.customLabel4 || '',
       enableCustomLabel4: schedule.config?.enableCustomLabel4 !== false, // default true for backward compat
     });
