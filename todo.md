@@ -662,3 +662,10 @@
 - [x] Upload updated script and update Help.tsx CDN URLs + timeout (9000s → 18000s)
 - [x] All 112 tests passing
 - [x] Save checkpoint and deploy
+
+## Top Conversion Download Feature (2026-04-13)
+- [x] Add frontend Top Conversion download with dropdown menu (Top 5K / Top 10K)
+- [x] Sort by total conversions (Ad Purchases + Catalog Purchases) descending
+- [x] Excel export with Rank, conversion metrics, ROAS, spend, CTR, CVR columns
+- [x] All 112 tests passing, no TypeScript errors
+- [x] Save checkpoint and deploy

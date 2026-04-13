@@ -12,11 +12,17 @@ import { BackgroundJobProgress } from '@/components/BackgroundJobProgress';
 import { trpc } from '@/lib/trpc';
 import { useReportState } from '@/contexts/ReportContext';
 
-import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, FileText, Calendar, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, FileText, Calendar, BookOpen, Trophy, ChevronDown } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 
@@ -318,6 +324,45 @@ export default function Home() {
     utils.book_append_sheet(wb, ws, "Product Insights");
     writeFile(wb, `meta_product_insights_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast.success("Excel file downloaded");
+  };
+
+  const handleDownloadTopConversion = (limit: number) => {
+    if (!filteredData) return;
+
+    // Sort by purchases (Ad Purchases Omni) descending, then take top N
+    const sorted = [...filteredData].sort((a, b) => {
+      const aPurchases = (a.purchases || 0) + (a.catalog_purchases || 0);
+      const bPurchases = (b.purchases || 0) + (b.catalog_purchases || 0);
+      return bPurchases - aPurchases;
+    });
+    const topData = sorted.slice(0, limit);
+
+    const exportData = topData.map((row, idx) => ({
+      'Rank': idx + 1,
+      'Product Name': row.product_name,
+      'Content ID': row.product_retailer_id,
+      'Brand': row.product_brand || 'N/A',
+      'Ad Purchases (Omni)': row.purchases,
+      'Catalog Purchases': row.catalog_purchases || 0,
+      'Total Conversions': (row.purchases || 0) + (row.catalog_purchases || 0),
+      'Purchase Value': row.purchase_value || 0,
+      'ROAS': row.purchase_roas || 0,
+      'Spend': row.spend,
+      'Impressions': row.impressions,
+      'Link Clicks': row.link_clicks,
+      'Link Click CTR (%)': row.inline_link_click_ctr || 0,
+      'CVR (%)': row.cvr || 0,
+      'CPM': row.cpm,
+      'Cost Per Link Click': row.cost_per_inline_link_click || 0,
+      'Adds to Cart (Omni)': row.adds_to_cart || 0,
+      'Product Views': row.product_views || 0,
+    }));
+
+    const ws = utils.json_to_sheet(exportData);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, `Top ${limit.toLocaleString()} Conversions`);
+    writeFile(wb, `top_${limit}_conversions_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`Top ${limit.toLocaleString()} conversion products downloaded`);
   };
 
   // Catalog Upload Handler - Uses background job processing
@@ -624,6 +669,30 @@ export default function Home() {
                       <FileSpreadsheet className="w-3 h-3 mr-2" />
                       Download Excel
                     </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          disabled={!filteredData || filteredData.length === 0}
+                          className="h-8 text-xs uppercase font-bold tracking-wide rounded-none border-border hover:bg-secondary"
+                        >
+                          <Trophy className="w-3 h-3 mr-2" />
+                          Top Conversion
+                          <ChevronDown className="w-3 h-3 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="rounded-none">
+                        <DropdownMenuItem onClick={() => handleDownloadTopConversion(5000)} className="text-xs uppercase font-bold tracking-wide cursor-pointer">
+                          <Trophy className="w-3 h-3 mr-2" />
+                          Top 5,000 Products
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDownloadTopConversion(10000)} className="text-xs uppercase font-bold tracking-wide cursor-pointer">
+                          <Trophy className="w-3 h-3 mr-2" />
+                          Top 10,000 Products
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button 
                       variant="default" 
                       size="sm" 
