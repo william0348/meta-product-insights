@@ -705,6 +705,7 @@ export const appRouter = router({
           catalogAccessToken: z.string().optional(),
           customNumbers: z.record(z.string(), z.string()).optional(),
           customLabels: z.record(z.string(), z.string()).optional(),
+          topConversionLimit: z.number().optional(),
         }),
         // Multi-account configurations
         reportConfigs: z.array(z.object({
@@ -718,12 +719,12 @@ export const appRouter = router({
           maxCVR: z.string().optional(),
           level: z.string().optional(),
           breakdown: z.string().optional(),
-        })).optional(),
+        })),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = ctx.user.id;
         
-        // Calculate next run time based on cron expression
+        console.log(`[Schedules] Creating new schedule for user ${userId}:`, input.name);
         const now = new Date();
         const nextRunAt = new Date(now);
         nextRunAt.setDate(nextRunAt.getDate() + 7); // Default to next week
@@ -806,6 +807,7 @@ export const appRouter = router({
           catalogAccessToken: z.string().optional(),
           customNumbers: z.record(z.string(), z.string()).optional(),
           customLabels: z.record(z.string(), z.string()).optional(),
+          topConversionLimit: z.number().optional(),
         }).optional(),
         // Multi-account configurations
         reportConfigs: z.array(z.object({

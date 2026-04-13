@@ -679,3 +679,9 @@
 - [x] Pass topConversionLimit from schedule.config to jobConfig in scheduler.ts
 - [x] All 112 tests passing, no TypeScript errors
 - [x] Save checkpoint and deploy
+
+## Bug Fix - topConversionLimit Not Saving (2026-04-13)
+- [x] Root cause: Zod schema in both create and update mutations missing topConversionLimit field — Zod strips unknown fields
+- [x] Fix: Added `topConversionLimit: z.number().optional()` to both config schemas in routers.ts
+- [x] All 112 tests passing, no TypeScript errors
+- [x] Save checkpoint and deploy
