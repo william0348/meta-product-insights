@@ -21,6 +21,7 @@ import { batchUpdateProducts, fetchProductsByRetailerIds, checkBatchRequestStatu
 import { processReportGenerationJob } from "./report-generator";
 import { workerHeartbeats } from "./report-worker";
 import { BatchJob } from "../drizzle/schema";
+import { calculateRetryDelay } from "./error-classifier";
 
 // Job processor state
 let isProcessing = false;
@@ -52,6 +53,12 @@ export function startJobProcessor(): void {
 
   console.log("[JobProcessor] Starting background job processor...");
   
+  // On startup, recover orphaned "running" jobs that were interrupted by a server restart.
+  // These jobs have no active worker — re-queue them so they get picked up immediately.
+  recoverOrphanedJobs().catch(err => {
+    console.error("[JobProcessor] Failed to recover orphaned jobs:", err);
+  });
+  
   // Process jobs immediately on startup
   processJobs().catch(console.error);
   
@@ -59,6 +66,59 @@ export function startJobProcessor(): void {
   processorInterval = setInterval(() => {
     processJobs().catch(console.error);
   }, PROCESSOR_INTERVAL_MS);
+}
+
+/**
+ * Recover orphaned "running" jobs on startup.
+ * After a server restart, any job marked as "running" in the DB has no active worker.
+ * We re-queue them so they get processed again, and update the associated schedule_run.
+ */
+async function recoverOrphanedJobs(): Promise<void> {
+  try {
+    const runningJobs = await getRunningJobs();
+    if (runningJobs.length === 0) return;
+    
+    console.log(`[JobProcessor] Found ${runningJobs.length} orphaned running job(s) after restart — re-queuing`);
+    
+    for (const job of runningJobs) {
+      const runningTime = Date.now() - (job.startedAt?.getTime() || 0);
+      console.log(
+        `[JobProcessor] Re-queuing orphaned job ${job.id} (type: ${job.jobType}, ` +
+        `was running for ${Math.round(runningTime / 60000)}min before restart)`
+      );
+      
+      await updateBatchJob(job.id, {
+        status: "queued",
+        statusMessage: `Re-queued after server restart (was running for ${Math.round(runningTime / 60000)}min)`,
+        progress: 0,
+        processedItems: 0,
+        startedAt: null,
+      });
+      
+      // Also reset the associated schedule_run status if it was 'running'
+      const scheduleRunId = job.config?.scheduleRunId;
+      if (scheduleRunId) {
+        try {
+          const run = await getScheduleRun(scheduleRunId);
+          if (run && run.status === 'running') {
+            await updateScheduleRun(scheduleRunId, {
+              errorMessage: `Job ${job.id} re-queued after server restart`,
+            });
+          }
+        } catch (runErr) {
+          console.warn(`[JobProcessor] Failed to update schedule run ${scheduleRunId} during recovery:`, runErr);
+        }
+      }
+      
+      // Clean up any stale cache entries
+      jobProgressCache.delete(job.id);
+      workerHeartbeats.delete(job.id);
+    }
+    
+    console.log(`[JobProcessor] Successfully re-queued ${runningJobs.length} orphaned job(s)`);
+  } catch (error) {
+    console.error("[JobProcessor] Error recovering orphaned jobs:", error);
+  }
 }
 
 /**
@@ -176,17 +236,32 @@ async function processJobs(): Promise<void> {
               const totalJobsDone = (run.completedJobs || 0) + newFailedJobs;
               const allDone = totalJobsDone >= (run.totalJobs || 1);
               
+              // Calculate retry delay for timeout errors (retryable)
+              const currentRetryCount = run.retryCount || 0;
+              const maxRetries = run.maxRetries || 3;
+              const shouldRetry = currentRetryCount < maxRetries;
+              const retryDelay = shouldRetry ? calculateRetryDelay(currentRetryCount, 'transient') : 0;
+              const nextRetryAt = shouldRetry ? new Date(Date.now() + retryDelay) : null;
+              
               await updateScheduleRun(scheduleRunId, {
                 failedJobs: newFailedJobs,
                 status: allDone ? ((run.completedJobs || 0) > 0 ? 'partial' : 'failed') : 'running',
                 errorMessage: `Job timed out: ${reason}`,
                 lastErrorType: 'timeout',
-                ...(allDone ? {
+                ...(allDone && shouldRetry ? {
+                  completedAt: new Date(),
+                  durationMs: Date.now() - run.startedAt.getTime(),
+                  nextRetryAt,
+                } : allDone ? {
                   completedAt: new Date(),
                   durationMs: Date.now() - run.startedAt.getTime(),
                 } : {}),
               });
-              console.log(`[JobProcessor] Updated schedule run ${scheduleRunId} after job timeout`);
+              if (shouldRetry && nextRetryAt) {
+                console.log(`[JobProcessor] Updated schedule run ${scheduleRunId} after job timeout — retry scheduled at ${nextRetryAt.toISOString()}`);
+              } else {
+                console.log(`[JobProcessor] Updated schedule run ${scheduleRunId} after job timeout (no more retries)`);  
+              }
             }
           } catch (runErr) {
             console.warn(`[JobProcessor] Failed to update schedule run after timeout:`, runErr);

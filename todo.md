@@ -692,3 +692,12 @@
 - [x] Confirmed DB already has topConversionLimit: 5000 saved correctly
 - [x] All 112 tests passing
 - [x] Deploy
+
+- [ ] Investigate today's schedule run failure (2026-04-17) - products not updated to catalog
+- [ ] Check batch_jobs, schedule_runs, catalog_update_logs for error details
+- [ ] Identify and fix root cause of catalog update failure
+- [ ] Deploy fix
+
+## Root Cause Analysis: Job 1050001 Lost After Server Restart
+- [x] Fix: Add startup recovery for orphaned "running" jobs — re-queue them immediately instead of waiting 90min stale timeout
+- [x] Fix: Stale timeout handler should set nextRetryAt on schedule_run to enable automatic retry
