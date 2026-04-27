@@ -705,7 +705,17 @@
 - [x] Fix: Agent API /api/agent/* routes blocked by Manus platform OAuth proxy on production — switched to DB-direct trigger via Python script
 
 ## Production Deployment Issue (2026-04-27)
-- [ ] Investigate: Production server running stale/old code — Python-style errors appearing in Node.js app
-- [ ] Jobs 1320001-1320015 failed with Python errors (process_report_generation_job() missing positional args)
-- [ ] Jobs 1320016-1320018 failed with "Job timed out after 240 minutes" after only 13 seconds
+- [x] Investigate: Production server running stale/old code — Python-style errors appearing in Node.js app (confirmed: old version was deployed, re-published)
+- [x] Jobs 1320001-1320015 failed with Python errors (process_report_generation_job() missing positional args) — resolved by re-deploy
+- [x] Jobs 1320016-1320018 failed with "Job timed out after 240 minutes" after only 13 seconds — old code format
 - [x] Save new checkpoint for user to re-publish
+
+## Production Job Failures (2026-04-27 Jobs 1320020-1320022)
+- [x] Investigate: Jobs 1320020 (CTR 9%), 1320021 (CVR 1%), 1320022 (Top 5000) all FAILED
+- [x] Root cause: Race condition between recoverOrphanedJobs() and processJobs() on server restart
+- [x] Root cause: Null startedAt causing false absolute timeout (Date.now() - 0 = huge number)
+- [x] Root cause: Trigger script using non-existent updatedAt column on schedule_runs table
+- [x] Fix: recoverOrphanedJobs() now fully awaits before processJobs() starts
+- [x] Fix: Skip timeout check when startedAt is null (prevents false timeout)
+- [x] Fix: Remove updatedAt from trigger script's schedule_runs UPDATE
+- [x] All 112 tests passing

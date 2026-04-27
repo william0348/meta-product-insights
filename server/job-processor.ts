@@ -55,12 +55,17 @@ export function startJobProcessor(): void {
   
   // On startup, recover orphaned "running" jobs that were interrupted by a server restart.
   // These jobs have no active worker — re-queue them so they get picked up immediately.
-  recoverOrphanedJobs().catch(err => {
-    console.error("[JobProcessor] Failed to recover orphaned jobs:", err);
-  });
-  
-  // Process jobs immediately on startup
-  processJobs().catch(console.error);
+  // CRITICAL: We MUST await recovery before processing jobs to avoid a race condition
+  // where processJobs() sees a running job before recoverOrphanedJobs() can re-queue it.
+  (async () => {
+    try {
+      await recoverOrphanedJobs();
+    } catch (err) {
+      console.error("[JobProcessor] Failed to recover orphaned jobs:", err);
+    }
+    // Only start processing after recovery is complete
+    processJobs().catch(console.error);
+  })();
   
   // Then check for new jobs periodically
   processorInterval = setInterval(() => {
@@ -162,7 +167,16 @@ async function processJobs(): Promise<void> {
     }
     
     for (const job of runningJobs) {
-      const runningTime = Date.now() - (job.startedAt?.getTime() || 0);
+      // Safety: if startedAt is null/undefined (e.g., just re-queued), use current time
+      // to avoid computing a massive runningTime that triggers false absolute timeout
+      const startedAtMs = job.startedAt?.getTime();
+      if (!startedAtMs) {
+        console.warn(
+          `[JobProcessor] Job ${job.id} is running but startedAt is null — skipping timeout check this cycle`,
+        );
+        continue;
+      }
+      const runningTime = Date.now() - startedAtMs;
       
       // Track progress for stale detection
       // Check BOTH progress field AND processedItems to detect activity
@@ -182,7 +196,7 @@ async function processJobs(): Promise<void> {
         jobProgressCache.set(job.id, { progress: currentProgress, processedItems: currentProcessedItems, statusMessage: currentStatusMessage, updatedAt: Date.now() });
       }
       
-      // Check for absolute timeout (60 minutes)
+      // Check for absolute timeout (240 minutes)
       const isAbsoluteTimeout = runningTime > JOB_TIMEOUT_MS;
       
       // Check for stale progress (no DB-level progress change for STALE_PROGRESS_TIMEOUT_MS)
