@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { trpc } from '@/lib/trpc';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -187,9 +188,7 @@ export default function BatchHistory() {
   const [catalogFilter, setCatalogFilter] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   
-  const { data, isLoading, refetch, isRefetching } = trpc.batchHistory.getMyHistory.useQuery({
-    limit: 100,
-  });
+  const { data, isLoading, refetch, isRefetching } = useQuery({ queryKey: ['batchHistory', 100], queryFn: () => apiClient.batchHistory.getMyHistory(100) });
   
   const toggleRow = (id: number) => {
     const newExpanded = new Set(expandedRows);

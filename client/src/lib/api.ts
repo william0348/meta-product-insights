@@ -1,7 +1,8 @@
 import type { ProductInsightData, ReportRunResponse } from '../types';
 import { mapJsonRowToProductInsightData } from './facebook-json-mapper';
+import { apiClient } from './api-client';
 
-const GRAPH_API_VERSION = 'v22.0';
+const GRAPH_API_VERSION = 'v25.0';
 
 // Helper to map CSV Row to ProductInsightData
 // The CSV headers from Meta are usually user-friendly (e.g., "Product Name", "Impressions")
@@ -107,7 +108,7 @@ const mapCsvRowToProductInsightData = (row: any): ProductInsightData => {
 
 
 export const facebookApiService = {
-  createReportRun: async (accountId: string, startDate: string, endDate: string, accessToken?: string, level: string = 'account', breakdown: string = 'product_id', filters?: Array<{field: string, operator: string, value: any}>): Promise<ReportRunResponse> => {
+  createReportRun: async (accountId: string, startDate: string, endDate: string, accessToken?: string, level: string = 'account', breakdown: string = 'product_id'): Promise<ReportRunResponse> => {
     
     if (!accessToken) {
       throw new Error("Access Token is required to fetch real data from Meta Marketing API.");
@@ -183,14 +184,16 @@ export const facebookApiService = {
 
     if (sort) queryParams.sort = sort;
     if (level && level !== 'account') queryParams.level = level;
-    
-    // Add filtering if provided
-    if (filters && filters.length > 0) {
-      queryParams.filtering = JSON.stringify(filters);
-    }
 
     const params = new URLSearchParams(queryParams);
-    const response = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${formattedAccountId}/insights?${params.toString()}`, { method: 'POST' });
+    const response = await fetch(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${formattedAccountId}/insights`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      }
+    );
 
     const data = await response.json();
     if (data.error) {
@@ -225,7 +228,8 @@ export const facebookApiService = {
     reportRunId: string,
     accessToken?: string,
     onProgress?: (data: ProductInsightData[]) => void,
-    onDownloadProgress?: (percent: number) => void
+    onDownloadProgress?: (percent: number) => void,
+    filters?: { minSpend?: string; minCTR?: string; maxSpend?: string; maxCVR?: string }
   ): Promise<{ data: ProductInsightData[] }> {
     try {
       const allData: ProductInsightData[] = [];
@@ -236,83 +240,31 @@ export const facebookApiService = {
         onDownloadProgress(10); // Starting
       }
       
-      // Fetch paginated data (no limit - fetch all pages)
-      while (true) {
-        // Build tRPC batch request
-        const input = {
-          "0": {
-            json: {
-              reportRunId,
-              accessToken,
-              limit: 1000,
-              after
-            }
-          }
-        };
-        
-        console.log(`[Insights Fetch] Fetching page ${pageCount + 1}...`);
-        
-        const response: Response = await fetch(`/api/trpc/facebook.getInsightsData?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[Insights Fetch] Server error:', errorText);
-          throw new Error(`Failed to fetch insights. Status: ${response.status}`);
-        }
-        
-        const result: any = await response.json();
-        console.log('[Insights Fetch] Raw result:', JSON.stringify(result).substring(0, 1000));
-        
-        // Check if tRPC returned an error
-        if (!result || !Array.isArray(result) || result.length === 0) {
-          console.error('[Insights Fetch] Invalid tRPC response structure:', result);
-          throw new Error('Invalid tRPC response structure');
-        }
-        
-        const firstResult = result[0];
-        if (firstResult.error) {
-          console.error('[Insights Fetch] tRPC error:', firstResult.error);
-          throw new Error(`Backend error: ${firstResult.error.message || JSON.stringify(firstResult.error)}`);
-        }
-        
-        const backendResult: any = firstResult.result?.data;
-        console.log('[Insights Fetch] Backend result:', JSON.stringify(backendResult).substring(0, 1000));
-        
-        // tRPC wraps the response in a "json" key when using superjson
-        const actualData = backendResult.json || backendResult;
-        
-        if (!actualData || !actualData.success || !actualData.data || !Array.isArray(actualData.data)) {
-          console.error('[Insights Fetch] Invalid response. actualData:', actualData);
-          throw new Error(`Invalid response from backend. success: ${actualData?.success}, has data array: ${Array.isArray(actualData?.data)}`);
-        }
-        
-        // Map the JSON data to our ProductInsightData structure
-        const mappedPage = actualData.data.map(mapJsonRowToProductInsightData);
-        allData.push(...mappedPage);
-        
-        console.log(`[Insights Fetch] Page ${pageCount + 1}: ${mappedPage.length} records (total: ${allData.length})`);
-        
-        // Update progress (show incremental progress based on pages fetched)
-        if (onDownloadProgress) {
-          // Show progress up to 90%, leaving 10% for completion
-          const progress = Math.min(10 + (pageCount * 5), 90);
-          onDownloadProgress(progress);
-        }
-        
-        // Call onProgress callback with accumulated data
-        if (onProgress) {
-          onProgress(allData);
-        }
-        
-        // Check if there's more data
-        if (actualData.paging && actualData.paging.next && actualData.paging.cursors?.after) {
-          after = actualData.paging.cursors.after;
-          pageCount++;
-        } else {
-          // No more pages
-          break;
-        }
+      // Fetch ALL pages server-side in one call (Python backend handles pagination)
+      console.log('[Insights Fetch] Fetching all data server-side...');
+      if (onDownloadProgress) onDownloadProgress(20);
+
+      const result = await apiClient.facebook.fetchAll({
+        reportRunId,
+        accessToken: accessToken || '',
+        ...filters,
+      });
+
+      console.log(`[Insights Fetch] Server returned ${result.totalRecords || result.data?.length || 0} records in ${result.totalPages || '?'} pages`);
+
+      const insightsData = result.data || result;
+      if (!Array.isArray(insightsData)) {
+        throw new Error('Failed to fetch insights data from backend');
       }
+
+      if (onDownloadProgress) onDownloadProgress(70);
+
+      // Map all data at once
+      const mapped = insightsData.map(mapJsonRowToProductInsightData);
+      allData.push(...mapped);
+
+      if (onProgress) onProgress(allData);
+      if (onDownloadProgress) onDownloadProgress(90);
       
       console.log(`[Insights Fetch] Complete: ${allData.length} total records`);
       

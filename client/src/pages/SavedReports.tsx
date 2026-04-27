@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { trpc } from '@/lib/trpc';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,16 +22,15 @@ import { format } from 'date-fns';
 
 export default function SavedReports() {
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
-  
-  const { data: reportsData, isLoading, refetch } = trpc.reports.getMyReports.useQuery({ limit: 50 });
-  const { data: reportDetail, isLoading: isLoadingDetail } = trpc.reports.get.useQuery(
-    { reportId: selectedReportId! },
-    { enabled: !!selectedReportId }
-  );
-  
-  const deleteMutation = trpc.reports.delete.useMutation({
+  const queryClient = useQueryClient();
+
+  const { data: reportsData, isLoading } = useQuery({ queryKey: ['reports'], queryFn: () => apiClient.reports.getMyReports(50) });
+  const { data: reportDetail, isLoading: isLoadingDetail } = useQuery({ queryKey: ['reports', selectedReportId], queryFn: () => apiClient.reports.get(selectedReportId!), enabled: !!selectedReportId });
+
+  const deleteMutation = useMutation({
+    mutationFn: (data: { reportId: number }) => apiClient.reports.delete(data.reportId),
     onSuccess: () => {
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       setSelectedReportId(null);
     },
   });

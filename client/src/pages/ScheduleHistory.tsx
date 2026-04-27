@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useParams, useLocation } from 'wouter';
-import { trpc } from '@/lib/trpc';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -64,40 +65,47 @@ export default function ScheduleHistory() {
   const [catalogFilter, setCatalogFilter] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   
+  const queryClient = useQueryClient();
+
   // ── Schedule Runs queries ──
-  const { data: allHistoryData, isLoading: isLoadingAll, error: allHistoryError } = trpc.schedules.getAllHistory.useQuery(
-    { limit: 100 },
-    { enabled: isGlobalView, retry: false }
-  );
-  
-  const { data: scheduleHistoryData, isLoading: isLoadingSchedule, error: scheduleHistoryError } = trpc.schedules.getHistory.useQuery(
-    { scheduleId, limit: 50 },
-    { enabled: !isGlobalView && scheduleId > 0, retry: false }
-  );
-  
-  const { data: runDetailData, isLoading: isLoadingDetail } = trpc.schedules.getRunDetail.useQuery(
-    { runId: selectedRunId! },
-    { enabled: selectedRunId !== null }
-  );
-  
-  const { data: reportData, isLoading: isLoadingReport } = trpc.reports.get.useQuery(
-    { reportId: viewingReportId! },
-    { enabled: viewingReportId !== null }
-  );
-  
+  const { data: allHistoryData, isLoading: isLoadingAll, error: allHistoryError } = useQuery({
+    queryKey: ['schedules', 'allHistory'],
+    queryFn: () => apiClient.schedules.getAllHistory(100),
+    enabled: isGlobalView,
+    retry: false,
+  });
+
+  const { data: scheduleHistoryData, isLoading: isLoadingSchedule, error: scheduleHistoryError } = useQuery({
+    queryKey: ['schedules', 'history', scheduleId],
+    queryFn: () => apiClient.schedules.getHistory(scheduleId, 50),
+    enabled: !isGlobalView && scheduleId > 0,
+    retry: false,
+  });
+
+  const { data: runDetailData, isLoading: isLoadingDetail } = useQuery({
+    queryKey: ['schedules', 'runs', selectedRunId],
+    queryFn: () => apiClient.schedules.getRunDetail(selectedRunId!),
+    enabled: selectedRunId !== null,
+  });
+
+  const { data: reportData, isLoading: isLoadingReport } = useQuery({
+    queryKey: ['reports', viewingReportId],
+    queryFn: () => apiClient.reports.get(viewingReportId!),
+    enabled: viewingReportId !== null,
+  });
+
   // ── Cancel mutation ──
   const [cancellingJobId, setCancellingJobId] = useState<number | null>(null);
-  const utils = trpc.useUtils();
-  const cancelJobMutation = trpc.schedules.cancelJob.useMutation({
+  const cancelJobMutation = useMutation({
+    mutationFn: (data: { jobId: number }) => apiClient.schedules.cancelJob(data.jobId),
     onSuccess: () => {
       toast.success('Job cancelled successfully');
       setCancellingJobId(null);
-      // Invalidate queries to refresh the list
-      utils.schedules.getAllHistory.invalidate();
-      utils.schedules.getHistory.invalidate();
-      if (selectedRunId) utils.schedules.getRunDetail.invalidate({ runId: selectedRunId });
+      queryClient.invalidateQueries({ queryKey: ['schedules', 'allHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['schedules', 'history'] });
+      if (selectedRunId) queryClient.invalidateQueries({ queryKey: ['schedules', 'runs', selectedRunId] });
     },
-    onError: (err) => {
+    onError: (err: Error) => {
       toast.error(`Failed to cancel job: ${err.message}`);
       setCancellingJobId(null);
     },
@@ -110,10 +118,12 @@ export default function ScheduleHistory() {
   };
 
   // ── Catalog Operations query ──
-  const { data: batchData, isLoading: isLoadingBatch } = trpc.batchHistory.getMyHistory.useQuery(
-    { limit: 100 },
-    { enabled: isGlobalView, retry: false }
-  );
+  const { data: batchData, isLoading: isLoadingBatch } = useQuery({
+    queryKey: ['batchHistory'],
+    queryFn: () => apiClient.batchHistory.getMyHistory(100),
+    enabled: isGlobalView,
+    retry: false,
+  });
   
   const isLoading = isGlobalView ? isLoadingAll : isLoadingSchedule;
   const historyError = isGlobalView ? allHistoryError : scheduleHistoryError;

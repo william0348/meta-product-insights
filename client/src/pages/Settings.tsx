@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { trpc } from '@/lib/trpc';
+import { apiClient } from '@/lib/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,17 +12,18 @@ import { ArrowLeft, Save, Trash2, Key, ShoppingBag, Loader2, Eye, EyeOff, Filter
 
 export default function Settings() {
   const [, setLocation] = useLocation();
-  
+  const queryClient = useQueryClient();
+
   // Token state
   const [adsToken, setAdsToken] = useState('');
   const [adsAccountId, setAdsAccountId] = useState('');
   const [catalogToken, setCatalogToken] = useState('');
   const [catalogId, setCatalogId] = useState('');
-  
+
   // Filter preferences state
   const [minSpend, setMinSpend] = useState('');
   const [minCTR, setMinCTR] = useState('');
-  
+
   // UI state
   const [showAdsToken, setShowAdsToken] = useState(false);
   const [showCatalogToken, setShowCatalogToken] = useState(false);
@@ -31,21 +33,27 @@ export default function Settings() {
   const [isDeletingAds, setIsDeletingAds] = useState(false);
   const [isDeletingCatalog, setIsDeletingCatalog] = useState(false);
   const [isDeletingFilters, setIsDeletingFilters] = useState(false);
-  
-  // tRPC hooks
-  const saveTokenMutation = trpc.tokens.save.useMutation();
-  const deleteTokenMutation = trpc.tokens.delete.useMutation();
-  
-  const { data: adsTokenData, refetch: refetchAdsToken } = trpc.tokens.get.useQuery(
-    { tokenType: "ads_management" },
-    { refetchOnWindowFocus: false }
-  );
-  
-  const { data: catalogTokenData, refetch: refetchCatalogToken } = trpc.tokens.get.useQuery(
-    { tokenType: "catalog_management" },
-    { refetchOnWindowFocus: false }
-  );
-  
+
+  // React Query hooks
+  const saveTokenMutation = useMutation({
+    mutationFn: (data: any) => apiClient.tokens.save(data),
+  });
+  const deleteTokenMutation = useMutation({
+    mutationFn: (data: { tokenType: string }) => apiClient.tokens.delete(data.tokenType),
+  });
+
+  const { data: adsTokenData } = useQuery({
+    queryKey: ['tokens', 'ads_management'],
+    queryFn: () => apiClient.tokens.get('ads_management'),
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: catalogTokenData } = useQuery({
+    queryKey: ['tokens', 'catalog_management'],
+    queryFn: () => apiClient.tokens.get('catalog_management'),
+    refetchOnWindowFocus: false,
+  });
+
   // Load saved tokens
   useEffect(() => {
     if (adsTokenData?.found) {
@@ -55,21 +63,21 @@ export default function Settings() {
       setMinCTR(adsTokenData.minCTR || '');
     }
   }, [adsTokenData]);
-  
+
   useEffect(() => {
     if (catalogTokenData?.found) {
       setCatalogToken(catalogTokenData.accessToken || '');
       setCatalogId(catalogTokenData.catalogId || '');
     }
   }, [catalogTokenData]);
-  
+
   // Save Ads Token
   const handleSaveAdsToken = async () => {
     if (!adsToken.trim()) {
       toast.error('Please enter an access token');
       return;
     }
-    
+
     setIsSavingAds(true);
     try {
       await saveTokenMutation.mutateAsync({
@@ -80,21 +88,21 @@ export default function Settings() {
         minCTR: minCTR || undefined,
       });
       toast.success('Ads Report Token saved successfully');
-      refetchAdsToken();
+      queryClient.invalidateQueries({ queryKey: ['tokens', 'ads_management'] });
     } catch (error: any) {
       toast.error(error.message || 'Failed to save token');
     } finally {
       setIsSavingAds(false);
     }
   };
-  
+
   // Save Catalog Token
   const handleSaveCatalogToken = async () => {
     if (!catalogToken.trim()) {
       toast.error('Please enter an access token');
       return;
     }
-    
+
     setIsSavingCatalog(true);
     try {
       await saveTokenMutation.mutateAsync({
@@ -103,14 +111,14 @@ export default function Settings() {
         catalogId: catalogId || undefined,
       });
       toast.success('Catalog Token saved successfully');
-      refetchCatalogToken();
+      queryClient.invalidateQueries({ queryKey: ['tokens', 'catalog_management'] });
     } catch (error: any) {
       toast.error(error.message || 'Failed to save token');
     } finally {
       setIsSavingCatalog(false);
     }
   };
-  
+
   // Save Filter Preferences
   const handleSaveFilters = async () => {
     // Validate inputs
@@ -122,7 +130,7 @@ export default function Settings() {
       toast.error('Min CTR must be a valid number');
       return;
     }
-    
+
     setIsSavingFilters(true);
     try {
       // Save filter preferences with the ads token (or create a placeholder if no token exists)
@@ -134,14 +142,14 @@ export default function Settings() {
         minCTR: minCTR || undefined,
       });
       toast.success('Filter preferences saved successfully');
-      refetchAdsToken();
+      queryClient.invalidateQueries({ queryKey: ['tokens', 'ads_management'] });
     } catch (error: any) {
       toast.error(error.message || 'Failed to save filter preferences');
     } finally {
       setIsSavingFilters(false);
     }
   };
-  
+
   // Delete Ads Token
   const handleDeleteAdsToken = async () => {
     setIsDeletingAds(true);
@@ -152,14 +160,14 @@ export default function Settings() {
       setMinSpend('');
       setMinCTR('');
       toast.success('Ads Report Token deleted');
-      refetchAdsToken();
+      queryClient.invalidateQueries({ queryKey: ['tokens', 'ads_management'] });
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete token');
     } finally {
       setIsDeletingAds(false);
     }
   };
-  
+
   // Delete Catalog Token
   const handleDeleteCatalogToken = async () => {
     setIsDeletingCatalog(true);
@@ -168,14 +176,14 @@ export default function Settings() {
       setCatalogToken('');
       setCatalogId('');
       toast.success('Catalog Token deleted');
-      refetchCatalogToken();
+      queryClient.invalidateQueries({ queryKey: ['tokens', 'catalog_management'] });
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete token');
     } finally {
       setIsDeletingCatalog(false);
     }
   };
-  
+
   // Clear Filter Preferences
   const handleClearFilters = async () => {
     setIsDeletingFilters(true);
@@ -191,7 +199,7 @@ export default function Settings() {
       setMinSpend('');
       setMinCTR('');
       toast.success('Filter preferences cleared');
-      refetchAdsToken();
+      queryClient.invalidateQueries({ queryKey: ['tokens', 'ads_management'] });
     } catch (error: any) {
       toast.error(error.message || 'Failed to clear filter preferences');
     } finally {
@@ -202,14 +210,14 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
       <Toaster position="top-right" />
-      
+
       {/* Header */}
       <header className="border-b border-border bg-background sticky top-0 z-20">
         <div className="container h-16 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setLocation('/')}
               className="gap-2"
             >
@@ -221,11 +229,11 @@ export default function Settings() {
           <div className="w-24" /> {/* Spacer for centering */}
         </div>
       </header>
-      
+
       {/* Main Content */}
       <main className="flex-1 container py-8 max-w-2xl">
         <div className="space-y-6">
-          
+
           {/* Ads Report Token Card */}
           <Card>
             <CardHeader>
@@ -247,7 +255,7 @@ export default function Settings() {
                   onChange={(e) => setAdsAccountId(e.target.value)}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="ads-token">Access Token</Label>
                 <div className="relative">
@@ -270,18 +278,18 @@ export default function Settings() {
                   </Button>
                 </div>
               </div>
-              
+
               <div className="flex gap-2">
-                <Button 
-                  onClick={handleSaveAdsToken} 
+                <Button
+                  onClick={handleSaveAdsToken}
                   disabled={isSavingAds}
                   className="gap-2"
                 >
                   {isSavingAds ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Save Token
                 </Button>
-                <Button 
-                  variant="destructive" 
+                <Button
+                  variant="destructive"
                   onClick={handleDeleteAdsToken}
                   disabled={isDeletingAds || !adsTokenData?.found}
                   className="gap-2"
@@ -290,7 +298,7 @@ export default function Settings() {
                   Delete
                 </Button>
               </div>
-              
+
               {adsTokenData?.found && (
                 <p className="text-xs text-muted-foreground">
                   ✓ Token saved. Last updated: stored in database.
@@ -298,7 +306,7 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
-          
+
           {/* Filter Preferences Card */}
           <Card>
             <CardHeader>
@@ -327,7 +335,7 @@ export default function Settings() {
                     Only show products with spend ≥ this value
                   </p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="min-ctr">Min CTR (%)</Label>
                   <Input
@@ -345,18 +353,18 @@ export default function Settings() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex gap-2">
-                <Button 
-                  onClick={handleSaveFilters} 
+                <Button
+                  onClick={handleSaveFilters}
                   disabled={isSavingFilters}
                   className="gap-2"
                 >
                   {isSavingFilters ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Save Preferences
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={handleClearFilters}
                   disabled={isDeletingFilters || (!minSpend && !minCTR)}
                   className="gap-2"
@@ -365,7 +373,7 @@ export default function Settings() {
                   Clear
                 </Button>
               </div>
-              
+
               {(adsTokenData?.minSpend || adsTokenData?.minCTR) && (
                 <p className="text-xs text-muted-foreground">
                   ✓ Filter preferences saved: Min Spend = {adsTokenData.minSpend || '0'}, Min CTR = {adsTokenData.minCTR || '0'}%
@@ -373,7 +381,7 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
-          
+
           {/* Catalog Token Card */}
           <Card>
             <CardHeader>
@@ -396,7 +404,7 @@ export default function Settings() {
                   onChange={(e) => setCatalogId(e.target.value)}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="catalog-token">Access Token</Label>
                 <div className="relative">
@@ -419,18 +427,18 @@ export default function Settings() {
                   </Button>
                 </div>
               </div>
-              
+
               <div className="flex gap-2">
-                <Button 
-                  onClick={handleSaveCatalogToken} 
+                <Button
+                  onClick={handleSaveCatalogToken}
                   disabled={isSavingCatalog}
                   className="gap-2"
                 >
                   {isSavingCatalog ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Save Token
                 </Button>
-                <Button 
-                  variant="destructive" 
+                <Button
+                  variant="destructive"
                   onClick={handleDeleteCatalogToken}
                   disabled={isDeletingCatalog || !catalogTokenData?.found}
                   className="gap-2"
@@ -439,7 +447,7 @@ export default function Settings() {
                   Delete
                 </Button>
               </div>
-              
+
               {catalogTokenData?.found && (
                 <p className="text-xs text-muted-foreground">
                   ✓ Token saved. Last updated: stored in database.
@@ -447,7 +455,7 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
-          
+
         </div>
       </main>
     </div>

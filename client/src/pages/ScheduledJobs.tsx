@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
-import { trpc } from '@/lib/trpc';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -101,24 +102,28 @@ export default function ScheduledJobs() {
     { name: '', adAccountId: '', minSpend: '', minCTR: '', maxSpend: '', maxCVR: '' }
   ]);
   
-  const { data: schedulesData, isLoading, refetch } = trpc.schedules.getMySchedules.useQuery({ limit: 50 });
-  const { data: tokenData } = trpc.tokens.get.useQuery({ tokenType: 'ads_management' });
-  const { data: catalogTokenData } = trpc.tokens.get.useQuery({ tokenType: 'catalog_management' });
-  
-  const createMutation = trpc.schedules.create.useMutation({
+  const queryClient = useQueryClient();
+
+  const { data: schedulesData, isLoading } = useQuery({ queryKey: ['schedules'], queryFn: () => apiClient.schedules.getMySchedules(50) });
+  const { data: tokenData } = useQuery({ queryKey: ['tokens', 'ads_management'], queryFn: () => apiClient.tokens.get('ads_management') });
+  const { data: catalogTokenData } = useQuery({ queryKey: ['tokens', 'catalog_management'], queryFn: () => apiClient.tokens.get('catalog_management') });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiClient.schedules.create(data),
     onSuccess: () => {
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['schedules'] });
       closeDialog();
       toast.success('Schedule created successfully');
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast.error(`Failed to create schedule: ${error.message}`);
     },
   });
-  
-  const updateMutation = trpc.schedules.update.useMutation({
+
+  const updateMutation = useMutation({
+    mutationFn: (vars: { scheduleId: number; [key: string]: any }) => apiClient.schedules.update(vars.scheduleId, vars),
     onSuccess: () => {
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['schedules'] });
       if (editingScheduleId) {
         closeDialog();
         toast.success('Schedule updated successfully');
@@ -126,24 +131,26 @@ export default function ScheduledJobs() {
         toast.success('Schedule updated');
       }
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast.error(`Failed to update schedule: ${error.message}`);
     },
   });
-  
-  const deleteMutation = trpc.schedules.delete.useMutation({
+
+  const deleteMutation = useMutation({
+    mutationFn: (data: { scheduleId: number }) => apiClient.schedules.delete(data.scheduleId),
     onSuccess: () => {
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['schedules'] });
       toast.success('Schedule deleted');
     },
   });
-  
-  const runNowMutation = trpc.schedules.runNow.useMutation({
+
+  const runNowMutation = useMutation({
+    mutationFn: (data: { scheduleId: number }) => apiClient.schedules.runNow(data.scheduleId),
     onSuccess: () => {
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['schedules'] });
       toast.success('Schedule triggered! Check Reports page for results.');
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast.error(`Failed to run schedule: ${error.message}`);
     },
   });

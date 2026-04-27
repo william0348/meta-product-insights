@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AsyncJobStatus, ProductInsightData, ReportConfig, FilterCondition } from '../types';
 import { facebookApiService } from '@/lib/api';
+import { mapJsonRowToProductInsightData } from '@/lib/facebook-json-mapper';
 import { ReportConfigForm } from '@/components/ReportConfigForm';
 import { StatusBadge } from '@/components/StatusBadge';
 import { InsightsCharts } from '@/components/InsightsCharts';
@@ -9,7 +10,8 @@ import { FilterBar } from '@/components/FilterBar';
 import { SummaryMetrics } from '@/components/SummaryMetrics';
 import { CatalogUploadModal, CatalogUploadConfig } from '@/components/CatalogUploadModal';
 import { BackgroundJobProgress } from '@/components/BackgroundJobProgress';
-import { trpc } from '@/lib/trpc';
+import { apiClient } from '@/lib/api-client';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useReportState } from '@/contexts/ReportContext';
 
 import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, FileText, Calendar, BookOpen, Trophy, ChevronDown } from 'lucide-react';
@@ -28,7 +30,7 @@ import { toast } from 'sonner';
 
 export default function Home() {
   const [, setLocation] = useLocation();
-  
+
   // Use persistent report state from context (survives navigation)
   const {
     reportId, setReportId,
@@ -48,11 +50,44 @@ export default function Home() {
     activeJobId, setActiveJobId,
     pollIntervalRef,
   } = useReportState();
-  
+
+  // Refilter state
+  const [refilterMinSpend, setRefilterMinSpend] = useState('');
+  const [refilterMinCTR, setRefilterMinCTR] = useState('');
+  const [refilterMaxSpend, setRefilterMaxSpend] = useState('');
+  const [refilterMaxCVR, setRefilterMaxCVR] = useState('');
+  const [refilterMaxResults, setRefilterMaxResults] = useState('50000');
+  const [isRefiltering, setIsRefiltering] = useState(false);
+  const [lastReportRunId, setLastReportRunId] = useState<string | null>(null);
+
+  const handleRefilter = async () => {
+    if (!lastReportRunId) return;
+    setIsRefiltering(true);
+    try {
+      const result = await apiClient.facebook.refilter({
+        reportRunId: lastReportRunId,
+        minSpend: refilterMinSpend || undefined,
+        minCTR: refilterMinCTR || undefined,
+        maxSpend: refilterMaxSpend || undefined,
+        maxCVR: refilterMaxCVR || undefined,
+        maxResults: refilterMaxResults ? parseInt(refilterMaxResults) : undefined,
+      });
+      const mapped = result.data.map(mapJsonRowToProductInsightData);
+      setReportData(mapped);
+      setLoadedRowCount(mapped.length);
+      toast.success(`Refiltered: ${result.rawRecords.toLocaleString()} → ${result.totalFiltered.toLocaleString()} rows (showing ${mapped.length.toLocaleString()})`);
+    } catch (err: any) {
+      toast.error(err.message || 'Refilter failed');
+    } finally {
+      setIsRefiltering(false);
+    }
+  };
+
   // Job submission mutation
-  const submitJobMutation = trpc.jobs.submit.useMutation();
-  const trpcUtils = trpc.useUtils();
-  
+  const submitJobMutation = useMutation({
+    mutationFn: (data: any) => apiClient.jobs.submit(data),
+  });
+
   // Saved token state
   const [savedAdsToken, setSavedAdsToken] = useState<string | null>(null);
   const [savedCatalogToken, setSavedCatalogToken] = useState<string | null>(null);
@@ -63,20 +98,24 @@ export default function Home() {
   const [savedMaxSpend, setSavedMaxSpend] = useState<string | null>(null);
   const [savedMaxCVR, setSavedMaxCVR] = useState<string | null>(null);
   const [savedBatchSize, setSavedBatchSize] = useState<number>(2000);
-  
+
   // Token mutations
-  const saveTokenMutation = trpc.tokens.save.useMutation();
-  
+  const saveTokenMutation = useMutation({
+    mutationFn: (data: any) => apiClient.tokens.save(data),
+  });
+
   // Load saved tokens on mount
-  const { data: adsTokenData } = trpc.tokens.get.useQuery(
-    { tokenType: "ads_management" },
-    { refetchOnWindowFocus: false }
-  );
-  const { data: catalogTokenData } = trpc.tokens.get.useQuery(
-    { tokenType: "catalog_management" },
-    { refetchOnWindowFocus: false }
-  );
-  
+  const { data: adsTokenData } = useQuery({
+    queryKey: ['tokens', 'ads_management'],
+    queryFn: () => apiClient.tokens.get('ads_management'),
+    refetchOnWindowFocus: false,
+  });
+  const { data: catalogTokenData } = useQuery({
+    queryKey: ['tokens', 'catalog_management'],
+    queryFn: () => apiClient.tokens.get('catalog_management'),
+    refetchOnWindowFocus: false,
+  });
+
   // Update local state when token data loads
   useEffect(() => {
     if (adsTokenData?.found) {
@@ -88,7 +127,7 @@ export default function Home() {
       setSavedMaxCVR(adsTokenData.maxCVR);
     }
   }, [adsTokenData]);
-  
+
   useEffect(() => {
     if (catalogTokenData?.found) {
       setSavedCatalogToken(catalogTokenData.accessToken);
@@ -108,50 +147,36 @@ export default function Home() {
       setIsRequesting(true);
       setActiveAccessToken(config.accessToken);
 
-      // 1. Build API filters from form data
-      const apiFilters: Array<{field: string, operator: string, value: any}> = [];
-      
-      if (config.minSpend && parseFloat(config.minSpend) > 0) {
-        apiFilters.push({
-          field: 'spend',
-          operator: 'GREATER_THAN',
-          value: parseFloat(config.minSpend)
-        });
-      }
-      
-      if (config.minCTR && parseFloat(config.minCTR) > 0) {
-        apiFilters.push({
-          field: 'inline_link_click_ctr',
-          operator: 'GREATER_THAN',
-          value: parseFloat(config.minCTR)
-        });
-      }
-      
-      if (config.maxSpend && parseFloat(config.maxSpend) > 0) {
-        apiFilters.push({
-          field: 'spend',
-          operator: 'LESS_THAN',
-          value: parseFloat(config.maxSpend)
-        });
-      }
-      // Note: maxCVR is a post-processing filter (CVR is calculated, not a native API field)
-      // It will be applied after data download in the filter logic
-      
-      // 2. Create Report Run with filters
+      // Store filters for Python-side filtering during download
+      const pythonFilters = {
+        minSpend: config.minSpend || undefined,
+        minCTR: config.minCTR || undefined,
+        maxSpend: config.maxSpend || undefined,
+        maxCVR: config.maxCVR || undefined,
+      };
+      (window as any).__reportFilters = pythonFilters;
+
+      // Create Report Run without API-level filters (filtering done in Python after download)
       const response = await facebookApiService.createReportRun(
-        config.accountId, 
-        config.dateStart, 
+        config.accountId,
+        config.dateStart,
         config.dateEnd,
         config.accessToken,
         config.level,
-        config.breakdown,
-        apiFilters.length > 0 ? apiFilters : undefined
+        config.breakdown
       );
-      
+
       setReportId(response.report_run_id);
+      setLastReportRunId(response.report_run_id);
       setIsRequesting(false);
       toast.success("Report run initiated successfully");
-      
+
+      // Pre-fill refilter with current config
+      setRefilterMinSpend(config.minSpend || '');
+      setRefilterMinCTR(config.minCTR || '');
+      setRefilterMaxSpend(config.maxSpend || '');
+      setRefilterMaxCVR(config.maxCVR || '');
+
       // Save ads token to database for future use
       try {
         await saveTokenMutation.mutateAsync({
@@ -230,12 +255,13 @@ export default function Home() {
       setDownloadProgress(0);
       setLoadedRowCount(0);
       setIsLoadingComplete(false);
-      
+
       let hasShownInitialResults = false;
-      
+
+      const filters = (window as any).__reportFilters || {};
       const results = await facebookApiService.downloadReportCSV(
-        id, 
-        token, 
+        id,
+        token,
         (parsedData) => {
           if (!hasShownInitialResults && parsedData.length >= 1000) {
             setReportData(parsedData);
@@ -250,9 +276,10 @@ export default function Home() {
         },
         (progress) => {
           setDownloadProgress(progress);
-        }
+        },
+        filters
       );
-      
+
       console.log('[fetchResults] CSV parsed successfully:', results.data.length, 'records');
       console.log('[fetchResults] First 3 records:', results.data.slice(0, 3));
       setReportData(results.data);
@@ -368,19 +395,19 @@ export default function Home() {
   // Catalog Upload Handler - Uses background job processing
   const handleCatalogUpload = async (config: CatalogUploadConfig) => {
     if (!filteredData || filteredData.length === 0) return;
-    
+
     const retailerIds = filteredData
       .map(item => item.product_retailer_id)
       .filter(Boolean);
-    
+
     if (retailerIds.length === 0) {
       toast.error('No valid product IDs found');
       return;
     }
-    
+
     try {
       setCatalogUploading(true);
-      
+
       const updateCriteria = {
         sourceField: config.customLabel4 ? 'custom_label_4' : undefined,
         targetField: config.customNumberValue ? config.customNumberField : undefined,
@@ -390,7 +417,7 @@ export default function Home() {
           config.customNumberValue ? `Set ${config.customNumberField} = ${config.customNumberValue}` : '',
         ].filter(Boolean).join('; ') || 'Batch update',
       };
-      
+
       const result = await submitJobMutation.mutateAsync({
         jobType: 'catalog_update',
         config: {
@@ -403,12 +430,12 @@ export default function Home() {
           updateCriteria,
         },
       });
-      
+
       if (result.success && result.jobId) {
         setActiveJobId(result.jobId);
         toast.success(`Background job started! Processing ${retailerIds.length} products...`);
         toast.info('You can close this window - the job will continue in the background.', { duration: 8000 });
-        
+
         try {
           await saveTokenMutation.mutateAsync({
             tokenType: "catalog_management",
@@ -435,7 +462,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
       <Toaster position="top-right" />
-      
+
       {/* Catalog Upload Modal */}
       <CatalogUploadModal
         open={catalogModalOpen}
@@ -445,14 +472,14 @@ export default function Home() {
         defaultCatalogId={savedCatalogId || undefined}
         defaultAccessToken={savedCatalogToken || undefined}
       />
-      
+
       {/* Swiss Style Header: Clean, minimal, authoritative */}
       <header className="border-b border-border bg-background sticky top-0 z-20">
         <div className="container h-16 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <img 
-              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663317876169/sDXSavaiZprWHKPf.png" 
-              alt="Meta Product Insights" 
+            <img
+              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663317876169/sDXSavaiZprWHKPf.png"
+              alt="Meta Product Insights"
               className="w-10 h-10 rounded-lg"
             />
             <div>
@@ -460,42 +487,42 @@ export default function Home() {
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Explorer v2.0</p>
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-4">
             <div className="hidden sm:flex items-center text-[10px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-3 py-1 border border-emerald-100">
               <ShieldCheck className="w-3 h-3 mr-1.5" />
               Secure API Connection
             </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setLocation('/reports')}
               className="gap-2"
             >
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">Reports</span>
             </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setLocation('/schedules')}
               className="gap-2"
             >
               <Calendar className="w-4 h-4" />
               <span className="hidden sm:inline">Schedules</span>
             </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setLocation('/settings')}
               className="gap-2"
             >
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">Settings</span>
             </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setLocation('/help')}
               className="gap-2"
             >
@@ -509,12 +536,12 @@ export default function Home() {
       {/* Main Content Grid */}
       <main className="flex-1 container py-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
+
           {/* Left Sidebar: Controls (3 cols) */}
           <div className="lg:col-span-3 space-y-6">
-            <ReportConfigForm 
-              onSubmit={handleStartReport} 
-              isProcessing={isRequesting || (jobStatus !== AsyncJobStatus.NOT_STARTED && jobStatus !== AsyncJobStatus.COMPLETED && jobStatus !== AsyncJobStatus.FAILED)} 
+            <ReportConfigForm
+              onSubmit={handleStartReport}
+              isProcessing={isRequesting || (jobStatus !== AsyncJobStatus.NOT_STARTED && jobStatus !== AsyncJobStatus.COMPLETED && jobStatus !== AsyncJobStatus.FAILED)}
               defaultToken={savedAdsToken || undefined}
               defaultAccountId={savedAdAccountId || undefined}
               defaultMinSpend={savedMinSpend || undefined}
@@ -522,7 +549,7 @@ export default function Home() {
               defaultMaxSpend={savedMaxSpend || undefined}
               defaultMaxCVR={savedMaxCVR || undefined}
             />
-            
+
             {/* Background Job Progress */}
             {activeJobId && (
               <BackgroundJobProgress
@@ -537,7 +564,7 @@ export default function Home() {
                 onClose={() => setActiveJobId(null)}
               />
             )}
-            
+
             {/* Job Status Card */}
             {(reportId || isRequesting) && (
               <Card className="border-0 shadow-none bg-background border border-border rounded-none">
@@ -561,13 +588,13 @@ export default function Home() {
                   {/* Progress Bar - Swiss Style (Sharp, no rounded corners) */}
                   {jobStatus === AsyncJobStatus.RUNNING && (
                     <div className="h-1 w-full bg-secondary mt-2">
-                      <div 
-                        className="h-full bg-primary transition-all duration-500 ease-out" 
+                      <div
+                        className="h-full bg-primary transition-all duration-500 ease-out"
                         style={{ width: `${jobPercent}%` }}
                       />
                     </div>
                   )}
-                  
+
                   {/* Download Progress Indicator */}
                   {isFetchingMore && downloadProgress > 0 && (
                     <div>
@@ -575,8 +602,8 @@ export default function Home() {
                         Downloading CSV: {downloadProgress}%
                       </span>
                       <div className="h-1 w-full bg-secondary mt-2">
-                        <div 
-                          className="h-full bg-emerald-600 transition-all duration-300 ease-out" 
+                        <div
+                          className="h-full bg-emerald-600 transition-all duration-300 ease-out"
                           style={{ width: `${downloadProgress}%` }}
                         />
                       </div>
@@ -585,11 +612,82 @@ export default function Home() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Refilter Panel - shown after data is loaded */}
+            {reportData && lastReportRunId && (
+              <Card className="border-0 shadow-none bg-background border border-border rounded-none">
+                <CardContent className="p-4 space-y-3">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground block">Quick Refilter</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground">Min Spend</label>
+                      <input
+                        type="number" step="0.01" placeholder="10"
+                        value={refilterMinSpend}
+                        onChange={(e) => setRefilterMinSpend(e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-border bg-background rounded-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground">Min CTR %</label>
+                      <input
+                        type="number" step="0.01" placeholder="5"
+                        value={refilterMinCTR}
+                        onChange={(e) => setRefilterMinCTR(e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-border bg-background rounded-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground">Max Spend</label>
+                      <input
+                        type="number" step="0.01" placeholder=""
+                        value={refilterMaxSpend}
+                        onChange={(e) => setRefilterMaxSpend(e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-border bg-background rounded-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground">Max CVR %</label>
+                      <input
+                        type="number" step="0.01" placeholder="1"
+                        value={refilterMaxCVR}
+                        onChange={(e) => setRefilterMaxCVR(e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-border bg-background rounded-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">Max Results</label>
+                    <input
+                      type="number" step="1000" placeholder="50000"
+                      value={refilterMaxResults}
+                      onChange={(e) => setRefilterMaxResults(e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-border bg-background rounded-none"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleRefilter}
+                    disabled={isRefiltering}
+                    className="w-full h-8 text-xs uppercase font-bold tracking-wide rounded-none"
+                    size="sm"
+                  >
+                    {isRefiltering ? (
+                      <><Loader2 className="w-3 h-3 mr-2 animate-spin" />Refiltering...</>
+                    ) : (
+                      <>Apply Filter</>
+                    )}
+                  </Button>
+                  <p className="text-[9px] text-muted-foreground text-center">
+                    Instant refilter from cached data — no re-download needed
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Right Content: Data & Charts (9 cols) */}
           <div className="lg:col-span-9 space-y-8">
-            
+
             {/* Error Message */}
             {apiError && (
               <div className="bg-destructive/10 border border-destructive/20 p-4 text-destructive text-sm font-medium">
@@ -619,11 +717,11 @@ export default function Home() {
             {/* Data View */}
             {reportData && (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
-                
+
                 {/* Filter Bar */}
-                <FilterBar 
-                  activeFilters={activeFilters} 
-                  onFiltersChange={setActiveFilters} 
+                <FilterBar
+                  activeFilters={activeFilters}
+                  onFiltersChange={setActiveFilters}
                 />
 
                 {/* Background Loading Progress */}
@@ -641,8 +739,8 @@ export default function Home() {
                       </span>
                     </div>
                     <div className="h-2 w-full bg-blue-100 dark:bg-blue-900 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-blue-600 transition-all duration-300 ease-out" 
+                      <div
+                        className="h-full bg-blue-600 transition-all duration-300 ease-out"
                         style={{ width: `${downloadProgress}%` }}
                       />
                     </div>
@@ -658,11 +756,11 @@ export default function Home() {
                       Showing {filteredData ? filteredData.length : 0} of {reportData.length} items
                     </span>
                   </div>
-                  
+
                   <div className="flex space-x-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={handleDownloadXlsx}
                       className="h-8 text-xs uppercase font-bold tracking-wide rounded-none border-border hover:bg-secondary"
                     >
@@ -671,9 +769,9 @@ export default function Home() {
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
+                        <Button
+                          variant="outline"
+                          size="sm"
                           disabled={!filteredData || filteredData.length === 0}
                           className="h-8 text-xs uppercase font-bold tracking-wide rounded-none border-border hover:bg-secondary"
                         >
@@ -693,9 +791,9 @@ export default function Home() {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                    <Button 
-                      variant="default" 
-                      size="sm" 
+                    <Button
+                      variant="default"
+                      size="sm"
                       onClick={() => setCatalogModalOpen(true)}
                       disabled={!filteredData || filteredData.length === 0}
                       className="h-8 text-xs uppercase font-bold tracking-wide rounded-none"
@@ -714,7 +812,7 @@ export default function Home() {
 
                 {/* Data Table */}
                 <ProductTable data={previewData} totalCount={filteredData ? filteredData.length : 0} />
-                
+
                 {filteredData && filteredData.length > 100 && (
                    <p className="text-center text-xs text-muted-foreground py-4 italic">
                      Table preview limited to top 100 items. Download Excel to view full filtered dataset.

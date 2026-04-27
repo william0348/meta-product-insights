@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { trpc } from '@/lib/trpc';
+import { apiClient } from '@/lib/api-client';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -17,19 +18,20 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
   onClose,
 }) => {
   const [isPolling, setIsPolling] = useState(true);
-  
-  const { data: jobData, refetch } = trpc.jobs.getStatus.useQuery(
-    { jobId },
-    { 
-      refetchInterval: isPolling ? 2000 : false, // Poll every 2 seconds while active
-      refetchOnWindowFocus: false,
-    }
-  );
-  
-  const cancelMutation = trpc.jobs.cancel.useMutation();
-  
+
+  const { data: jobData, refetch } = useQuery({
+    queryKey: ['jobs', jobId],
+    queryFn: () => apiClient.jobs.getStatus(jobId),
+    refetchInterval: isPolling ? 2000 : false,
+    refetchOnWindowFocus: false,
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (data: { jobId: number }) => apiClient.jobs.cancel(data.jobId),
+  });
+
   const job = jobData?.job;
-  
+
   // Stop polling when job is complete
   useEffect(() => {
     if (job && (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled')) {
@@ -39,7 +41,7 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
       }
     }
   }, [job?.status, onComplete]);
-  
+
   const handleCancel = async () => {
     try {
       await cancelMutation.mutateAsync({ jobId });
@@ -48,7 +50,7 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
       console.error('Failed to cancel job:', error);
     }
   };
-  
+
   if (!jobData?.found || !job) {
     return (
       <Card className="border-border">
@@ -61,7 +63,7 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
       </Card>
     );
   }
-  
+
   const getStatusIcon = () => {
     switch (job.status) {
       case 'queued':
@@ -78,7 +80,7 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
         return null;
     }
   };
-  
+
   const getStatusText = () => {
     switch (job.status) {
       case 'queued':
@@ -95,9 +97,9 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
         return job.status;
     }
   };
-  
+
   const isActive = job.status === 'queued' || job.status === 'running';
-  
+
   return (
     <Card className="border-border">
       <CardHeader className="pb-2">
@@ -122,7 +124,7 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
           </div>
           <Progress value={job.progress} className="h-2" />
         </div>
-        
+
         {/* Stats */}
         <div className="grid grid-cols-4 gap-2 text-xs">
           <div className="text-center">
@@ -142,14 +144,14 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
             <div className="text-muted-foreground">Errors</div>
           </div>
         </div>
-        
+
         {/* Batch progress */}
         {job.totalBatches && job.totalBatches > 0 && (
           <div className="text-xs text-muted-foreground text-center">
             Batch {job.currentBatch || 0} of {job.totalBatches}
           </div>
         )}
-        
+
         {/* Errors preview */}
         {job.errors && job.errors.length > 0 && (
           <div className="text-xs text-destructive bg-destructive/10 p-2 rounded max-h-20 overflow-y-auto">
@@ -164,12 +166,12 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
             )}
           </div>
         )}
-        
+
         {/* Cancel button */}
         {isActive && (
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="w-full"
             onClick={handleCancel}
             disabled={cancelMutation.isPending}
@@ -184,7 +186,7 @@ export const BackgroundJobProgress: React.FC<BackgroundJobProgressProps> = ({
             )}
           </Button>
         )}
-        
+
         {/* Timing info */}
         {job.startedAt && (
           <div className="text-xs text-muted-foreground text-center">
