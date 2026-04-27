@@ -701,3 +701,11 @@
 ## Root Cause Analysis: Job 1050001 Lost After Server Restart
 - [x] Fix: Add startup recovery for orphaned "running" jobs — re-queue them immediately instead of waiting 90min stale timeout
 - [x] Fix: Stale timeout handler should set nextRetryAt on schedule_run to enable automatic retry
+
+- [x] Fix: Agent API /api/agent/* routes blocked by Manus platform OAuth proxy on production — switched to DB-direct trigger via Python script
+
+## Production Deployment Issue (2026-04-27)
+- [ ] Investigate: Production server running stale/old code — Python-style errors appearing in Node.js app
+- [ ] Jobs 1320001-1320015 failed with Python errors (process_report_generation_job() missing positional args)
+- [ ] Jobs 1320016-1320018 failed with "Job timed out after 240 minutes" after only 13 seconds
+- [x] Save new checkpoint for user to re-publish
