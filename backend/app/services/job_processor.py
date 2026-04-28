@@ -17,7 +17,7 @@ from typing import Any, Optional
 from sqlalchemy import select, update, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import BatchJob, CatalogBatchHistory, ScheduleRun, UserToken
+from ..models import BatchJob, CatalogBatchHistory, ScheduledJob, ScheduleRun, UserToken
 from ..database import get_session_factory
 from ..facebook.catalog import (
     fetch_products_by_retailer_ids,
@@ -184,12 +184,147 @@ async def _db_op_get_batch_job(job_id: int):
 # ---------------------------------------------------------------------------
 
 
+async def _reconcile_stale_schedule_runs() -> None:
+    """One-shot startup cleanup. Two passes:
+      1. Runs whose jobs all settled → set correct terminal status.
+      2. Runs older than RECONCILE_FORCE_AFTER_MIN where jobs are still
+         flagged running/queued → those jobs died with the previous backend
+         (in-memory state was lost), so force-mark both jobs and run as failed.
+    """
+    RECONCILE_FORCE_AFTER_MIN = 60
+
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(ScheduleRun).where(ScheduleRun.status == "running")
+        )
+        stuck_runs = list(result.scalars().all())
+
+    if not stuck_runs:
+        return
+
+    logger.info(
+        "[Reconcile] %d schedule_run(s) stuck in 'running' state at startup",
+        len(stuck_runs),
+    )
+
+    now = datetime.utcnow()
+
+    for run in stuck_runs:
+        job_ids = run.jobIds or []
+        run_age_min = (
+            (now - run.startedAt).total_seconds() / 60
+            if run.startedAt else float("inf")
+        )
+
+        async with session_factory() as session:
+            if not job_ids:
+                await update_schedule_run(
+                    session, run.id,
+                    status="failed",
+                    completedAt=now,
+                    errorMessage="Reconciled at startup: no jobs tracked",
+                )
+                logger.info("[Reconcile] run %d: no jobs → failed", run.id)
+                continue
+
+            jobs_result = await session.execute(
+                select(BatchJob).where(BatchJob.id.in_(job_ids))
+            )
+            jobs = list(jobs_result.scalars().all())
+
+            still_active = [j for j in jobs if j.status in ("queued", "running")]
+
+            # Aggressive path: old run + still-active jobs → those jobs are
+            # zombies from the previous lifecycle. Force-fail them.
+            if still_active and run_age_min >= RECONCILE_FORCE_AFTER_MIN:
+                for j in still_active:
+                    await update_batch_job(
+                        session, j.id,
+                        status="failed",
+                        statusMessage=(
+                            "Force-failed at startup: orphaned by previous "
+                            "backend lifecycle"
+                        ),
+                        completedAt=now,
+                    )
+                logger.info(
+                    "[Reconcile] run %d (%.0f min old): force-failed %d zombie job(s)",
+                    run.id, run_age_min, len(still_active),
+                )
+                # Refresh job statuses for the summary below
+                jobs = [
+                    j if j.status not in ("queued", "running") else j
+                    for j in jobs
+                ]
+                # The zombies are now failed, so include them as failed
+                still_active = []
+
+            if still_active:
+                logger.info(
+                    "[Reconcile] run %d (%.0f min old): %d job(s) still active "
+                    "and run is recent, leaving alone",
+                    run.id, run_age_min, len(still_active),
+                )
+                continue
+
+            # Recompute statuses (zombies are now failed)
+            completed = [j for j in jobs if j.status == "completed"]
+            failed = [j for j in jobs if j.status in ("failed", "queued", "running")]
+            cancelled = [j for j in jobs if j.status == "cancelled"]
+
+            if completed and not failed and not cancelled:
+                new_status = "completed"
+                err_msg = None
+            elif completed:
+                new_status = "partial"
+                err_msg = f"{len(failed)} failed, {len(cancelled)} cancelled"
+            else:
+                new_status = "failed"
+                err_msg = (
+                    f"All jobs ended without success: "
+                    f"{len(failed)} failed, {len(cancelled)} cancelled"
+                )
+
+            await update_schedule_run(
+                session, run.id,
+                status=new_status,
+                completedAt=now,
+                completedJobs=len(completed),
+                failedJobs=len(failed),
+                errorMessage=err_msg,
+            )
+
+            # Sync parent scheduled_job's lastRunStatus so the schedule list
+            # UI doesn't keep showing "Running" for a settled run.
+            sj_status = "success" if new_status == "completed" else "failed"
+            await session.execute(
+                update(ScheduledJob)
+                .where(ScheduledJob.id == run.scheduleId)
+                .values(lastRunStatus=sj_status)
+            )
+            await session.commit()
+
+            logger.info(
+                "[Reconcile] run %d → %s (%d completed / %d failed / %d cancelled), schedule %d → %s",
+                run.id, new_status, len(completed), len(failed), len(cancelled),
+                run.scheduleId, sj_status,
+            )
+
+
 async def start_job_processor() -> None:
     """Start the background job processor loop."""
     global _processor_task
     if _processor_task is not None and not _processor_task.done():
         logger.warning("[JobProcessor] Already running")
         return
+
+    # Clean up any schedule_runs left in 'running' state by a previous lifecycle
+    try:
+        await _reconcile_stale_schedule_runs()
+    except Exception as exc:
+        logger.warning("[JobProcessor] Reconcile failed (non-fatal): %s", exc)
+
     _processor_task = asyncio.create_task(_process_loop())
     logger.info("[JobProcessor] Started")
 

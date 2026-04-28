@@ -1,8 +1,0 @@
-{
-  "query": "SELECT id, status, jobType, progress, processedItems, statusMessage, error_message, queued_at, started_at, completed_at FROM batch_jobs WHERE id >= 90002 ORDER BY id;",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute SELECT id, status, jobType, progress, processedItems, statusMessage, error_message, queued_at, started_at, completed_at FROM batch_jobs WHERE id >= 90002 ORDER BY id;",
-  "returncode": 1,
-  "logs": [
-    "ERROR 1054 (42S22) at line 1: Unknown column 'error_message' in 'field list'"
-  ]
-}

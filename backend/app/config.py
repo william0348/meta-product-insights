@@ -6,8 +6,6 @@ class Settings(BaseSettings):
     debug: bool = False
 
     database_url: str = ""
-    gcs_bucket: str = ""
-    gcs_credentials_path: str = ""
     agent_api_key: str = ""
     owner_open_id: str = "cloudrun-default-user"
     session_secret: str = "dev-secret"

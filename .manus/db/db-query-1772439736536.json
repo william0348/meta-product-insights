@@ -1,9 +1,0 @@
-{
-  "query": "UPDATE batch_jobs SET status = 'failed', statusMessage = 'Cancelled by user', completedAt = NOW(), updatedAt = NOW() WHERE id = 330002 AND status = 'running';\nUPDATE schedule_runs SET status = 'failed', errorMessage = 'Cancelled by user', completedAt = NOW() WHERE id = 270002 AND status = 'running';",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute UPDATE batch_jobs SET status = 'failed', statusMessage = 'Cancelled by user', completedAt = NOW(), updatedAt = NOW() WHERE id = 330002 AND status = 'running';\nUPDATE schedule_runs SET status = 'failed', errorMessage = 'Cancelled by user', completedAt = NOW() WHERE id = 270002 AND status = 'running';",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 2535
-}

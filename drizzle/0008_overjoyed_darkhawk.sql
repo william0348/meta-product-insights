@@ -1,1 +1,0 @@
-ALTER TABLE `scheduled_jobs` MODIFY COLUMN `jobType` enum('report_generation','catalog_update','report_and_catalog') NOT NULL;

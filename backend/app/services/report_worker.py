@@ -5,7 +5,7 @@ Python port of report-worker.ts. Handles:
 - Creating and polling async report runs
 - Fetching paginated insights data
 - Post-processing filters (maxCVR, topConversionLimit)
-- Uploading results to GCS
+- Storing results to local file under backend/reports/
 - Optionally updating product catalog with custom labels
 - Heartbeat tracking for job health monitoring
 """
@@ -22,13 +22,16 @@ from typing import Any, Optional, Callable, Awaitable
 import httpx
 from nanoid import generate as _nanoid_generate
 
+from sqlalchemy import update as sql_update
+
 from ..facebook.insights import (
     create_report_run,
     poll_report_status,
     fetch_insights_data,
 )
 from ..facebook.catalog import batch_update_products, create_update_request
-from ..storage.gcs import storage_put
+from ..database import get_session_factory
+from ..models import ScheduledJob, ScheduleRun
 
 logger = logging.getLogger(__name__)
 
@@ -192,17 +195,22 @@ async def verify_catalog_update(
             data.get("summary", {}).get("total_count", 0)
         )
 
-        # Per-field verification
+        # Per-field verification.
+        # FB Catalog filter syntax is {<field>: {<operator>: <value>}}.
+        # Use "is_any" for multi-value or "eq" for single-value match.
         for field_name, expected_values in update_fields.items():
             field_result: dict[str, Any] = {"matched": 0, "expected_values": expected_values}
             try:
+                if len(expected_values) == 1:
+                    filter_obj = {field_name: {"eq": expected_values[0]}}
+                else:
+                    filter_obj = {field_name: {"is_any": expected_values}}
+
                 filter_params = {
                     "access_token": access_token,
                     "summary": "true",
                     "limit": 0,
-                    "filter": json.dumps(
-                        {"field": field_name, "operator": "IN", "values": expected_values}
-                    ),
+                    "filter": json.dumps(filter_obj),
                 }
                 field_resp = await client.get(base_url, params=filter_params)
                 field_resp.raise_for_status()
@@ -210,10 +218,15 @@ async def verify_catalog_update(
                 field_result["matched"] = (
                     field_data.get("summary", {}).get("total_count", 0)
                 )
+                logger.info(
+                    "Catalog verify %s=%s: matched %d / %d",
+                    field_name, expected_values,
+                    field_result["matched"], result["total_catalog_products"],
+                )
             except Exception as exc:
                 logger.warning(
-                    "Catalog verification failed for field %s: %s",
-                    field_name,
+                    "Catalog verification failed for field %s (filter=%s): %s",
+                    field_name, json.dumps(filter_obj) if 'filter_obj' in locals() else "?",
                     exc,
                 )
                 field_result["error"] = str(exc)
@@ -251,7 +264,7 @@ async def run_report_worker(
     -------
     dict
         A WorkerResult dict with keys: success, jobId, reportId, totalItems,
-        totalSpend, totalImpressions, durationMs, s3Url, error.
+        totalSpend, totalImpressions, durationMs, error.
     """
 
     job_id: int = config["jobId"]
@@ -294,7 +307,6 @@ async def run_report_worker(
         "totalSpend": 0.0,
         "totalImpressions": 0,
         "durationMs": 0,
-        "s3Url": None,
         "error": None,
     }
 
@@ -380,36 +392,58 @@ async def run_report_worker(
         raw_rows: list[dict] = []
         download_method = "csv"
 
-        # Same URLs as frontend routes.py fetchAll — export_report first, lookaside as fallback
-        csv_urls = [
-            f"https://www.facebook.com/ads/ads_insights/export_report?report_run_id={report_run_id}&format=csv&access_token={access_token}",
-            f"https://lookaside.facebook.com/ads/ads_insights/download_report/business/?report_run_id={report_run_id}&access_token={access_token}",
-        ]
+        # Match the frontend path exactly (routes.py /facebook/insights):
+        # bare httpx (no custom headers), lookaside-only, 4 attempts.
+        # Adding browser-like headers triggered FB 400; the async_report_url
+        # path is also dropped to keep behaviour identical to the working
+        # frontend endpoint.
+        download_url = (
+            f"https://lookaside.facebook.com/ads/ads_insights/download_report/business/"
+            f"?report_run_id={report_run_id}&access_token={access_token}"
+        )
 
         async with httpx.AsyncClient(timeout=600, follow_redirects=True) as client:
             csv_text = None
-            for url in csv_urls:
-                for attempt in range(3):
-                    try:
-                        logger.info("Downloading CSV (attempt %d/3) from %s for job %d...", attempt + 1, url[:80], job_id)
-                        touch_heartbeat(job_id)
-                        resp = await client.get(url)
-                        if resp.status_code == 200 and len(resp.text) > 100:
-                            csv_text = resp.text
-                            logger.info("CSV downloaded: %d bytes for job %d", len(csv_text), job_id)
-                            break
-                        elif resp.status_code == 500:
-                            wait = 10 * (attempt + 1)
-                            logger.warning("CSV download 500, waiting %ds (attempt %d/3)", wait, attempt + 1)
-                            await asyncio.sleep(wait)
-                        else:
-                            logger.warning("CSV download status %d, size %d", resp.status_code, len(resp.text))
-                            await asyncio.sleep(5)
-                    except Exception as e:
-                        logger.warning("CSV download error: %s", e)
+            for attempt in range(4):
+                try:
+                    logger.info(
+                        "Downloading CSV (attempt %d/4) from %s for job %d...",
+                        attempt + 1, download_url[:80], job_id,
+                    )
+                    touch_heartbeat(job_id)
+                    resp = await client.get(download_url)
+                    if resp.status_code == 200 and len(resp.text) > 100:
+                        # FB returns an HTML login/error page when access_token
+                        # is rejected. Treat as failure so JSON fallback runs.
+                        content_type = resp.headers.get("content-type", "").lower()
+                        text_head = resp.text.lstrip()[:200].lower()
+                        if "text/html" in content_type or text_head.startswith("<"):
+                            logger.warning(
+                                "CSV endpoint returned HTML (likely auth error) for job %d. "
+                                "First 200 chars: %s",
+                                job_id, resp.text[:200],
+                            )
+                            await asyncio.sleep(2)
+                            continue
+                        csv_text = resp.text
+                        logger.info("CSV downloaded: %d bytes for job %d", len(csv_text), job_id)
+                        break
+                    if resp.status_code == 500:
+                        wait = 30 * (attempt + 1)
+                        logger.warning(
+                            "CSV download 500, waiting %ds (attempt %d/4). Body: %s",
+                            wait, attempt + 1, resp.text[:300],
+                        )
+                        await asyncio.sleep(wait)
+                    else:
+                        logger.warning(
+                            "CSV download status %d, size %d. Body: %s",
+                            resp.status_code, len(resp.text), resp.text[:300],
+                        )
                         await asyncio.sleep(5)
-                if csv_text:
-                    break
+                except Exception as e:
+                    logger.warning("CSV download error: %s", e)
+                    await asyncio.sleep(5)
 
             if csv_text:
                 # Log first 500 chars of CSV to debug
@@ -440,12 +474,15 @@ async def run_report_worker(
                     await db_update_job(job_id, {"progress": overall})
                     touch_heartbeat(job_id)
 
+                async def _on_fetch_heartbeat(_msg: str) -> None:
+                    touch_heartbeat(job_id)
+
                 raw_rows = await fetch_insights_data(
                     report_run_id=report_run_id,
                     access_token=access_token,
                     on_progress=_on_fetch_progress,
-                    heartbeat_callback=lambda: touch_heartbeat(job_id),
-                    cancellation_check=_check_cancellation,
+                    on_heartbeat=_on_fetch_heartbeat,
+                    check_cancelled=_check_cancellation,
                 )
 
         logger.info("Data download complete: %d rows via %s for job %d", len(raw_rows), download_method, job_id)
@@ -456,6 +493,10 @@ async def run_report_worker(
         # ---------------------------------------------------------------
         # Step 4 - Map to ProductInsight
         # ---------------------------------------------------------------
+        await db_update_job(job_id, {
+            "progress": 90,
+            "statusMessage": f"Mapping {len(raw_rows)} rows...",
+        })
         insights = [map_row_to_product_insight(row) for row in raw_rows]
         logger.info("Mapped %d rows to product insights for job %d", len(insights), job_id)
 
@@ -500,25 +541,41 @@ async def run_report_worker(
         total_spend = round(sum(i["spend"] for i in insights), 2)
         total_impressions = sum(i["impressions"] for i in insights)
 
+        await db_update_job(job_id, {
+            "totalItems": total_items,
+            "processedItems": total_items,
+            "statusMessage": f"Filtered to {total_items:,} items (raw {raw_count:,})",
+        })
+
         # ---------------------------------------------------------------
-        # Step 6 - Store report data (inline JSON or GCS)
+        # Step 6 - Store report data to local file
         # ---------------------------------------------------------------
         payload = json.dumps(insights, ensure_ascii=False)
-        s3_url = None
+        data_value = None
 
-        from ..config import settings as app_settings
-        if app_settings.gcs_bucket:
-            try:
-                uid = _nanoid_generate(size=8)
-                gcs_key = f"reports/{user_id}/{report_id}-{uid}.json"
-                result = await storage_put(gcs_key, payload)
-                s3_url = result.get("url", gcs_key)
-                logger.info("Uploaded report to GCS: %s", gcs_key)
-            except Exception as gcs_err:
-                logger.warning("GCS upload failed, storing inline: %s", gcs_err)
-                s3_url = None
+        try:
+            from pathlib import Path
+            backend_root = Path(__file__).resolve().parents[2]
+            local_dir = backend_root / "reports" / str(user_id)
+            local_dir.mkdir(parents=True, exist_ok=True)
+            uid = _nanoid_generate(size=8)
+            local_path = local_dir / f"{report_id}-{uid}.json"
+            local_path.write_text(payload, encoding="utf-8")
+            data_value = f"file://{local_path}"
+            logger.info(
+                "Stored report to local file: %s (%d bytes)",
+                local_path, len(payload),
+            )
+        except Exception as fs_err:
+            logger.warning(
+                "Local file write failed: %s. Falling back to inline.",
+                fs_err,
+            )
 
-        data_value = s3_url if s3_url else payload
+        # Last-resort: inline. Will fail on TiDB if payload > 6 MB; only used
+        # when local file write fails.
+        if data_value is None:
+            data_value = payload
 
         logger.info("Report data stored (%d items, %d bytes)", total_items, len(payload))
 
@@ -549,6 +606,9 @@ async def run_report_worker(
                 total_items,
                 job_id,
             )
+            await db_update_job(job_id, {
+                "statusMessage": f"Updating catalog {catalog_id} with {total_items:,} products...",
+            })
 
             # Build batch update requests
             batch_requests: list[dict] = []
@@ -568,10 +628,23 @@ async def run_report_worker(
                     if custom_label_4 not in update_fields_for_verify["custom_label_4"]:
                         update_fields_for_verify["custom_label_4"].append(custom_label_4)
 
-                # Custom numbers
+                # Custom numbers — FB expects float, not string
                 if custom_numbers:
                     for key, value in custom_numbers.items():
-                        update_data[key] = value
+                        if value is None or str(value).strip() == "":
+                            continue
+                        try:
+                            num_value = float(value)
+                        except (ValueError, TypeError):
+                            logger.warning(
+                                "Skipping custom_number %s=%r (not a valid number)",
+                                key, value,
+                            )
+                            continue
+                        update_data[key] = num_value
+                        update_fields_for_verify.setdefault(key, [])
+                        if num_value not in update_fields_for_verify[key]:
+                            update_fields_for_verify[key].append(num_value)
 
                 # Custom labels
                 if custom_labels:
@@ -587,41 +660,100 @@ async def run_report_worker(
                     )
 
             if batch_requests:
-                await batch_update_products(
+                await db_update_job(job_id, {
+                    "statusMessage": f"Sending {len(batch_requests):,} catalog updates to Facebook...",
+                })
+                batch_result = await batch_update_products(
                     catalog_id=catalog_id,
                     access_token=effective_token,
                     requests=batch_requests,
                 )
+                num_handles = len(batch_result.get("handles", []))
+                num_errors = len(batch_result.get("errors", []))
                 logger.info(
-                    "Sent %d catalog update requests for job %d",
-                    len(batch_requests),
-                    job_id,
+                    "Sent %d catalog update requests for job %d — handles=%d errors=%d success=%s",
+                    len(batch_requests), job_id, num_handles, num_errors,
+                    batch_result.get("success"),
                 )
+                if num_errors:
+                    for err in batch_result.get("errors", [])[:3]:
+                        logger.warning("  Batch error: %s", err)
 
-                # Verify updates
-                if update_fields_for_verify:
-                    try:
-                        catalog_verification = await verify_catalog_update(
-                            catalog_id=catalog_id,
-                            access_token=effective_token,
-                            update_fields=update_fields_for_verify,
-                        )
-                        logger.info(
-                            "Catalog verification result for job %d: %s",
-                            job_id,
-                            json.dumps(catalog_verification),
-                        )
-                    except Exception as verify_exc:
-                        logger.warning(
-                            "Catalog verification failed for job %d: %s",
-                            job_id,
-                            verify_exc,
-                        )
+                # Estimate success: requests in batches that didn't fail.
+                # batch_update_products splits into MAX_BATCH_SIZE chunks, so
+                # each failed batch loses up to MAX_BATCH_SIZE requests.
+                from ..facebook.catalog import MAX_BATCH_SIZE as CATALOG_MAX
+                estimated_success = max(
+                    0, len(batch_requests) - num_errors * CATALOG_MAX,
+                )
+                await db_update_job(job_id, {
+                    "successCount": estimated_success,
+                    "errorCount": num_errors * CATALOG_MAX if num_errors else 0,
+                    "statusMessage": (
+                        f"Catalog batch: {estimated_success:,} sent, "
+                        f"{num_errors} batch(es) failed"
+                    ) if num_errors else (
+                        f"Catalog batch sent: {len(batch_requests):,} products"
+                    ),
+                })
+            else:
+                logger.warning(
+                    "No catalog updates to send for job %d (insights=%d, custom_numbers=%s, custom_label_4=%s)",
+                    job_id, len(insights), bool(custom_numbers), bool(custom_label_4),
+                )
+                await db_update_job(job_id, {
+                    "statusMessage": (
+                        f"No catalog updates queued (insights={len(insights):,}, "
+                        f"check customNumbers/customLabel4 settings)"
+                    ),
+                })
+
+            # Verify updates (runs whether batch was sent or skipped, as long
+            # as we have fields we expected to update). FB items_batch is
+            # async so wait briefly to let updates propagate before querying.
+            if update_fields_for_verify:
+                if batch_requests:
+                    verify_delay = 15
+                    await db_update_job(job_id, {
+                        "statusMessage": f"Waiting {verify_delay}s for FB to process batch before verifying...",
+                    })
+                    await asyncio.sleep(verify_delay)
+                try:
+                    catalog_verification = await verify_catalog_update(
+                        catalog_id=catalog_id,
+                        access_token=effective_token,
+                        update_fields=update_fields_for_verify,
+                    )
+                    logger.info(
+                        "Catalog verification result for job %d: %s",
+                        job_id,
+                        json.dumps(catalog_verification),
+                    )
+                except Exception as verify_exc:
+                    logger.warning(
+                        "Catalog verification failed for job %d: %s",
+                        job_id,
+                        verify_exc,
+                    )
 
         # ---------------------------------------------------------------
         # Step 9 - Mark job completed (progress 100%)
         # ---------------------------------------------------------------
         duration_ms = int((time.time() - start_time) * 1000)
+
+        # Build a final status message that reflects what actually ran
+        catalog_summary = ""
+        if update_to_catalog and catalog_id:
+            if catalog_verification:
+                fields = catalog_verification.get("fields", {})
+                if fields:
+                    parts = [
+                        f"{name}: {info.get('matched', 0)}/{catalog_verification.get('total_catalog_products', 0)}"
+                        for name, info in fields.items()
+                    ]
+                    catalog_summary = f" | catalog verified: {', '.join(parts)}"
+            else:
+                catalog_summary = " | catalog: no verification"
 
         await db_update_job(
             job_id,
@@ -629,24 +761,15 @@ async def run_report_worker(
                 "status": "completed",
                 "progress": 100,
                 "completedAt": datetime.utcnow(),
+                "totalItems": total_items,
+                "processedItems": total_items,
+                "statusMessage": (
+                    f"Completed: {total_items:,} items, "
+                    f"${total_spend:,.2f} spend, {total_impressions:,} impressions"
+                    f"{catalog_summary}"
+                ),
             },
         )
-
-        # Create history record
-        history_data: dict[str, Any] = {
-            "jobId": job_id,
-            "reportId": report_id,
-            "status": "completed",
-            "totalItems": total_items,
-            "totalSpend": total_spend,
-            "totalImpressions": total_impressions,
-            "durationMs": duration_ms,
-            "s3Url": s3_url,
-        }
-        if catalog_verification:
-            history_data["catalogVerification"] = catalog_verification
-
-        await db_create_history(history_data)
 
         # ---------------------------------------------------------------
         # Step 10 - Update schedule_run if applicable
@@ -655,15 +778,51 @@ async def run_report_worker(
             try:
                 schedule_run = await db_get_schedule_run(schedule_run_id)
                 if schedule_run:
+                    completed_at = datetime.utcnow()
+                    started_at = getattr(schedule_run, "startedAt", None)
+                    run_duration_ms = (
+                        int((completed_at - started_at).total_seconds() * 1000)
+                        if started_at else duration_ms
+                    )
+                    catalog_items_updated = (
+                        len(batch_requests)
+                        if (update_to_catalog and catalog_id and 'batch_requests' in locals())
+                        else 0
+                    )
                     await db_update_schedule_run(
                         schedule_run_id,
                         {
                             "status": "completed",
-                            "completedAt": datetime.utcnow(),
-                            "reportId": report_id,
-                            "totalItems": total_items,
+                            "completedAt": completed_at,
+                            "completedJobs": (schedule_run.completedJobs or 0) + 1,
+                            "totalItems": (schedule_run.totalItems or 0) + total_items,
+                            # totalSpend stored in cents
+                            "totalSpend": (schedule_run.totalSpend or 0) + int(round(total_spend * 100)),
+                            "totalImpressions": (schedule_run.totalImpressions or 0) + total_impressions,
+                            "catalogItemsUpdated": (schedule_run.catalogItemsUpdated or 0) + catalog_items_updated,
+                            "durationMs": run_duration_ms,
                         },
                     )
+
+                    # Also flip the parent scheduled_job's lastRunStatus from
+                    # "running" to "success" so the schedule list UI reflects
+                    # reality.
+                    sched_id = getattr(schedule_run, "scheduleId", None)
+                    if sched_id:
+                        try:
+                            sf = get_session_factory()
+                            async with sf() as s:
+                                await s.execute(
+                                    sql_update(ScheduledJob)
+                                    .where(ScheduledJob.id == sched_id)
+                                    .values(lastRunStatus="success")
+                                )
+                                await s.commit()
+                        except Exception as sj_exc:
+                            logger.warning(
+                                "Failed to update scheduled_job %d lastRunStatus: %s",
+                                sched_id, sj_exc,
+                            )
             except Exception as sched_exc:
                 logger.warning(
                     "Failed to update schedule run %d: %s",
@@ -679,7 +838,6 @@ async def run_report_worker(
                 "totalSpend": total_spend,
                 "totalImpressions": total_impressions,
                 "durationMs": duration_ms,
-                "s3Url": s3_url,
             }
         )
 
@@ -733,7 +891,7 @@ async def run_report_worker(
                     "Failed to update job %d on error: %s", job_id, job_exc
                 )
 
-        # Update schedule run on failure
+        # Update schedule run + parent scheduled_job on failure
         if schedule_run_id:
             try:
                 await db_update_schedule_run(
@@ -746,6 +904,27 @@ async def run_report_worker(
                 )
             except Exception:
                 pass
+            try:
+                from sqlalchemy import select as sql_select
+                sf = get_session_factory()
+                async with sf() as s:
+                    res = await s.execute(
+                        sql_select(ScheduleRun.scheduleId)
+                        .where(ScheduleRun.id == schedule_run_id)
+                    )
+                    sched_id = res.scalar()
+                    if sched_id:
+                        await s.execute(
+                            sql_update(ScheduledJob)
+                            .where(ScheduledJob.id == sched_id)
+                            .values(lastRunStatus="failed")
+                        )
+                        await s.commit()
+            except Exception as sj_exc:
+                logger.warning(
+                    "Failed to update scheduled_job lastRunStatus on failure: %s",
+                    sj_exc,
+                )
 
         result.update(
             {"durationMs": duration_ms, "error": error_message}

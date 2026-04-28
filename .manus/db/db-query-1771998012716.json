@@ -1,9 +1,0 @@
-{
-  "query": "UPDATE batch_jobs SET status = 'failed', statusMessage = 'Worker killed by server restart (Publish)', completedAt = NOW() WHERE id = 270002 AND status = 'running'; UPDATE schedule_runs SET status = 'failed', failedJobs = 1, errorMessage = 'Worker killed by server restart (Publish)', completedAt = NOW() WHERE id = 210002 AND status = 'running';",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.9755592f0d70 --database XjmCsZvNQQQCDKpp3FwrY5 --execute UPDATE batch_jobs SET status = 'failed', statusMessage = 'Worker killed by server restart (Publish)', completedAt = NOW() WHERE id = 270002 AND status = 'running'; UPDATE schedule_runs SET status = 'failed', failedJobs = 1, errorMessage = 'Worker killed by server restart (Publish)', completedAt = NOW() WHERE id = 210002 AND status = 'running';",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 1794
-}

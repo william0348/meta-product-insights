@@ -619,11 +619,11 @@ async def facebook_insights(
     import csv
     import io
 
+    # FB's documented CSV download endpoint per
+    # https://developers.facebook.com/documentation/ads-commerce/marketing-api/insights/products
+    # The www.facebook.com/.../export_report path requires browser cookies and
+    # returns an HTML login page with just an OAuth token, so it's omitted.
     download_url = (
-        f"https://www.facebook.com/ads/ads_insights/export_report"
-        f"?report_run_id={reportRunId}&format=csv&access_token={accessToken}"
-    )
-    alt_download_url = (
         f"https://lookaside.facebook.com/ads/ads_insights/download_report/business/"
         f"?report_run_id={reportRunId}&access_token={accessToken}"
     )
@@ -632,21 +632,41 @@ async def facebook_insights(
     raw_count = 0
 
     async with httpx.AsyncClient(timeout=300, follow_redirects=True) as client:
-        # Try primary URL first, fallback to lookaside
         csv_text = None
-        for url in [download_url, alt_download_url]:
-            for attempt in range(3):
+        for url in [download_url]:
+            for attempt in range(4):
                 try:
-                    logger.info("[facebook/insights] Downloading CSV from %s (attempt %d)...", url[:80], attempt + 1)
+                    logger.info("[facebook/insights] Downloading CSV from %s (attempt %d/4)...", url[:80], attempt + 1)
                     resp = await client.get(url)
                     if resp.status_code == 200 and len(resp.text) > 100:
+                        # FB returns an HTML login/error page when access_token is
+                        # rejected by the export_report endpoint. Detect and treat
+                        # as failure so the JSON fallback can run.
+                        content_type = resp.headers.get("content-type", "").lower()
+                        text_head = resp.text.lstrip()[:200].lower()
+                        if "text/html" in content_type or text_head.startswith("<"):
+                            logger.warning(
+                                "[facebook/insights] CSV endpoint returned HTML (likely auth error). "
+                                "First 200 chars: %s",
+                                resp.text[:200],
+                            )
+                            continue
                         csv_text = resp.text
                         logger.info("[facebook/insights] CSV downloaded: %d bytes", len(csv_text))
                         break
-                    logger.warning("[facebook/insights] CSV download returned status %d, size %d", resp.status_code, len(resp.text))
+                    if resp.status_code == 500:
+                        wait = 30 * (attempt + 1)
+                        logger.warning(
+                            "[facebook/insights] CSV download 500, waiting %ds (attempt %d/4)",
+                            wait, attempt + 1,
+                        )
+                        await asyncio.sleep(wait)
+                    else:
+                        logger.warning("[facebook/insights] CSV download returned status %d, size %d", resp.status_code, len(resp.text))
+                        await asyncio.sleep(5)
                 except Exception as e:
                     logger.warning("[facebook/insights] CSV download error: %s", e)
-                    if attempt < 2:
+                    if attempt < 3:
                         await asyncio.sleep(2 ** attempt)
             if csv_text:
                 break
@@ -838,20 +858,23 @@ async def get_report(
 
     d = _row_to_dict(report)
 
-    # If data is a GCS URL, load it
-    if d.get("data") and isinstance(d["data"], str) and d["data"].startswith("gs://"):
-        try:
-            from ..storage import download_json_from_gcs
-            gcs_data = await download_json_from_gcs(d["data"])
-            d["data"] = gcs_data
-        except Exception as e:
-            logger.warning("[reports/%s] Failed to load GCS data: %s", report_id, e)
-            d["dataError"] = str(e)
-    elif d.get("data") and isinstance(d["data"], str):
-        try:
-            d["data"] = json.loads(d["data"])
-        except (json.JSONDecodeError, TypeError):
-            pass
+    # Load report data: file:// path → read from disk; otherwise treat as
+    # inline JSON.
+    raw = d.get("data")
+    if raw and isinstance(raw, str):
+        if raw.startswith("file://"):
+            try:
+                from pathlib import Path
+                local_path = Path(raw[len("file://"):])
+                d["data"] = json.loads(local_path.read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.warning("[reports/%s] Failed to load local file: %s", report_id, e)
+                d["dataError"] = str(e)
+        else:
+            try:
+                d["data"] = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                pass
 
     return {"success": True, "report": d}
 

@@ -1,1 +1,0 @@
-ALTER TABLE `scheduled_jobs` ADD `reportConfigs` json;

@@ -250,8 +250,11 @@ async def send_batch_request(
     """Send a single items_batch request to Facebook."""
 
     url = f"{BASE_URL}/{catalog_id}/items_batch"
+    # item_type is REQUIRED by FB items_batch API; without it FB returns
+    # HTTP 400 Bad Request and the whole batch is rejected.
     payload: dict[str, Any] = {
         "access_token": access_token,
+        "item_type": "PRODUCT_ITEM",
         "requests": json.dumps(requests),
     }
     if allow_upsert:
@@ -266,6 +269,11 @@ async def send_batch_request(
 
     async with httpx.AsyncClient(limits=_LIMITS, timeout=120.0) as client:
         resp = await client.post(url, data=payload)
+        if resp.status_code >= 400:
+            logger.error(
+                "Batch %d failed: HTTP %d - body: %s",
+                batch_index, resp.status_code, resp.text[:500],
+            )
         resp.raise_for_status()
         data = resp.json()
         logger.info(

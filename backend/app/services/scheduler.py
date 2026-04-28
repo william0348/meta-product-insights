@@ -219,10 +219,24 @@ async def process_scheduled_job(
                     "accessToken": ads_token.accessToken,
                     "dateStart": rc.get("dateStart") or config.get("dateStart"),
                     "dateEnd": rc.get("dateEnd") or config.get("dateEnd"),
-                    "level": rc.get("level") or config.get("level", "ad"),
-                    "breakdown": rc.get("breakdown") or config.get("breakdown"),
+                    "dateRangeType": rc.get("dateRangeType") or config.get("dateRangeType"),
+                    # Default to product-level reporting (level=account +
+                    # breakdown=product_id) to match the frontend manual flow.
+                    # Ad-level reports without product breakdown can be too
+                    # large for FB's lookaside CSV endpoint and return 500.
+                    "level": rc.get("level") or config.get("level") or "account",
+                    "breakdown": rc.get("breakdown") or config.get("breakdown") or "product_id",
                     "minSpend": rc.get("minSpend") or config.get("minSpend"),
                     "minCTR": rc.get("minCTR") or config.get("minCTR"),
+                    "maxSpend": rc.get("maxSpend") or config.get("maxSpend"),
+                    "maxCVR": rc.get("maxCVR") or config.get("maxCVR"),
+                    "topConversionLimit": rc.get("topConversionLimit") or config.get("topConversionLimit"),
+                    "updateToCatalog": config.get("updateToCatalog", False),
+                    "catalogId": config.get("catalogId"),
+                    "catalogAccessToken": config.get("catalogAccessToken"),
+                    "enableCustomLabel4": config.get("enableCustomLabel4", True),
+                    "customLabel4": config.get("customLabel4"),
+                    "customNumbers": config.get("customNumbers", {}),
                     "scheduleId": schedule.id,
                     "scheduleRunId": schedule_run_id,
                     "reportName": rc.get("name") or f"{schedule.name} - Report {i + 1}",
@@ -246,9 +260,14 @@ async def process_scheduled_job(
                 )
 
         # ------------------------------------------------------------------
-        # Create catalog update jobs if report_and_catalog
+        # Create standalone catalog_update job ONLY for pure catalog mode.
+        # For "report_and_catalog", the catalog update happens inline inside
+        # the report worker (using the products it just downloaded). Creating
+        # a separate catalog_update job here would always produce a noisy
+        # "No updates to process" entry because retailerIds isn't in the
+        # schedule config.
         # ------------------------------------------------------------------
-        if schedule.jobType in ("catalog_update", "report_and_catalog"):
+        if schedule.jobType == "catalog_update":
             # Get catalog_management token
             async with session_factory() as session:
                 catalog_token_result = await session.execute(
