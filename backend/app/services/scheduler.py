@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,10 +43,11 @@ _scheduler_task: Optional[asyncio.Task] = None
 
 def calculate_next_run_time(schedule: ScheduledJob) -> datetime:
     """
-    Calculate the next run time from a cron expression.
+    Calculate the next run time from a cron expression in the schedule's
+    declared timezone, then convert to a naive UTC datetime for DB storage.
 
     Cron format: "second minute hour dayOfMonth month dayOfWeek"
-    Supports weekly (dayOfWeek != *), monthly (dayOfMonth != *), and daily patterns.
+    Supports weekly (dayOfWeek != *), monthly (dayOfMonth != *), and daily.
     """
     cron = schedule.cronExpression
     parts = cron.strip().split()
@@ -56,72 +58,73 @@ def calculate_next_run_time(schedule: ScheduledJob) -> datetime:
 
     _second, minute, hour, day_of_month, _month, day_of_week = parts
 
-    now = datetime.utcnow()
-    target_hour = int(hour) if hour != "*" else now.hour
-    target_minute = int(minute) if minute != "*" else now.minute
+    # Resolve the schedule's timezone. Compute the next-run instant in local
+    # time, then convert to UTC at the end. Treating cron hour/minute as UTC
+    # caused schedules set to "8am Taipei" to fire at 4pm Taipei.
+    tz_name = schedule.timezone or "UTC"
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        logger.warning("Unknown timezone %r on schedule %s, falling back to UTC",
+                       tz_name, getattr(schedule, "id", "?"))
+        tz = ZoneInfo("UTC")
+
+    now_local = datetime.now(tz)
+    target_hour = int(hour) if hour != "*" else now_local.hour
+    target_minute = int(minute) if minute != "*" else now_local.minute
     target_second = int(_second) if _second != "*" else 0
 
     if day_of_week != "*":
         # Weekly schedule
         target_dow = int(day_of_week)  # 0=Sunday, 1=Monday, ..., 6=Saturday
         # Python weekday: 0=Monday, ..., 6=Sunday
-        # Convert: Sunday=0 in cron -> 6 in Python, Monday=1 -> 0, etc.
         python_dow = (target_dow - 1) % 7 if target_dow > 0 else 6
 
-        current_dow = now.weekday()
+        current_dow = now_local.weekday()
         days_ahead = python_dow - current_dow
         if days_ahead < 0:
             days_ahead += 7
 
-        next_run = now.replace(
+        next_run_local = now_local.replace(
             hour=target_hour, minute=target_minute, second=target_second, microsecond=0
         ) + timedelta(days=days_ahead)
 
-        # If same day but time has passed, go to next week
-        if next_run <= now:
-            next_run += timedelta(weeks=1)
-
-        return next_run
+        if next_run_local <= now_local:
+            next_run_local += timedelta(weeks=1)
 
     elif day_of_month != "*":
         # Monthly schedule
+        import calendar
         target_day = int(day_of_month)
 
-        next_run = now.replace(
-            day=min(target_day, 28),  # Safe default; adjusted below
+        next_run_local = now_local.replace(
+            day=min(target_day, 28),
             hour=target_hour,
             minute=target_minute,
             second=target_second,
             microsecond=0,
         )
+        max_day = calendar.monthrange(next_run_local.year, next_run_local.month)[1]
+        next_run_local = next_run_local.replace(day=min(target_day, max_day))
 
-        # Try to set the exact day, handling months with fewer days
-        import calendar
-        max_day = calendar.monthrange(next_run.year, next_run.month)[1]
-        actual_day = min(target_day, max_day)
-        next_run = next_run.replace(day=actual_day)
-
-        if next_run <= now:
-            # Move to next month
-            if next_run.month == 12:
-                next_run = next_run.replace(year=next_run.year + 1, month=1)
+        if next_run_local <= now_local:
+            if next_run_local.month == 12:
+                next_run_local = next_run_local.replace(year=next_run_local.year + 1, month=1)
             else:
-                next_run = next_run.replace(month=next_run.month + 1)
-            max_day = calendar.monthrange(next_run.year, next_run.month)[1]
-            next_run = next_run.replace(day=min(target_day, max_day))
-
-        return next_run
+                next_run_local = next_run_local.replace(month=next_run_local.month + 1)
+            max_day = calendar.monthrange(next_run_local.year, next_run_local.month)[1]
+            next_run_local = next_run_local.replace(day=min(target_day, max_day))
 
     else:
         # Daily schedule
-        next_run = now.replace(
+        next_run_local = now_local.replace(
             hour=target_hour, minute=target_minute, second=target_second, microsecond=0
         )
+        if next_run_local <= now_local:
+            next_run_local += timedelta(days=1)
 
-        if next_run <= now:
-            next_run += timedelta(days=1)
-
-        return next_run
+    # Convert local-tz aware datetime to a naive UTC datetime for DB storage
+    return next_run_local.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 # ---------------------------------------------------------------------------
@@ -518,12 +521,56 @@ async def _check_scheduled_jobs() -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _recompute_all_next_run_times() -> None:
+    """One-shot at startup: recompute every enabled schedule's nextRunAt
+    using the current calculate_next_run_time logic. Catches schedules whose
+    nextRunAt was stored under a previous (buggy) timezone implementation.
+    """
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(ScheduledJob).where(ScheduledJob.enabled == True)  # noqa: E712
+        )
+        schedules = list(result.scalars().all())
+    if not schedules:
+        return
+
+    for sched in schedules:
+        try:
+            new_next = calculate_next_run_time(sched)
+            if sched.nextRunAt != new_next:
+                async with session_factory() as session:
+                    await session.execute(
+                        update(ScheduledJob)
+                        .where(ScheduledJob.id == sched.id)
+                        .values(nextRunAt=new_next)
+                    )
+                    await session.commit()
+                logger.info(
+                    "[Scheduler] Recomputed nextRunAt for schedule %d (%s): %s -> %s",
+                    sched.id, sched.name, sched.nextRunAt, new_next,
+                )
+        except Exception as exc:
+            logger.warning(
+                "[Scheduler] Recompute failed for schedule %d: %s",
+                sched.id, exc,
+            )
+
+
 async def start_scheduler() -> None:
     """Start the background scheduler loop."""
     global _scheduler_task
     if _scheduler_task is not None and not _scheduler_task.done():
         logger.warning("[Scheduler] Already running")
         return
+
+    # Refresh nextRunAt for all enabled schedules so any rows written under
+    # an older (buggy) timezone implementation get corrected immediately.
+    try:
+        await _recompute_all_next_run_times()
+    except Exception as exc:
+        logger.warning("[Scheduler] Startup nextRunAt refresh failed (non-fatal): %s", exc)
+
     _scheduler_task = asyncio.create_task(_scheduler_loop())
     logger.info("[Scheduler] Started (interval=%ds)", SCHEDULER_INTERVAL_S)
 

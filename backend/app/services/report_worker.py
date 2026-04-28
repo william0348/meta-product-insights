@@ -566,6 +566,28 @@ async def run_report_worker(
                 "Stored report to local file: %s (%d bytes)",
                 local_path, len(payload),
             )
+
+            # Auto-cleanup: keep only the N most recent reports per user
+            # to stop backend/reports/ growing unbounded (~25 MB per file).
+            KEEP_RECENT_REPORTS = 5
+            try:
+                existing = sorted(
+                    local_dir.glob("*.json"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True,
+                )
+                for old in existing[KEEP_RECENT_REPORTS:]:
+                    try:
+                        size = old.stat().st_size
+                        old.unlink()
+                        logger.info(
+                            "Cleaned old report file %s (%d bytes)",
+                            old.name, size,
+                        )
+                    except Exception as rm_err:
+                        logger.warning("Failed to clean %s: %s", old.name, rm_err)
+            except Exception as scan_err:
+                logger.warning("Report cleanup scan failed: %s", scan_err)
         except Exception as fs_err:
             logger.warning(
                 "Local file write failed: %s. Falling back to inline.",
