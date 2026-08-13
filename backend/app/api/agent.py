@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import settings
 from ..database import get_session_factory
 from ..models import BatchJob, ScheduledJob, ScheduleRun
+from ..utils import dt_iso
 
 logger = logging.getLogger(__name__)
 agent_router = APIRouter(prefix="/api/agent")
@@ -45,9 +46,9 @@ def _row_to_schedule_dict(s: ScheduledJob) -> dict:
         "timezone": s.timezone,
         "enabled": s.enabled,
         "jobType": s.jobType,
-        "lastRunAt": s.lastRunAt.isoformat() if s.lastRunAt else None,
+        "lastRunAt": dt_iso(s.lastRunAt),
         "lastRunStatus": s.lastRunStatus,
-        "nextRunAt": s.nextRunAt.isoformat() if s.nextRunAt else None,
+        "nextRunAt": dt_iso(s.nextRunAt),
     }
 
 
@@ -62,9 +63,9 @@ def _row_to_job_dict(j: BatchJob) -> dict:
         "successCount": j.successCount,
         "errorCount": j.errorCount,
         "statusMessage": j.statusMessage,
-        "queuedAt": j.queuedAt.isoformat() if j.queuedAt else None,
-        "startedAt": j.startedAt.isoformat() if j.startedAt else None,
-        "completedAt": j.completedAt.isoformat() if j.completedAt else None,
+        "queuedAt": dt_iso(j.queuedAt),
+        "startedAt": dt_iso(j.startedAt),
+        "completedAt": dt_iso(j.completedAt),
     }
 
 
@@ -79,8 +80,8 @@ def _row_to_run_dict(r: ScheduleRun) -> dict:
         "failedJobs": r.failedJobs,
         "jobIds": r.jobIds,
         "errorMessage": r.errorMessage,
-        "startedAt": r.startedAt.isoformat() if r.startedAt else None,
-        "completedAt": r.completedAt.isoformat() if r.completedAt else None,
+        "startedAt": dt_iso(r.startedAt),
+        "completedAt": dt_iso(r.completedAt),
         "durationMs": r.durationMs,
     }
 
@@ -267,7 +268,7 @@ async def keepalive():
                     "jobType": j.jobType,
                     "status": j.status,
                     "progress": j.progress,
-                    "updatedAt": j.updatedAt.isoformat() if j.updatedAt else None,
+                    "updatedAt": dt_iso(j.updatedAt),
                 }
                 for j in jobs
             ],

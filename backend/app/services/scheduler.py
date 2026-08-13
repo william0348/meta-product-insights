@@ -597,4 +597,16 @@ async def _scheduler_loop() -> None:
             raise
         except Exception as exc:
             logger.error("[Scheduler] Unexpected error in scheduler loop: %s", exc, exc_info=True)
+        try:
+            from .monitor import tick_due_monitors
+            ran = await tick_due_monitors()
+            if ran:
+                logger.info("[Scheduler] Ran %d due product set monitor(s)", ran)
+        except Exception as exc:
+            logger.error("[Scheduler] Monitor tick failed: %s", exc, exc_info=True)
+        try:
+            from .token_health import tick_token_health
+            await tick_token_health()
+        except Exception as exc:
+            logger.error("[Scheduler] Token health tick failed: %s", exc, exc_info=True)
         await asyncio.sleep(SCHEDULER_INTERVAL_S)

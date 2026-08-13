@@ -20,7 +20,6 @@ from datetime import datetime
 from typing import Any, Optional, Callable, Awaitable
 
 import httpx
-from nanoid import generate as _nanoid_generate
 
 from sqlalchemy import update as sql_update
 
@@ -380,6 +379,10 @@ async def run_report_worker(
             on_progress=_on_poll_progress,
         )
 
+        if not poll_result.get("success"):
+            failure_reason = poll_result.get("failure_reason", "unknown")
+            raise RuntimeError(f"Facebook async report failed: {failure_reason}")
+
         await db_update_job(job_id, {"progress": 50})
         touch_heartbeat(job_id)
 
@@ -548,58 +551,13 @@ async def run_report_worker(
         })
 
         # ---------------------------------------------------------------
-        # Step 6 - Store report data to local file
+        # Step 6 - Skip persisting row-level payload
+        # Row-level data is processed in-memory only; only summary stats
+        # are stored in saved_reports. Frontend detail view falls back to
+        # "No data available" when data is NULL.
         # ---------------------------------------------------------------
-        payload = json.dumps(insights, ensure_ascii=False)
         data_value = None
-
-        try:
-            from pathlib import Path
-            backend_root = Path(__file__).resolve().parents[2]
-            local_dir = backend_root / "reports" / str(user_id)
-            local_dir.mkdir(parents=True, exist_ok=True)
-            uid = _nanoid_generate(size=8)
-            local_path = local_dir / f"{report_id}-{uid}.json"
-            local_path.write_text(payload, encoding="utf-8")
-            data_value = f"file://{local_path}"
-            logger.info(
-                "Stored report to local file: %s (%d bytes)",
-                local_path, len(payload),
-            )
-
-            # Auto-cleanup: keep only the N most recent reports per user
-            # to stop backend/reports/ growing unbounded (~25 MB per file).
-            KEEP_RECENT_REPORTS = 5
-            try:
-                existing = sorted(
-                    local_dir.glob("*.json"),
-                    key=lambda p: p.stat().st_mtime,
-                    reverse=True,
-                )
-                for old in existing[KEEP_RECENT_REPORTS:]:
-                    try:
-                        size = old.stat().st_size
-                        old.unlink()
-                        logger.info(
-                            "Cleaned old report file %s (%d bytes)",
-                            old.name, size,
-                        )
-                    except Exception as rm_err:
-                        logger.warning("Failed to clean %s: %s", old.name, rm_err)
-            except Exception as scan_err:
-                logger.warning("Report cleanup scan failed: %s", scan_err)
-        except Exception as fs_err:
-            logger.warning(
-                "Local file write failed: %s. Falling back to inline.",
-                fs_err,
-            )
-
-        # Last-resort: inline. Will fail on TiDB if payload > 6 MB; only used
-        # when local file write fails.
-        if data_value is None:
-            data_value = payload
-
-        logger.info("Report data stored (%d items, %d bytes)", total_items, len(payload))
+        logger.info("Report processed (%d items, data not persisted — summary in DB)", total_items)
 
         # ---------------------------------------------------------------
         # Step 7 - Update saved_reports
@@ -751,6 +709,7 @@ async def run_report_worker(
                         job_id,
                         json.dumps(catalog_verification),
                     )
+                    await db_update_job(job_id, {"catalogVerification": catalog_verification})
                 except Exception as verify_exc:
                     logger.warning(
                         "Catalog verification failed for job %d: %s",
@@ -921,11 +880,14 @@ async def run_report_worker(
                     {
                         "status": "failed",
                         "completedAt": datetime.utcnow(),
-                        "statusMessage": error_message,
+                        "errorMessage": error_message,
                     },
                 )
-            except Exception:
-                pass
+            except Exception as sr_exc:
+                logger.error(
+                    "Failed to mark schedule_run %d as failed: %s",
+                    schedule_run_id, sr_exc,
+                )
             try:
                 from sqlalchemy import select as sql_select
                 sf = get_session_factory()

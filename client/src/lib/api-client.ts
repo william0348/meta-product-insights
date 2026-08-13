@@ -104,4 +104,14 @@ export const apiClient = {
     getAllHistory: (limit = 50) => fetchJson<any>(`${API_BASE}/schedules/history/all?limit=${limit}`),
     getRunDetail: (runId: number) => fetchJson<any>(`${API_BASE}/schedules/runs/${runId}`),
   },
+  monitors: {
+    list: () => fetchJson<any>(`${API_BASE}/monitors`),
+    create: (data: any) => fetchJson<any>(`${API_BASE}/monitors`, { method: 'POST', body: JSON.stringify(data) }),
+    get: (id: number) => fetchJson<any>(`${API_BASE}/monitors/${id}`),
+    update: (id: number, data: any) => fetchJson<any>(`${API_BASE}/monitors/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: number) => fetchJson<any>(`${API_BASE}/monitors/${id}`, { method: 'DELETE' }),
+    runNow: (id: number) => fetchJson<any>(`${API_BASE}/monitors/${id}/run`, { method: 'POST' }),
+    listSnapshots: (id: number, limit = 50) => fetchJson<any>(`${API_BASE}/monitors/${id}/snapshots?limit=${limit}`),
+    getSnapshot: (id: number, snapId: number) => fetchJson<any>(`${API_BASE}/monitors/${id}/snapshots/${snapId}`),
+  },
 };

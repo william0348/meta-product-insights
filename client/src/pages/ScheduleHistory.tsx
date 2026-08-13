@@ -37,8 +37,9 @@ import {
   ChevronUp,
   Layers,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+import { formatTaipei } from '@/lib/utils';
 
 /**
  * Unified Reports & History page.
@@ -442,7 +443,7 @@ export default function ScheduleHistory() {
                               <div>
                                 <span className="text-[10px] font-bold uppercase text-muted-foreground block mb-0.5">Started</span>
                                 <span className="font-medium">
-                                  {format(new Date(run.startedAt), 'MMM d, HH:mm:ss')}
+                                  {formatTaipei(run.startedAt, 'MMM d, HH:mm:ss', { withTz: true })}
                                 </span>
                                 <span className="text-xs text-muted-foreground block">
                                   {formatDistanceToNow(new Date(run.startedAt), { addSuffix: true })}
@@ -636,7 +637,7 @@ export default function ScheduleHistory() {
                                     )}
                                   </TableCell>
                                   <TableCell className="font-mono text-xs">
-                                    {format(new Date(record.startedAt), 'yyyy-MM-dd HH:mm')}
+                                    {formatTaipei(record.startedAt, 'yyyy-MM-dd HH:mm', { withTz: true })}
                                   </TableCell>
                                   <TableCell className="font-mono text-xs">
                                     {record.catalogId}
@@ -910,14 +911,14 @@ export default function ScheduleHistory() {
                 <div className="space-y-1">
                   <span className="text-[10px] font-bold uppercase text-muted-foreground">Started</span>
                   <p className="text-sm font-medium">
-                    {format(new Date(runDetailData.run.startedAt), 'MMM d, yyyy HH:mm:ss')}
+                    {formatTaipei(runDetailData.run.startedAt, 'MMM d, yyyy HH:mm:ss', { withTz: true })}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <span className="text-[10px] font-bold uppercase text-muted-foreground">Completed</span>
                   <p className="text-sm font-medium">
                     {runDetailData.run.completedAt 
-                      ? format(new Date(runDetailData.run.completedAt), 'MMM d, yyyy HH:mm:ss')
+                      ? formatTaipei(runDetailData.run.completedAt, 'MMM d, yyyy HH:mm:ss', { withTz: true })
                       : '—'
                     }
                   </p>
@@ -961,7 +962,7 @@ export default function ScheduleHistory() {
                           <CardContent className="pt-3 pb-3">
                             <span className="text-[10px] font-bold uppercase text-muted-foreground block">Next Retry</span>
                             <p className="text-sm font-bold text-blue-700">
-                              {format(new Date(runDetailData.run.nextRetryAt), 'MMM d, HH:mm:ss')}
+                              {formatTaipei(runDetailData.run.nextRetryAt, 'MMM d, HH:mm:ss', { withTz: true })}
                             </p>
                             <p className="text-xs text-blue-500">
                               {formatDistanceToNow(new Date(runDetailData.run.nextRetryAt), { addSuffix: true })}
@@ -1102,17 +1103,34 @@ export default function ScheduleHistory() {
                                 {job.statusMessage}
                               </p>
                             )}
-                            
+
+                            {(job as any).catalogVerification && (
+                              <div className="mt-2 bg-blue-50 border border-blue-200 rounded p-2 space-y-1">
+                                <div className="text-[10px] font-bold uppercase text-blue-700">Catalog Verification</div>
+                                <div className="text-xs text-blue-700">
+                                  Total catalog products: {((job as any).catalogVerification.total_catalog_products || 0).toLocaleString()}
+                                </div>
+                                {Object.entries((job as any).catalogVerification.fields || {}).map(([fieldName, info]: [string, any]) => (
+                                  <div key={fieldName} className="flex items-center justify-between text-xs">
+                                    <span className="font-mono text-blue-800">{fieldName} = {(info.expected_values || []).join(', ')}</span>
+                                    <span className="font-medium text-blue-700">
+                                      {(info.matched || 0).toLocaleString()} matched
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
                             <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                               {job.startedAt && (
                                 <span>
                                   <Clock className="w-3 h-3 inline mr-1" />
-                                  {format(new Date(job.startedAt), 'HH:mm:ss')}
+                                  {formatTaipei(job.startedAt, 'HH:mm:ss')}
                                 </span>
                               )}
                               {job.completedAt && (
                                 <span>
-                                  → {format(new Date(job.completedAt), 'HH:mm:ss')}
+                                  → {formatTaipei(job.completedAt, 'HH:mm:ss')}
                                 </span>
                               )}
                             </div>

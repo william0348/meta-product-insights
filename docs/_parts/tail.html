@@ -1,0 +1,70 @@
+<script>
+let current = 0;
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+const dotsContainer = document.getElementById('navDots');
+
+slides.forEach((_, i) => {
+  const dot = document.createElement('button');
+  dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+  dot.onclick = () => goTo(i);
+  dotsContainer.appendChild(dot);
+});
+const dots = document.querySelectorAll('.nav-dot');
+
+function goTo(i) {
+  current = Math.max(0, Math.min(total - 1, i));
+  slides[current].scrollIntoView({ behavior: 'smooth' });
+  updateDots();
+}
+
+function updateDots() {
+  dots.forEach((d, i) => d.classList.toggle('active', i === current));
+}
+
+document.addEventListener('keydown', e => {
+  if (['ArrowRight','ArrowDown','Space',' '].includes(e.key)) { e.preventDefault(); goTo(current + 1); }
+  if (['ArrowLeft','ArrowUp'].includes(e.key)) { e.preventDefault(); goTo(current - 1); }
+  if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+  if (e.key === 'End') { e.preventDefault(); goTo(total - 1); }
+});
+
+document.addEventListener('click', e => {
+  if (e.target.closest('.nav-dots')) return;
+  if (e.clientX > window.innerWidth / 2) goTo(current + 1);
+  else goTo(current - 1);
+});
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      current = Array.from(slides).indexOf(entry.target);
+      updateDots();
+    }
+  });
+}, { threshold: 0.5 });
+slides.forEach(s => observer.observe(s));
+
+/* Auto-scale slide content to fill viewport proportionally */
+function fitSlides() {
+  document.querySelectorAll('.slide').forEach(slide => {
+    const content = slide.querySelector('.sc, .corp-closing, .corp-cta, .corp-title-content');
+    if (!content) return;
+    content.style.zoom = '1';
+    const footer = slide.querySelector('.footer');
+    const footerH = footer ? footer.offsetHeight + 20 : 60;
+    const topPad = parseFloat(getComputedStyle(slide).paddingTop) || 0;
+    var availH = slide.clientHeight - topPad - footerH;
+    var availW = slide.clientWidth * 0.98;
+    var cH = content.scrollHeight;
+    var cW = content.scrollWidth;
+    if (!cH || !cW) return;
+    var z = Math.min(availH / cH, availW / cW, 2);
+    content.style.zoom = z;
+  });
+}
+fitSlides();
+window.addEventListener('resize', fitSlides);
+</script>
+</body>
+</html>

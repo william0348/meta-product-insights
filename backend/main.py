@@ -59,6 +59,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.api.routes import router as api_router
+from app.api.monitors import monitors_router
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -68,6 +69,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # API routes
 app.include_router(api_router)
 app.include_router(agent_router)
+app.include_router(monitors_router)
 
 # Serve frontend static files in production
 static_dir = Path(__file__).parent / "static"

@@ -26,8 +26,8 @@ import {
   Play,
   History
 } from 'lucide-react';
-import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { formatTaipei } from '@/lib/utils';
 
 // Type for report configuration
 interface ReportConfig {
@@ -60,8 +60,6 @@ interface ScheduleFormData {
   minute: string;
   dateRangeType: string;
   topConversionLimit: string; // 'all' | '5000' | '10000'
-  customLabel4: string;
-  enableCustomLabel4: boolean;
 }
 
 const defaultFormData: ScheduleFormData = {
@@ -72,8 +70,6 @@ const defaultFormData: ScheduleFormData = {
   minute: '0',
   dateRangeType: 'last_7_days',
   topConversionLimit: 'all',
-  customLabel4: '',
-  enableCustomLabel4: true,
 };
 
 const defaultCustomNumbers: CustomNumberField[] = [
@@ -195,8 +191,6 @@ export default function ScheduledJobs() {
       minute: minute || '0',
       dateRangeType: schedule.config?.dateRangeType || 'last_7_days',
       topConversionLimit: schedule.config?.topConversionLimit ? String(schedule.config.topConversionLimit) : 'all',
-      customLabel4: schedule.config?.customLabel4 || '',
-      enableCustomLabel4: schedule.config?.enableCustomLabel4 !== false, // default true for backward compat
     });
     
     // Set custom numbers
@@ -325,11 +319,7 @@ export default function ScheduledJobs() {
       config.updateToCatalog = true;
       config.catalogId = catalogTokenData?.catalogId;
       config.catalogAccessToken = catalogTokenData?.accessToken;
-      config.enableCustomLabel4 = formData.enableCustomLabel4;
-      if (formData.enableCustomLabel4 && formData.customLabel4.trim()) {
-        config.customLabel4 = formData.customLabel4.trim();
-      }
-      
+
       // Add custom_number fields (0-4)
       const customNumbersConfig: Record<string, string> = {};
       customNumbers.forEach((cn, index) => {
@@ -353,7 +343,7 @@ export default function ScheduledJobs() {
       // Update existing schedule
       updateMutation.mutate({
         scheduleId: editingScheduleId,
-        name: formData.name || `Weekly Report - ${getDayName(parseInt(formData.dayOfWeek))}`,
+        name: formData.name || (formData.dayOfWeek === '*' ? 'Daily Report' : `Weekly Report - ${getDayName(parseInt(formData.dayOfWeek))}`),
         jobType: formData.jobType,
         cronExpression,
         config,
@@ -362,7 +352,7 @@ export default function ScheduledJobs() {
     } else {
       // Create new schedule
       createMutation.mutate({
-        name: formData.name || `Weekly Report - ${getDayName(parseInt(formData.dayOfWeek))}`,
+        name: formData.name || (formData.dayOfWeek === '*' ? 'Daily Report' : `Weekly Report - ${getDayName(parseInt(formData.dayOfWeek))}`),
         jobType: formData.jobType,
         cronExpression,
         config,
@@ -486,7 +476,7 @@ export default function ScheduledJobs() {
             
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Day of Week</Label>
+                <Label>Frequency / Day of Week</Label>
                 <Select
                   value={formData.dayOfWeek}
                   onValueChange={(value) => setFormData({ ...formData, dayOfWeek: value })}
@@ -495,6 +485,7 @@ export default function ScheduledJobs() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="*">Daily (every day)</SelectItem>
                     <SelectItem value="0">Sunday</SelectItem>
                     <SelectItem value="1">Monday</SelectItem>
                     <SelectItem value="2">Tuesday</SelectItem>
@@ -606,26 +597,8 @@ export default function ScheduledJobs() {
                     <p className="text-[10px] text-muted-foreground">Uses your saved catalog settings</p>
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label>Custom Label 4</Label>
-                    <div className="flex items-center gap-3 p-2 bg-background rounded border">
-                      <Switch
-                        checked={formData.enableCustomLabel4}
-                        onCheckedChange={(checked) => setFormData({ ...formData, enableCustomLabel4: checked })}
-                      />
-                      <span className="text-sm font-mono w-28">custom_label_4</span>
-                      <Input
-                        placeholder="Enter custom label value"
-                        value={formData.customLabel4}
-                        onChange={(e) => setFormData({ ...formData, customLabel4: e.target.value })}
-                        disabled={!formData.enableCustomLabel4}
-                        className="flex-1"
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Enable and set value for custom_label_4</p>
-                  </div>
                 </div>
-                
+
                 {/* Custom Number Fields */}
                 <div className="space-y-3">
                   <Label>Custom Number Fields</Label>
@@ -865,7 +838,7 @@ export default function ScheduledJobs() {
                     {/* Next Run */}
                     {schedule.nextRunAt && (
                       <div className="text-xs text-muted-foreground">
-                        Next: {format(new Date(schedule.nextRunAt), 'MMM d, yyyy HH:mm')}
+                        Next: {formatTaipei(schedule.nextRunAt, 'MMM d, yyyy HH:mm', { withTz: true })}
                       </div>
                     )}
                     

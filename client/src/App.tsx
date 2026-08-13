@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import ScheduledJobs from "./pages/ScheduledJobs";
 import ScheduleHistory from "./pages/ScheduleHistory";
+import ProductSetMonitors from "./pages/ProductSetMonitors";
 import Help from "./pages/Help";
 
 function Router() {
@@ -20,6 +21,7 @@ function Router() {
       <Route path={"/reports"} component={ScheduleHistory} />
       <Route path="/schedule-history/:id" component={ScheduleHistory} />
       <Route path={"/schedules"} component={ScheduledJobs} />
+      <Route path={"/monitors"} component={ProductSetMonitors} />
       <Route path={"/help"} component={Help} />
       {/* Redirect old batch-history to unified reports page */}
       <Route path={"/batch-history"}>{() => <Redirect to="/reports" />}</Route>

@@ -14,7 +14,7 @@ import { apiClient } from '@/lib/api-client';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useReportState } from '@/contexts/ReportContext';
 
-import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, FileText, Calendar, BookOpen, Trophy, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Download, ShieldCheck, FileSpreadsheet, Loader2, BarChart2, Upload, Settings, FileText, Calendar, BookOpen, Trophy, ChevronDown, Eye } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -510,6 +510,15 @@ export default function Home() {
             >
               <Calendar className="w-4 h-4" />
               <span className="hidden sm:inline">Schedules</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLocation('/monitors')}
+              className="gap-2"
+            >
+              <Eye className="w-4 h-4" />
+              <span className="hidden sm:inline">Monitors</span>
             </Button>
             <Button
               variant="ghost"

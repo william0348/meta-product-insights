@@ -113,6 +113,11 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 backend/venv/
+backend/.venv/
+
+# LaunchAgent runtime logs
+*.launchagent.log
+*.launchagent.err
 
 # Local report storage (large generated files, never to be committed)
 backend/reports/

@@ -1,0 +1,344 @@
+<!-- ============================================================ -->
+<!-- SLIDE 0: TITLE                                               -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-light" data-slide="0">
+  <div class="corp-title-content">
+    <h1 class="corp-h1" style="margin-bottom:16px;">Meta Product Insights</h1>
+    <div class="corp-label">CATALOG REPORTING &amp; AUTOMATION TOOL &middot; FOR IT REVIEW</div>
+  </div>
+  <div class="corp-title-bottom">
+    <div class="corp-speakers">
+      <div class="corp-speaker">
+        <div class="corp-speaker-name">William Lion</div>
+        <div class="corp-speaker-title">Product Marketing &middot; Meta APAC</div>
+      </div>
+    </div>
+    <span class="meta-logo corp-title-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 1: AGENDA                                              -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-light" data-slide="1">
+  <div class="sc">
+    <h2 class="corp-h2">Agenda</h2>
+    <div class="accent-line"></div>
+    <ol class="corp-agenda-list">
+      <li><span class="corp-agenda-num">01</span> Why this tool exists</li>
+      <li><span class="corp-agenda-num">02</span> Tech stack &amp; architecture</li>
+      <li><span class="corp-agenda-num">03</span> End-to-end data flow</li>
+      <li><span class="corp-agenda-num">04</span> Feature overview</li>
+      <li><span class="corp-agenda-num">05</span> Deployment options</li>
+    </ol>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 2: PROBLEM / MISSION                                   -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-light" data-slide="2">
+  <div class="sc" style="text-align:center;">
+    <div class="corp-label" style="margin-bottom:32px;">WHY THIS TOOL EXISTS</div>
+    <h1 class="corp-h1" style="font-size:44px; font-weight:800; max-width:1000px; margin:0 auto; line-height:1.3;">
+      Turn 1M+ rows of FB product-level insights into prioritised Catalog signals &mdash; on a schedule, with verification.
+    </h1>
+    <p class="corp-body" style="max-width:780px; margin:32px auto 0;">
+      Run weekly or daily, filter top performers, push <code>custom_label_*</code> back to the Catalog,
+      then verify how many products actually received the update.
+    </p>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 3: TECH STACK (bullets)                                -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-light" data-slide="3">
+  <div class="sc">
+    <div class="corp-label">02&emsp;TECH STACK</div>
+    <h2 class="corp-h2">Built on a small, boring stack</h2>
+    <div class="accent-line" style="margin-bottom:24px;"></div>
+    <ul class="corp-bullets">
+      <li><strong>Frontend:</strong> React 19, Vite 7, TanStack Query, Tailwind, Radix UI, Recharts</li>
+      <li><strong>Backend:</strong> Python 3.12, FastAPI, SQLAlchemy 2 (async), APScheduler, httpx</li>
+      <li><strong>DB:</strong> SQLite (local) or TiDB Cloud (production) &mdash; same code path, swap via <code>DATABASE_URL</code></li>
+      <li><strong>External:</strong> Meta Marketing API v25.0 (Insights Async Reports + Catalog Batch + Product Sets)</li>
+      <li><strong>Deploy:</strong> Single Docker image (Vite build → FastAPI static mount) → Cloud Run</li>
+    </ul>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 4: ARCHITECTURE (hub-and-spoke)                        -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-light" data-slide="4">
+  <div class="sc">
+    <div class="corp-label">02&emsp;ARCHITECTURE</div>
+    <h2 class="corp-h2" style="margin-bottom:8px;">System Overview</h2>
+    <div class="accent-line" style="margin-bottom:32px;"></div>
+    <div class="corp-hub-spoke">
+      <svg style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:1;" viewBox="0 0 500 400" preserveAspectRatio="xMidYMid meet">
+        <line x1="250" y1="140" x2="250" y2="100" stroke="var(--corp-blue)" stroke-width="2" opacity="0.35"/>
+        <line x1="302" y1="170" x2="337" y2="150" stroke="var(--corp-blue)" stroke-width="2" opacity="0.35"/>
+        <line x1="302" y1="230" x2="337" y2="250" stroke="var(--corp-blue)" stroke-width="2" opacity="0.35"/>
+        <line x1="250" y1="260" x2="250" y2="300" stroke="var(--corp-blue)" stroke-width="2" opacity="0.35"/>
+        <line x1="198" y1="230" x2="163" y2="250" stroke="var(--corp-blue)" stroke-width="2" opacity="0.35"/>
+        <line x1="198" y1="170" x2="163" y2="150" stroke="var(--corp-blue)" stroke-width="2" opacity="0.35"/>
+      </svg>
+      <div class="corp-hub"><span>FastAPI<br>Backend</span></div>
+      <div class="corp-spoke-node" style="top:0px; left:200px;"><span>React SPA</span></div>
+      <div class="corp-spoke-node" style="top:75px; left:330px;"><span>FB Insights</span></div>
+      <div class="corp-spoke-node" style="top:225px; left:330px;"><span>FB Catalog</span></div>
+      <div class="corp-spoke-node" style="top:300px; left:200px;"><span>Product Sets</span></div>
+      <div class="corp-spoke-node" style="top:225px; left:70px;"><span>SQLite / TiDB</span></div>
+      <div class="corp-spoke-node" style="top:75px; left:70px;"><span>APScheduler</span></div>
+    </div>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 5: DATA FLOW (process flow)                            -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-light" data-slide="5">
+  <div class="sc">
+    <div class="corp-label">03&emsp;DATA FLOW</div>
+    <h2 class="corp-h2" style="margin-bottom:32px;">How a scheduled run works</h2>
+    <div class="corp-process-flow">
+      <div class="corp-process-step">
+        <div class="corp-process-step-num">01</div>
+        <div class="corp-process-step-title">Trigger</div>
+        <div class="corp-process-step-desc">APScheduler tick fires the cron at the configured time</div>
+      </div>
+      <div class="corp-process-arrow">&rarr;</div>
+      <div class="corp-process-step">
+        <div class="corp-process-step-num">02</div>
+        <div class="corp-process-step-title">Fetch</div>
+        <div class="corp-process-step-desc">POST FB Insights async report, poll until ready, download CSV (~290 MB)</div>
+      </div>
+      <div class="corp-process-arrow">&rarr;</div>
+      <div class="corp-process-step">
+        <div class="corp-process-step-num">03</div>
+        <div class="corp-process-step-title">Filter</div>
+        <div class="corp-process-step-desc">Parse CSV in-memory, apply CTR / spend filters, pick top performers</div>
+      </div>
+      <div class="corp-process-arrow">&rarr;</div>
+      <div class="corp-process-step">
+        <div class="corp-process-step-num">04</div>
+        <div class="corp-process-step-title">Push + Verify</div>
+        <div class="corp-process-step-desc">Catalog batch update (3k items/req) then verify matched count via Catalog API</div>
+      </div>
+    </div>
+    <p class="corp-source" style="text-align:center; margin-top:32px;">
+      No row-level data is persisted &mdash; only DB summary (count, spend, verification result).
+    </p>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 6: KPI / PROOF                                         -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-light" data-slide="6">
+  <div class="sc">
+    <div class="corp-label">03&emsp;PROOF OF EXECUTION</div>
+    <h2 class="corp-h2" style="text-align:center;">Real scheduled run, 2026-06-01</h2>
+    <div class="accent-line-center" style="margin-bottom:32px;"></div>
+    <div class="corp-three-col" style="margin-top:24px; text-align:center;">
+      <div class="corp-col">
+        <div class="stat-big" style="font-size:72px;">1.08M</div>
+        <p class="stat-desc">Product-level rows fetched from FB Insights API</p>
+      </div>
+      <div class="corp-vdivider"></div>
+      <div class="corp-col">
+        <div class="stat-big" style="font-size:72px;">70,684</div>
+        <p class="stat-desc">Products updated in Catalog after CTR &gt;= 10% filter</p>
+      </div>
+      <div class="corp-vdivider"></div>
+      <div class="corp-col">
+        <div class="stat-big" style="font-size:72px;">3m 24s</div>
+        <p class="stat-desc">End-to-end wall-clock, errors = 0</p>
+      </div>
+    </div>
+    <p class="corp-source" style="text-align:center; margin-top:32px;">
+      Source: local backend log + DB summary, ad account 10153679704478431
+    </p>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 7: FEATURE OVERVIEW (icon grid, 6 features)            -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-light" data-slide="7">
+  <div class="sc">
+    <div class="corp-label">04&emsp;FEATURES</div>
+    <h2 class="corp-h2">Capabilities at a glance</h2>
+    <p class="corp-body" style="margin-bottom:24px;">Six modules built around the Catalog + Insights pipeline.</p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+      <div style="background:var(--corp-bg-alt); border-radius:12px; padding:20px; display:flex; gap:14px; align-items:flex-start;">
+        <div style="flex-shrink:0; width:40px; height:40px; background:rgba(0,100,224,0.1); border-radius:10px; display:flex; align-items:center; justify-content:center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--corp-blue)"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
+        </div>
+        <div>
+          <h4 style="font-size:14px; font-weight:700; margin:0 0 4px;">Schedules</h4>
+          <p style="font-size:13px; color:var(--corp-text-secondary); margin:0; line-height:1.5;">Cron-based daily / weekly runs per ad account with multi-account support.</p>
+        </div>
+      </div>
+      <div style="background:var(--corp-bg-alt); border-radius:12px; padding:20px; display:flex; gap:14px; align-items:flex-start;">
+        <div style="flex-shrink:0; width:40px; height:40px; background:rgba(0,133,124,0.1); border-radius:10px; display:flex; align-items:center; justify-content:center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--corp-teal)"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
+        </div>
+        <div>
+          <h4 style="font-size:14px; font-weight:700; margin:0 0 4px;">Report + Catalog</h4>
+          <p style="font-size:13px; color:var(--corp-text-secondary); margin:0; line-height:1.5;">Pull Insights, filter, push <code>custom_label_*</code> to Catalog in one job.</p>
+        </div>
+      </div>
+      <div style="background:var(--corp-bg-alt); border-radius:12px; padding:20px; display:flex; gap:14px; align-items:flex-start;">
+        <div style="flex-shrink:0; width:40px; height:40px; background:rgba(153,29,249,0.1); border-radius:10px; display:flex; align-items:center; justify-content:center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--corp-violet)"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+        </div>
+        <div>
+          <h4 style="font-size:14px; font-weight:700; margin:0 0 4px;">Product Set Monitor</h4>
+          <p style="font-size:13px; color:var(--corp-text-secondary); margin:0; line-height:1.5;">Daily snapshot of product count per set, 30-day chart with day-over-day delta.</p>
+        </div>
+      </div>
+      <div style="background:var(--corp-bg-alt); border-radius:12px; padding:20px; display:flex; gap:14px; align-items:flex-start;">
+        <div style="flex-shrink:0; width:40px; height:40px; background:rgba(49,162,76,0.1); border-radius:10px; display:flex; align-items:center; justify-content:center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--corp-green)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        </div>
+        <div>
+          <h4 style="font-size:14px; font-weight:700; margin:0 0 4px;">Catalog Verification</h4>
+          <p style="font-size:13px; color:var(--corp-text-secondary); margin:0; line-height:1.5;">Post-update API check: how many products actually received the new value.</p>
+        </div>
+      </div>
+      <div style="background:var(--corp-bg-alt); border-radius:12px; padding:20px; display:flex; gap:14px; align-items:flex-start;">
+        <div style="flex-shrink:0; width:40px; height:40px; background:rgba(247,185,40,0.1); border-radius:10px; display:flex; align-items:center; justify-content:center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--corp-amber)"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+        </div>
+        <div>
+          <h4 style="font-size:14px; font-weight:700; margin:0 0 4px;">Schedule History</h4>
+          <p style="font-size:13px; color:var(--corp-text-secondary); margin:0; line-height:1.5;">Per-run timeline with status, duration, items processed, error breakdown.</p>
+        </div>
+      </div>
+      <div style="background:var(--corp-bg-alt); border-radius:12px; padding:20px; display:flex; gap:14px; align-items:flex-start;">
+        <div style="flex-shrink:0; width:40px; height:40px; background:rgba(250,56,62,0.1); border-radius:10px; display:flex; align-items:center; justify-content:center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--corp-red)"><path d="M19 13H5v-2h14v2z"/></svg>
+        </div>
+        <div>
+          <h4 style="font-size:14px; font-weight:700; margin:0 0 4px;">Token Vault</h4>
+          <p style="font-size:13px; color:var(--corp-text-secondary); margin:0; line-height:1.5;">Per-user storage of ads_management &amp; catalog_management tokens; never logged.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 8: COMPARISON - LOCAL vs CLOUD RUN                     -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-light" data-slide="8">
+  <div class="sc">
+    <div class="corp-label">05&emsp;DEPLOYMENT</div>
+    <h2 class="corp-h2">Local dev vs Cloud Run</h2>
+    <p class="corp-body" style="margin-bottom:24px;">Same code path, two operating modes. Choose based on whether schedules must survive laptop shutdown.</p>
+
+    <div style="display:flex; gap:24px; align-items:stretch;">
+      <div style="flex:1; background:rgba(247,185,40,0.06); border:2px solid var(--corp-amber); border-radius:12px; padding:28px 24px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="var(--corp-amber)"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4z"/></svg>
+          <h3 style="font-size:18px; font-weight:700; color:var(--corp-amber); margin:0;">Local (dev / demo)</h3>
+        </div>
+        <ul class="corp-bullets">
+          <li>SQLite file in <code>backend/meta_insights.db</code></li>
+          <li><code>uvicorn :8001</code> + <code>vite :5174</code>; reload on save</li>
+          <li>Schedules only fire while laptop awake and process running</li>
+          <li>No infra cost; fastest iteration loop</li>
+        </ul>
+      </div>
+      <div style="display:flex; align-items:center; flex-shrink:0;">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="var(--corp-text-muted)"><path d="M16.01 11H4v2h12.01v3L20 12l-3.99-4v3z"/></svg>
+      </div>
+      <div style="flex:1; background:rgba(49,162,76,0.06); border:2px solid var(--corp-green); border-radius:12px; padding:28px 24px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="var(--corp-green)"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
+          <h3 style="font-size:18px; font-weight:700; color:var(--corp-green); margin:0;">Cloud Run (production)</h3>
+        </div>
+        <ul class="corp-bullets">
+          <li>TiDB Cloud as managed MySQL; schema auto-migrates on boot</li>
+          <li>Single container (Vite build → FastAPI static mount)</li>
+          <li>Cloud Scheduler triggers <code>/api/schedules/{id}/run</code> at the exact cron time</li>
+          <li><code>--cpu-throttling --min-instances=0 --max-instances=1</code> &asymp; USD $0&ndash;2/month</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 9: WHAT'S NEXT (CTA dark)                              -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-dark" data-slide="9">
+  <div class="corp-cta">
+    <div class="corp-label" style="margin-bottom:24px;">FOR IT REVIEW</div>
+    <h2 class="corp-h2" style="font-size:44px; margin-bottom:8px;">What we need from IT</h2>
+    <div class="accent-line-center" style="margin-bottom:16px;"></div>
+    <p class="corp-body" style="color:var(--corp-text-secondary); max-width:760px; margin:0 auto;">
+      The tool runs end-to-end on a Meta laptop today. To deploy to Cloud Run we need the following greenlights.
+    </p>
+    <div class="corp-cta-chips">
+      <span class="corp-cta-chip primary">GCP project + billing</span>
+      <span class="corp-cta-chip">TiDB Cloud or Cloud SQL</span>
+      <span class="corp-cta-chip">FB long-lived token rotation policy</span>
+      <span class="corp-cta-chip">Domain + SSO (optional)</span>
+    </div>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SLIDE 10: CLOSING                                            -->
+<!-- ============================================================ -->
+<div class="slide slide-corp-dark" data-slide="10">
+  <div class="corp-closing">
+    <div class="meta-logo" style="margin:0 auto 24px;"></div>
+    <div class="corp-closing-text">Thank you</div>
+  </div>
+  <div class="footer">
+    <span>Internal &mdash; Meta Confidential</span>
+    <span class="meta-logo"></span>
+  </div>
+</div>

@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
     port: int = 8001
 
+    # LINE Messaging API push notifications (token health alerts)
+    line_channel_access_token: str = ""
+    line_user_id: str = ""
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
