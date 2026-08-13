@@ -11,6 +11,7 @@ from sqlalchemy import select, update, delete, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
+from ..utils import dt_iso
 from ..models import (
     User,
     UserToken,
@@ -112,7 +113,7 @@ def _row_to_dict(obj: Any) -> dict:
     for c in obj.__table__.columns:
         val = getattr(obj, c.name)
         if isinstance(val, datetime):
-            val = val.isoformat()
+            val = dt_iso(val)
         d[c.name] = val
     return d
 
@@ -134,7 +135,7 @@ async def cleanup_jobs(
 ):
     """Clean up stuck running/queued jobs by marking them as failed."""
     from sqlalchemy import text
-    r1 = await db.execute(text("UPDATE batch_jobs SET status='failed', statusMessage='Cleaned up' WHERE status IN ('running', 'queued')"))
+    r1 = await db.execute(text("UPDATE mpi_batch_jobs SET status='failed', statusMessage='Cleaned up' WHERE status IN ('running', 'queued')"))
     await db.commit()
     return {"success": True, "cleaned": r1.rowcount}
 
@@ -147,7 +148,7 @@ async def migrate_user(
     """One-time migration: update all old user data to the new default user."""
     from sqlalchemy import text
     new_id = user.id
-    tables = ["user_tokens", "batch_jobs", "saved_reports", "scheduled_jobs", "schedule_runs", "catalog_batch_history"]
+    tables = ["mpi_user_tokens", "mpi_batch_jobs", "mpi_saved_reports", "mpi_scheduled_jobs", "mpi_schedule_runs", "mpi_catalog_batch_history"]
     results = {}
     for table in tables:
         r = await db.execute(text(f"UPDATE {table} SET userId = :new_id WHERE userId != :new_id"), {"new_id": new_id})
@@ -857,25 +858,7 @@ async def get_report(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     d = _row_to_dict(report)
-
-    # Load report data: file:// path → read from disk; otherwise treat as
-    # inline JSON.
-    raw = d.get("data")
-    if raw and isinstance(raw, str):
-        if raw.startswith("file://"):
-            try:
-                from pathlib import Path
-                local_path = Path(raw[len("file://"):])
-                d["data"] = json.loads(local_path.read_text(encoding="utf-8"))
-            except Exception as e:
-                logger.warning("[reports/%s] Failed to load local file: %s", report_id, e)
-                d["dataError"] = str(e)
-        else:
-            try:
-                d["data"] = json.loads(raw)
-            except (json.JSONDecodeError, TypeError):
-                pass
-
+    # data column is intentionally not persisted (summary only); keep as-is.
     return {"success": True, "report": d}
 
 

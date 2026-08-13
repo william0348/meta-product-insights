@@ -2,7 +2,8 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum, Integer, String, Text, func
-from sqlalchemy.dialects.mysql import LONGTEXT
+
+LONGTEXT = Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -11,7 +12,7 @@ class Base(DeclarativeBase):
 
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "mpi_users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     openId: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
@@ -25,7 +26,7 @@ class User(Base):
 
 
 class UserToken(Base):
-    __tablename__ = "user_tokens"
+    __tablename__ = "mpi_user_tokens"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     userId: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -43,7 +44,7 @@ class UserToken(Base):
 
 
 class CatalogBatchHistory(Base):
-    __tablename__ = "catalog_batch_history"
+    __tablename__ = "mpi_catalog_batch_history"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     userId: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -66,7 +67,7 @@ class CatalogBatchHistory(Base):
 
 
 class BatchJob(Base):
-    __tablename__ = "batch_jobs"
+    __tablename__ = "mpi_batch_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     userId: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -84,6 +85,7 @@ class BatchJob(Base):
     handles: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     errors: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     statusMessage: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    catalogVerification: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     queuedAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     startedAt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completedAt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -94,7 +96,7 @@ class BatchJob(Base):
 
 
 class SavedReport(Base):
-    __tablename__ = "saved_reports"
+    __tablename__ = "mpi_saved_reports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     userId: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -121,7 +123,7 @@ class SavedReport(Base):
 
 
 class ScheduledJob(Base):
-    __tablename__ = "scheduled_jobs"
+    __tablename__ = "mpi_scheduled_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     userId: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -143,7 +145,7 @@ class ScheduledJob(Base):
 
 
 class ScheduleRun(Base):
-    __tablename__ = "schedule_runs"
+    __tablename__ = "mpi_schedule_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     scheduleId: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -168,3 +170,39 @@ class ScheduleRun(Base):
     completedAt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     durationMs: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class ProductSetMonitor(Base):
+    __tablename__ = "mpi_product_set_monitors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    userId: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    productSetId: Mapped[str] = mapped_column(String(64), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    runHour: Mapped[int] = mapped_column(Integer, default=8, nullable=False)
+    runMinute: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Taipei", nullable=False)
+    lastRunAt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    lastRunStatus: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    lastProductCount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    lastErrorMessage: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    nextRunAt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updatedAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class ProductSetSnapshot(Base):
+    __tablename__ = "mpi_product_set_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    monitorId: Mapped[int] = mapped_column(Integer, nullable=False)
+    takenAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    triggerType: Mapped[str] = mapped_column(String(32), default="auto", nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="completed", nullable=False)
+    productCount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    products: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    addedProducts: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    removedProducts: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    errorMessage: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    durationMs: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
