@@ -56,9 +56,17 @@ def touch_heartbeat(job_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 def p_float(val: Any) -> float:
-    """Parse *val* to float. Returns 0.0 on ``None``, empty string, or error."""
+    """Parse *val* to float. Returns 0.0 on ``None``, empty string, or error.
+
+    Facebook's JSON insights format returns some fields as a list of
+    per-attribution-window dicts, e.g. ``[{"value": "2"}]``, instead of a
+    bare scalar. Sum across entries so callers don't need to know which
+    shape a given field comes back in.
+    """
     if val is None or val == "":
         return 0.0
+    if isinstance(val, list):
+        return sum(p_float(item.get("value")) for item in val if isinstance(item, dict))
     try:
         return float(val)
     except (ValueError, TypeError):
@@ -66,9 +74,14 @@ def p_float(val: Any) -> float:
 
 
 def p_int(val: Any) -> int:
-    """Parse *val* to int. Returns 0 on ``None``, empty string, or error."""
+    """Parse *val* to int. Returns 0 on ``None``, empty string, or error.
+
+    See :func:`p_float` re: Facebook's list-of-dict field shape.
+    """
     if val is None or val == "":
         return 0
+    if isinstance(val, list):
+        return int(p_float(val))
     try:
         return int(float(val))
     except (ValueError, TypeError):
@@ -85,8 +98,14 @@ def _get(row: dict, *keys: str) -> Any:
 
 
 def map_row_to_product_insight(row: dict) -> dict:
-    """Convert a raw row (JSON or CSV format) to normalised ProductInsight dict."""
-    is_csv = "Product Name" in row or "Impressions" in row
+    """Convert a raw row (JSON or CSV format) to normalised ProductInsight dict.
+
+    Detects by the "actions" key, unique to the raw Graph API JSON shape — CSV
+    rows never have it, regardless of what language their column headers are in
+    (checking for specific English header names like "Impressions" would silently
+    misdetect a localized CSV as JSON and produce an all-zero row instead).
+    """
+    is_csv = "actions" not in row
 
     if is_csv:
         return _map_csv_row(row)
@@ -94,24 +113,33 @@ def map_row_to_product_insight(row: dict) -> dict:
 
 
 def _map_csv_row(row: dict) -> dict:
-    """Map CSV format row (column names like 'Product Name', 'Impressions')."""
-    link_clicks = p_int(_get(row, "Product link clicks", "Link clicks"))
-    catalog_purchases = p_int(_get(row, "Product purchases", "Meta purchases"))
+    """Map CSV format row (column names like 'Product Name', 'Impressions').
+
+    Also accepts Traditional Chinese headers — the CSV's header language follows
+    the report-requesting user's personal FB locale and has been observed to
+    silently switch (see Accept-Language header on the download request, which
+    tries to prevent this at the source). Only headers directly confirmed from a
+    real Chinese CSV response are aliased here; unconfirmed fields (product name,
+    content ID, brand, product views) fall back to empty/0 under that locale —
+    the raw_count-vs-zero-totals guard below catches a fully broken mapping.
+    """
+    link_clicks = p_int(_get(row, "Product link clicks", "Link clicks", "商品連結點擊次數", "連結點擊次數"))
+    catalog_purchases = p_int(_get(row, "Product purchases", "Meta purchases", "商品購買次數"))
     cvr = (catalog_purchases / link_clicks * 100) if link_clicks > 0 else 0.0
 
     return {
         "product_name": _get(row, "Product Name") or "",
         "product_retailer_id": _get(row, "Content ID") or "",
         "product_brand": _get(row, "Brand") or "",
-        "impressions": p_int(_get(row, "Impressions")),
-        "spend": p_float(_get(row, "Product amount spent")),
+        "impressions": p_int(_get(row, "Impressions", "曝光次數")),
+        "spend": p_float(_get(row, "Product amount spent", "商品花費金額")),
         "link_clicks": link_clicks,
-        "inline_link_click_ctr": p_float(_get(row, "CTR (link click-through rate)")),
+        "inline_link_click_ctr": p_float(_get(row, "CTR (link click-through rate)", "CTR（連結點閱率）")),
         "cvr": round(cvr, 4),
-        "cpm": p_float(_get(row, "CPM (cost per 1,000 impressions)")),
-        "cost_per_inline_link_click": p_float(_get(row, "Product CPC (cost per product link click)")),
+        "cpm": p_float(_get(row, "CPM (cost per 1,000 impressions)", "CPM（每千次廣告曝光成本）")),
+        "cost_per_inline_link_click": p_float(_get(row, "Product CPC (cost per product link click)", "商品 CPC（每次商品連結點擊成本）")),
         "purchases": p_int(_get(row, "Product attributed orders")),
-        "adds_to_cart": p_int(_get(row, "Product adds to cart", "Meta adds to cart")),
+        "adds_to_cart": p_int(_get(row, "Product adds to cart", "Meta adds to cart", "應用程式內商品加到購物車次數")),
         "catalog_purchases": catalog_purchases,
         "product_set_purchases": p_int(_get(row, "Product set purchases")),
         "product_views": p_int(_get(row, "Product views")),
@@ -282,6 +310,7 @@ async def run_report_worker(
     min_ctr: Optional[float] = config.get("minCTR")
     max_spend: Optional[float] = config.get("maxSpend")
     max_cvr: Optional[float] = config.get("maxCVR")
+    min_cvr: Optional[float] = config.get("minCVR")
     top_conversion_limit: Optional[int] = config.get("topConversionLimit")
 
     # Catalog update options
@@ -405,6 +434,12 @@ async def run_report_worker(
             f"?report_run_id={report_run_id}&access_token={access_token}"
         )
 
+        # Ask for English column headers explicitly — the CSV's header language
+        # otherwise follows the report-requesting user's personal FB locale, which
+        # can silently drift (e.g. to Traditional Chinese) and break every _get()
+        # lookup below since map_row_to_product_insight only recognizes English names.
+        csv_headers = {"Accept-Language": "en-US,en;q=0.9"}
+
         async with httpx.AsyncClient(timeout=600, follow_redirects=True) as client:
             csv_text = None
             for attempt in range(4):
@@ -414,7 +449,7 @@ async def run_report_worker(
                         attempt + 1, download_url[:80], job_id,
                     )
                     touch_heartbeat(job_id)
-                    resp = await client.get(download_url)
+                    resp = await client.get(download_url, headers=csv_headers)
                     if resp.status_code == 200 and len(resp.text) > 100:
                         # FB returns an HTML login/error page when access_token
                         # is rejected. Treat as failure so JSON fallback runs.
@@ -503,6 +538,18 @@ async def run_report_worker(
         insights = [map_row_to_product_insight(row) for row in raw_rows]
         logger.info("Mapped %d rows to product insights for job %d", len(insights), job_id)
 
+        # Sanity check: real Facebook data has non-zero spend/impressions somewhere.
+        # All-zero across every row after a non-empty download means the column
+        # mapping broke (e.g. an unrecognized header language) — fail loudly
+        # instead of silently completing as "0 items, $0 spend" like a genuinely
+        # empty report would. This exact scenario ran undetected for 6 days.
+        if insights and not any(i["spend"] > 0 or i["impressions"] > 0 for i in insights):
+            raise RuntimeError(
+                f"Mapped {len(insights)} rows but all have $0 spend and 0 impressions — "
+                f"likely a column header mismatch (e.g. unexpected CSV locale). "
+                f"Sample raw row keys: {list(raw_rows[0].keys())[:10] if raw_rows else []}"
+            )
+
         # ---------------------------------------------------------------
         # Step 5 - Post-processing filters (Python-side, not API-level)
         # ---------------------------------------------------------------
@@ -524,9 +571,19 @@ async def run_report_worker(
                 len(insights),
             )
 
+        if min_cvr is not None:
+            before = len(insights)
+            insights = [i for i in insights if i["cvr"] >= min_cvr]
+            logger.info(
+                "minCVR filter (>=%s): %d -> %d items",
+                min_cvr,
+                before,
+                len(insights),
+            )
+
         if len(insights) != raw_count:
-            logger.info("Post-processing filters: %d -> %d items (minSpend=%s minCTR=%s maxSpend=%s maxCVR=%s)",
-                         raw_count, len(insights), min_spend, min_ctr, max_spend, max_cvr)
+            logger.info("Post-processing filters: %d -> %d items (minSpend=%s minCTR=%s maxSpend=%s maxCVR=%s minCVR=%s)",
+                         raw_count, len(insights), min_spend, min_ctr, max_spend, max_cvr, min_cvr)
 
         if top_conversion_limit is not None and top_conversion_limit > 0:
             insights.sort(
