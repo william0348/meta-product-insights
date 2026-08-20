@@ -63,16 +63,17 @@ export const apiClient = {
       if (params.after) qs.set('after', params.after);
       return fetchJson<any>(`${API_BASE}/facebook/insights?${qs}`);
     },
-    refilter: (params: { reportRunId: string; minSpend?: string; minCTR?: string; maxSpend?: string; maxCVR?: string; maxResults?: number }) => {
+    refilter: (params: { reportRunId: string; minSpend?: string; minCTR?: string; maxSpend?: string; maxCVR?: string; minCVR?: string; maxResults?: number }) => {
       const qs = new URLSearchParams({ reportRunId: params.reportRunId });
       if (params.minSpend) qs.set('minSpend', params.minSpend);
       if (params.minCTR) qs.set('minCTR', params.minCTR);
       if (params.maxSpend) qs.set('maxSpend', params.maxSpend);
       if (params.maxCVR) qs.set('maxCVR', params.maxCVR);
+      if (params.minCVR) qs.set('minCVR', params.minCVR);
       if (params.maxResults) qs.set('maxResults', String(params.maxResults));
       return fetchJson<any>(`${API_BASE}/facebook/insights/refilter?${qs}`);
     },
-    fetchAll: (params: { reportRunId: string; accessToken: string; minSpend?: string; minCTR?: string; maxSpend?: string; maxCVR?: string }) => {
+    fetchAll: (params: { reportRunId: string; accessToken: string; minSpend?: string; minCTR?: string; maxSpend?: string; maxCVR?: string; minCVR?: string }) => {
       const qs = new URLSearchParams({
         reportRunId: params.reportRunId,
         accessToken: params.accessToken,
@@ -83,6 +84,7 @@ export const apiClient = {
       if (params.minCTR) qs.set('minCTR', params.minCTR);
       if (params.maxSpend) qs.set('maxSpend', params.maxSpend);
       if (params.maxCVR) qs.set('maxCVR', params.maxCVR);
+      if (params.minCVR) qs.set('minCVR', params.minCVR);
       return fetchJson<any>(`${API_BASE}/facebook/insights?${qs}`);
     },
   },

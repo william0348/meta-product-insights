@@ -105,6 +105,8 @@ export interface ReportConfig {
   minCTR?: string; // Minimum CTR filter
   maxSpend?: string; // Maximum spend filter (spend less than)
   maxCVR?: string; // Maximum CVR filter (CVR less than)
+  minCVR?: string; // Minimum CVR filter (CVR greater than or equal to)
+  minROAS?: string; // Minimum estimated ROAS filter (sale_price x purchases / spend)
   apiFilters?: Array<{field: string, operator: string, value: any}>; // Filters applied at API level before CSV generation
 }
 

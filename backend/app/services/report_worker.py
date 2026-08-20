@@ -15,6 +15,7 @@ import csv
 import io
 import json
 import logging
+import re
 import time
 from datetime import datetime
 from typing import Any, Optional, Callable, Awaitable
@@ -28,7 +29,7 @@ from ..facebook.insights import (
     poll_report_status,
     fetch_insights_data,
 )
-from ..facebook.catalog import batch_update_products, create_update_request
+from ..facebook.catalog import batch_update_products, create_update_request, fetch_products_by_retailer_ids
 from ..database import get_session_factory
 from ..models import ScheduledJob, ScheduleRun
 
@@ -97,6 +98,24 @@ def _get(row: dict, *keys: str) -> Any:
     return None
 
 
+_PRICE_NUMBER_RE = re.compile(r"[\d.]+")
+
+
+def _parse_catalog_price(val: Any) -> Optional[float]:
+    """Parse a catalog price string like ``"NT$1,234"`` to a float.
+
+    Facebook's catalog API returns price fields as a currency-prefixed
+    string; the prefix isn't a reliable currency indicator (products can
+    be tagged USD while the amount is actually TWD), so we just strip
+    everything but digits/decimal point rather than trust the currency
+    field.
+    """
+    if not val:
+        return None
+    m = _PRICE_NUMBER_RE.search(str(val).replace(",", ""))
+    return float(m.group()) if m else None
+
+
 def map_row_to_product_insight(row: dict) -> dict:
     """Convert a raw row (JSON or CSV format) to normalised ProductInsight dict.
 
@@ -112,37 +131,84 @@ def map_row_to_product_insight(row: dict) -> dict:
     return _map_json_row(row)
 
 
-def _map_csv_row(row: dict) -> dict:
-    """Map CSV format row (column names like 'Product Name', 'Impressions').
+# Fixed column positions in Facebook's CSV export for our exact request shape
+# (breakdowns=product_id, fields=FIELD_LIST in facebook/insights.py). Confirmed
+# identical, position-for-position, across an English and a Traditional
+# Chinese export of the same account on 2026-08-20 — Facebook's export
+# template order does not depend on header language, only the header TEXT
+# does. Indexing by position instead of by header name makes row mapping
+# immune to locale entirely, not just to the languages we've happened to see.
+_CSV_COLUMN_INDEX = {
+    "product_name": 58,           # Product Name / 商品名稱
+    "product_retailer_id": 51,    # Content ID / 內容編號
+    "product_brand": 49,          # Brand / 品牌
+    "impressions": 4,             # Impressions / 曝光次數
+    "spend": 7,                   # Product amount spent / 商品花費金額
+    "link_clicks": 5,             # Product link clicks / 商品連結點擊次數
+    "inline_link_click_ctr": 8,   # CTR (link click-through rate) / CTR（連結點閱率）
+    "cpm": 25,                    # CPM (cost per 1,000 impressions) / CPM（每千次廣告曝光成本）
+    "cost_per_inline_link_click": 3,  # Product CPC ... / 商品 CPC（...）
+    "purchases": 42,              # Product attributed orders / 商品歸因訂單數量
+    "adds_to_cart": 40,           # Product adds to cart / 商品加到購物車次數 — NOT
+                                   # the same as "In-app product adds to cart"
+                                   # (index 10, 應用程式內商品加到購物車次數), which
+                                   # a prior version of this file's name-based
+                                   # aliasing silently conflated under Chinese.
+    "catalog_purchases": 14,      # Product purchases / 商品購買次數
+    "product_set_purchases": 20,  # Product set purchases / 商品組合購買次數
+    "product_views": 59,          # Product views / 商品瀏覽次數
+}
+# Column count Facebook returned for the confirmed captures above. A count
+# mismatch means Facebook changed the export template (added/removed a
+# column) and the fixed indices above can no longer be trusted blindly.
+_CSV_EXPECTED_COLUMN_COUNT = 62
 
-    Also accepts Traditional Chinese headers — the CSV's header language follows
-    the report-requesting user's personal FB locale and has been observed to
-    silently switch (see Accept-Language header on the download request, which
-    tries to prevent this at the source). Only headers directly confirmed from a
-    real Chinese CSV response are aliased here; unconfirmed fields (product name,
-    content ID, brand, product views) fall back to empty/0 under that locale —
-    the raw_count-vs-zero-totals guard below catches a fully broken mapping.
+
+def _col(values: list, field: str, fallback: Any = None) -> Any:
+    """Get a CSV field by its confirmed fixed position, not header name."""
+    idx = _CSV_COLUMN_INDEX[field]
+    if idx < len(values):
+        v = values[idx]
+        if v not in (None, ""):
+            return v
+    return fallback
+
+
+def _map_csv_row(row: dict) -> dict:
+    """Map a CSV row to a normalised ProductInsight dict, by column position.
+
+    ``row`` comes from ``csv.DictReader``, which preserves file column order
+    in the dict — ``list(row.values())`` reconstructs the original positional
+    row. We read by position (see ``_CSV_COLUMN_INDEX``) instead of by header
+    name so this works regardless of what language Facebook renders the
+    headers in; that language follows the report-requesting user's FB locale
+    and has been observed to silently switch, and is NOT controllable via the
+    Accept-Language header on the download request (same report_run_id, same
+    bytes, different Accept-Language values all returned English in testing —
+    treat that header as a best-effort hint only, not a guarantee).
     """
-    link_clicks = p_int(_get(row, "Product link clicks", "Link clicks", "商品連結點擊次數", "連結點擊次數"))
-    catalog_purchases = p_int(_get(row, "Product purchases", "Meta purchases", "商品購買次數"))
+    values = list(row.values())
+
+    link_clicks = p_int(_col(values, "link_clicks"))
+    catalog_purchases = p_int(_col(values, "catalog_purchases"))
     cvr = (catalog_purchases / link_clicks * 100) if link_clicks > 0 else 0.0
 
     return {
-        "product_name": _get(row, "Product Name") or "",
-        "product_retailer_id": _get(row, "Content ID") or "",
-        "product_brand": _get(row, "Brand") or "",
-        "impressions": p_int(_get(row, "Impressions", "曝光次數")),
-        "spend": p_float(_get(row, "Product amount spent", "商品花費金額")),
+        "product_name": _col(values, "product_name") or "",
+        "product_retailer_id": _col(values, "product_retailer_id") or "",
+        "product_brand": _col(values, "product_brand") or "",
+        "impressions": p_int(_col(values, "impressions")),
+        "spend": p_float(_col(values, "spend")),
         "link_clicks": link_clicks,
-        "inline_link_click_ctr": p_float(_get(row, "CTR (link click-through rate)", "CTR（連結點閱率）")),
+        "inline_link_click_ctr": p_float(_col(values, "inline_link_click_ctr")),
         "cvr": round(cvr, 4),
-        "cpm": p_float(_get(row, "CPM (cost per 1,000 impressions)", "CPM（每千次廣告曝光成本）")),
-        "cost_per_inline_link_click": p_float(_get(row, "Product CPC (cost per product link click)", "商品 CPC（每次商品連結點擊成本）")),
-        "purchases": p_int(_get(row, "Product attributed orders")),
-        "adds_to_cart": p_int(_get(row, "Product adds to cart", "Meta adds to cart", "應用程式內商品加到購物車次數")),
+        "cpm": p_float(_col(values, "cpm")),
+        "cost_per_inline_link_click": p_float(_col(values, "cost_per_inline_link_click")),
+        "purchases": p_int(_col(values, "purchases")),
+        "adds_to_cart": p_int(_col(values, "adds_to_cart")),
         "catalog_purchases": catalog_purchases,
-        "product_set_purchases": p_int(_get(row, "Product set purchases")),
-        "product_views": p_int(_get(row, "Product views")),
+        "product_set_purchases": p_int(_col(values, "product_set_purchases")),
+        "product_views": p_int(_col(values, "product_views")),
     }
 
 
@@ -311,6 +377,7 @@ async def run_report_worker(
     max_spend: Optional[float] = config.get("maxSpend")
     max_cvr: Optional[float] = config.get("maxCVR")
     min_cvr: Optional[float] = config.get("minCVR")
+    min_roas: Optional[float] = config.get("minROAS")
     top_conversion_limit: Optional[int] = config.get("topConversionLimit")
 
     # Catalog update options
@@ -434,10 +501,15 @@ async def run_report_worker(
             f"?report_run_id={report_run_id}&access_token={access_token}"
         )
 
-        # Ask for English column headers explicitly — the CSV's header language
-        # otherwise follows the report-requesting user's personal FB locale, which
-        # can silently drift (e.g. to Traditional Chinese) and break every _get()
-        # lookup below since map_row_to_product_insight only recognizes English names.
+        # Best-effort attempt at English column headers — the CSV's header
+        # language follows the report-requesting user's personal FB locale and
+        # has been observed to silently drift (e.g. to Traditional Chinese)
+        # regardless of this header (same report_run_id, same bytes returned
+        # for different Accept-Language values in testing 2026-08-20). Row
+        # mapping below reads by column POSITION, not header text, so it no
+        # longer depends on this actually working — kept only as a cheap
+        # extra nudge in case Facebook's behavior here is inconsistent rather
+        # than fully ignoring it.
         csv_headers = {"Accept-Language": "en-US,en;q=0.9"}
 
         async with httpx.AsyncClient(timeout=600, follow_redirects=True) as client:
@@ -482,6 +554,25 @@ async def run_report_worker(
                 except Exception as e:
                     logger.warning("CSV download error: %s", e)
                     await asyncio.sleep(5)
+
+            if csv_text:
+                # Peek at the header row's column count before committing to
+                # the CSV path — a mismatch means Facebook's export layout
+                # drifted and _CSV_COLUMN_INDEX positions can no longer be
+                # trusted. Null out csv_text so the branch below falls
+                # through to the JSON fallback instead of silently proceeding
+                # with zero (or misaligned) rows.
+                header_line = csv_text.split("\n", 1)[0]
+                actual_col_count = len(next(csv.reader(io.StringIO(header_line))))
+                if actual_col_count != _CSV_EXPECTED_COLUMN_COUNT:
+                    logger.error(
+                        "CSV column count changed for job %d: expected %d, got %d — "
+                        "Facebook's export layout has drifted, _CSV_COLUMN_INDEX "
+                        "positions are no longer trustworthy. Falling back to "
+                        "paginated JSON instead of risking silently wrong data.",
+                        job_id, _CSV_EXPECTED_COLUMN_COUNT, actual_col_count,
+                    )
+                    csv_text = None
 
             if csv_text:
                 # Log first 500 chars of CSV to debug
@@ -584,6 +675,58 @@ async def run_report_worker(
         if len(insights) != raw_count:
             logger.info("Post-processing filters: %d -> %d items (minSpend=%s minCTR=%s maxSpend=%s maxCVR=%s minCVR=%s)",
                          raw_count, len(insights), min_spend, min_ctr, max_spend, max_cvr, min_cvr)
+
+        # ---------------------------------------------------------------
+        # minROAS filter — estimates per-product ROAS as
+        # (catalog sale_price x converted_product_omni_purchase) / spend,
+        # since Facebook's insights export doesn't carry a reliable
+        # per-product revenue figure on the CSV path production uses.
+        # Requires an extra catalog lookup, so it's skipped entirely
+        # (zero added cost) unless minROAS is actually configured.
+        # ---------------------------------------------------------------
+        if min_roas is not None:
+            if not catalog_id:
+                logger.warning(
+                    "minROAS=%s set but no catalogId configured — skipping ROAS filter",
+                    min_roas,
+                )
+            else:
+                before = len(insights)
+                retailer_ids = list({
+                    i["product_retailer_id"] for i in insights if i["product_retailer_id"]
+                })
+                price_token = catalog_access_token or access_token
+                products = await fetch_products_by_retailer_ids(
+                    catalog_id, retailer_ids, price_token,
+                )
+                price_by_retailer: dict[str, float] = {}
+                for prod in products:
+                    rid = prod.get("retailer_id")
+                    if not rid:
+                        continue
+                    unit = (
+                        _parse_catalog_price(prod.get("sale_price"))
+                        or _parse_catalog_price(prod.get("price"))
+                    )
+                    if unit is not None:
+                        price_by_retailer[rid] = unit
+
+                kept: list[dict] = []
+                no_price_count = 0
+                for i in insights:
+                    unit = price_by_retailer.get(i["product_retailer_id"])
+                    if unit is None or i["spend"] <= 0:
+                        no_price_count += 1
+                        continue
+                    roas = (unit * i["catalog_purchases"]) / i["spend"]
+                    i["roas_est"] = round(roas, 4)
+                    if roas >= min_roas:
+                        kept.append(i)
+                insights = kept
+                logger.info(
+                    "minROAS filter (>=%s): %d -> %d items (%d excluded: no catalog price)",
+                    min_roas, before, len(insights), no_price_count,
+                )
 
         if top_conversion_limit is not None and top_conversion_limit > 0:
             insights.sort(

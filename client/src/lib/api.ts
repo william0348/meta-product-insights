@@ -229,7 +229,7 @@ export const facebookApiService = {
     accessToken?: string,
     onProgress?: (data: ProductInsightData[]) => void,
     onDownloadProgress?: (percent: number) => void,
-    filters?: { minSpend?: string; minCTR?: string; maxSpend?: string; maxCVR?: string }
+    filters?: { minSpend?: string; minCTR?: string; maxSpend?: string; maxCVR?: string; minCVR?: string }
   ): Promise<{ data: ProductInsightData[] }> {
     try {
       const allData: ProductInsightData[] = [];

@@ -233,6 +233,8 @@ async def process_scheduled_job(
                     "minCTR": rc.get("minCTR") or config.get("minCTR"),
                     "maxSpend": rc.get("maxSpend") or config.get("maxSpend"),
                     "maxCVR": rc.get("maxCVR") or config.get("maxCVR"),
+                    "minCVR": rc.get("minCVR") or config.get("minCVR"),
+                    "minROAS": rc.get("minROAS") or config.get("minROAS"),
                     "topConversionLimit": rc.get("topConversionLimit") or config.get("topConversionLimit"),
                     "updateToCatalog": config.get("updateToCatalog", False),
                     "catalogId": config.get("catalogId"),

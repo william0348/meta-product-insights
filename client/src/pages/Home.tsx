@@ -56,6 +56,7 @@ export default function Home() {
   const [refilterMinCTR, setRefilterMinCTR] = useState('');
   const [refilterMaxSpend, setRefilterMaxSpend] = useState('');
   const [refilterMaxCVR, setRefilterMaxCVR] = useState('');
+  const [refilterMinCVR, setRefilterMinCVR] = useState('');
   const [refilterMaxResults, setRefilterMaxResults] = useState('50000');
   const [isRefiltering, setIsRefiltering] = useState(false);
   const [lastReportRunId, setLastReportRunId] = useState<string | null>(null);
@@ -70,6 +71,7 @@ export default function Home() {
         minCTR: refilterMinCTR || undefined,
         maxSpend: refilterMaxSpend || undefined,
         maxCVR: refilterMaxCVR || undefined,
+        minCVR: refilterMinCVR || undefined,
         maxResults: refilterMaxResults ? parseInt(refilterMaxResults) : undefined,
       });
       const mapped = result.data.map(mapJsonRowToProductInsightData);
@@ -97,6 +99,8 @@ export default function Home() {
   const [savedMinCTR, setSavedMinCTR] = useState<string | null>(null);
   const [savedMaxSpend, setSavedMaxSpend] = useState<string | null>(null);
   const [savedMaxCVR, setSavedMaxCVR] = useState<string | null>(null);
+  const [savedMinCVR, setSavedMinCVR] = useState<string | null>(null);
+  const [savedMinROAS, setSavedMinROAS] = useState<string | null>(null);
   const [savedBatchSize, setSavedBatchSize] = useState<number>(2000);
 
   // Token mutations
@@ -125,6 +129,8 @@ export default function Home() {
       setSavedMinCTR(adsTokenData.minCTR);
       setSavedMaxSpend(adsTokenData.maxSpend);
       setSavedMaxCVR(adsTokenData.maxCVR);
+      setSavedMinCVR(adsTokenData.minCVR);
+      setSavedMinROAS(adsTokenData.minROAS);
     }
   }, [adsTokenData]);
 
@@ -153,6 +159,7 @@ export default function Home() {
         minCTR: config.minCTR || undefined,
         maxSpend: config.maxSpend || undefined,
         maxCVR: config.maxCVR || undefined,
+        minCVR: config.minCVR || undefined,
       };
       (window as any).__reportFilters = pythonFilters;
 
@@ -176,6 +183,7 @@ export default function Home() {
       setRefilterMinCTR(config.minCTR || '');
       setRefilterMaxSpend(config.maxSpend || '');
       setRefilterMaxCVR(config.maxCVR || '');
+      setRefilterMinCVR(config.minCVR || '');
 
       // Save ads token to database for future use
       try {
@@ -187,11 +195,15 @@ export default function Home() {
           minCTR: config.minCTR || undefined,
           maxSpend: config.maxSpend || undefined,
           maxCVR: config.maxCVR || undefined,
+          minCVR: config.minCVR || undefined,
+          minROAS: config.minROAS || undefined,
         });
         setSavedAdsToken(config.accessToken);
         setSavedAdAccountId(config.accountId);
         setSavedMaxSpend(config.maxSpend || null);
         setSavedMaxCVR(config.maxCVR || null);
+        setSavedMinCVR(config.minCVR || null);
+        setSavedMinROAS(config.minROAS || null);
       } catch (e) {
         console.warn("[Token Save] Could not save ads token:", e);
       }
@@ -557,6 +569,8 @@ export default function Home() {
               defaultMinCTR={savedMinCTR || undefined}
               defaultMaxSpend={savedMaxSpend || undefined}
               defaultMaxCVR={savedMaxCVR || undefined}
+              defaultMinCVR={savedMinCVR || undefined}
+              defaultMinROAS={savedMinROAS || undefined}
             />
 
             {/* Background Job Progress */}
@@ -661,6 +675,15 @@ export default function Home() {
                         type="number" step="0.01" placeholder="1"
                         value={refilterMaxCVR}
                         onChange={(e) => setRefilterMaxCVR(e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-border bg-background rounded-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground">Min CVR %</label>
+                      <input
+                        type="number" step="0.01" placeholder="0.5"
+                        value={refilterMinCVR}
+                        onChange={(e) => setRefilterMinCVR(e.target.value)}
                         className="w-full px-2 py-1 text-xs border border-border bg-background rounded-none"
                       />
                     </div>

@@ -37,6 +37,8 @@ interface ReportConfig {
   minCTR?: string;
   maxSpend?: string;
   maxCVR?: string;
+  minCVR?: string;
+  minROAS?: string;
   dateRangeType?: string;
 }
 
@@ -95,7 +97,7 @@ export default function ScheduledJobs() {
   const [customNumbers, setCustomNumbers] = useState<CustomNumberField[]>(defaultCustomNumbers);
   const [customLabels, setCustomLabels] = useState<CustomLabelField[]>(defaultCustomLabels);
   const [reportConfigs, setReportConfigs] = useState<ReportConfig[]>([
-    { name: '', adAccountId: '', minSpend: '', minCTR: '', maxSpend: '', maxCVR: '' }
+    { name: '', adAccountId: '', minSpend: '', minCTR: '', maxSpend: '', maxCVR: '', minCVR: '', minROAS: '' }
   ]);
   
   const queryClient = useQueryClient();
@@ -158,7 +160,7 @@ export default function ScheduledJobs() {
     setFormData(defaultFormData);
     setCustomNumbers(defaultCustomNumbers);
     setCustomLabels(defaultCustomLabels);
-    setReportConfigs([{ name: '', adAccountId: '', minSpend: '', minCTR: '', maxSpend: '', maxCVR: '' }]);
+    setReportConfigs([{ name: '', adAccountId: '', minSpend: '', minCTR: '', maxSpend: '', maxCVR: '', minCVR: '', minROAS: '' }]);
     setEditingScheduleId(null);
   };
   
@@ -226,6 +228,8 @@ export default function ScheduledJobs() {
         minCTR: c.minCTR || '',
         maxSpend: c.maxSpend || '',
         maxCVR: c.maxCVR || '',
+        minCVR: c.minCVR || '',
+        minROAS: c.minROAS || '',
         dateRangeType: c.dateRangeType || '',
       })));
     } else if (schedule.config?.adAccountId) {
@@ -236,10 +240,12 @@ export default function ScheduledJobs() {
         minCTR: schedule.config.minCTR || '',
         maxSpend: schedule.config.maxSpend || '',
         maxCVR: schedule.config.maxCVR || '',
+        minCVR: schedule.config.minCVR || '',
+        minROAS: schedule.config.minROAS || '',
         dateRangeType: schedule.config.dateRangeType || '',
       }]);
     } else {
-      setReportConfigs([{ name: '', adAccountId: '', minSpend: '', minCTR: '', maxSpend: '', maxCVR: '' }]);
+      setReportConfigs([{ name: '', adAccountId: '', minSpend: '', minCTR: '', maxSpend: '', maxCVR: '', minCVR: '', minROAS: '' }]);
     }
     
     setIsDialogOpen(true);
@@ -247,7 +253,7 @@ export default function ScheduledJobs() {
   
   // Add a new report configuration
   const addReportConfig = () => {
-    setReportConfigs([...reportConfigs, { name: '', adAccountId: '', minSpend: '', minCTR: '', maxSpend: '', maxCVR: '' }]);
+    setReportConfigs([...reportConfigs, { name: '', adAccountId: '', minSpend: '', minCTR: '', maxSpend: '', maxCVR: '', minCVR: '', minROAS: '' }]);
   };
   
   // Remove a report configuration
@@ -275,6 +281,8 @@ export default function ScheduledJobs() {
         minCTR: tokenData.minCTR || updated[index].minCTR,
         maxSpend: tokenData.maxSpend || updated[index].maxSpend,
         maxCVR: tokenData.maxCVR || updated[index].maxCVR,
+        minCVR: tokenData.minCVR || updated[index].minCVR,
+        minROAS: tokenData.minROAS || updated[index].minROAS,
       };
       setReportConfigs(updated);
       toast.success('Copied default values');
@@ -300,6 +308,8 @@ export default function ScheduledJobs() {
       minCTR: c.minCTR?.trim() || undefined,
       maxSpend: c.maxSpend?.trim() || undefined,
       maxCVR: c.maxCVR?.trim() || undefined,
+      minCVR: c.minCVR?.trim() || undefined,
+      minROAS: c.minROAS?.trim() || undefined,
       dateRangeType: c.dateRangeType || formData.dateRangeType,
     }));
     
@@ -311,6 +321,8 @@ export default function ScheduledJobs() {
       minCTR: validConfigs[0].minCTR || undefined,
       maxSpend: validConfigs[0].maxSpend || undefined,
       maxCVR: validConfigs[0].maxCVR || undefined,
+      minCVR: validConfigs[0].minCVR || undefined,
+      minROAS: validConfigs[0].minROAS || undefined,
       topConversionLimit: formData.topConversionLimit !== 'all' ? parseInt(formData.topConversionLimit) : undefined,
     };
     
@@ -750,6 +762,24 @@ export default function ScheduledJobs() {
                         placeholder="e.g., 10"
                         value={config.maxCVR || ''}
                         onChange={(e) => updateReportConfig(index, 'maxCVR', e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">Min CVR (%)</Label>
+                      <Input
+                        placeholder="e.g., 0.5"
+                        value={config.minCVR || ''}
+                        onChange={(e) => updateReportConfig(index, 'minCVR', e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">Min ROAS</Label>
+                      <Input
+                        placeholder="e.g., 1"
+                        value={config.minROAS || ''}
+                        onChange={(e) => updateReportConfig(index, 'minROAS', e.target.value)}
                       />
                     </div>
                   </div>

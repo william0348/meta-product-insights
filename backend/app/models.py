@@ -38,6 +38,8 @@ class UserToken(Base):
     minCTR: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     maxSpend: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     maxCVR: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    minCVR: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    minROAS: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     batchSize: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updatedAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

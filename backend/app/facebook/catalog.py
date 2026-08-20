@@ -87,6 +87,8 @@ PRODUCT_FIELDS = ",".join(
         "id",
         "retailer_id",
         "name",
+        "price",
+        "sale_price",
         "custom_label_0",
         "custom_label_1",
         "custom_label_2",

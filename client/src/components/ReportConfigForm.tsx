@@ -20,7 +20,9 @@ const formSchema = z.object({
   minSpend: z.string().optional(),
   minCTR: z.string().optional(),
   maxSpend: z.string().optional(),
-  maxCVR: z.string().optional()
+  maxCVR: z.string().optional(),
+  minCVR: z.string().optional(),
+  minROAS: z.string().optional()
 });
 
 interface Props {
@@ -32,9 +34,11 @@ interface Props {
   defaultMinCTR?: string;
   defaultMaxSpend?: string;
   defaultMaxCVR?: string;
+  defaultMinCVR?: string;
+  defaultMinROAS?: string;
 }
 
-export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defaultToken, defaultAccountId, defaultMinSpend, defaultMinCTR, defaultMaxSpend, defaultMaxCVR }) => {
+export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defaultToken, defaultAccountId, defaultMinSpend, defaultMinCTR, defaultMaxSpend, defaultMaxCVR, defaultMinCVR, defaultMinROAS }) => {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -48,7 +52,9 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
       minSpend: '',
       minCTR: '',
       maxSpend: '',
-      maxCVR: ''
+      maxCVR: '',
+      minCVR: '',
+      minROAS: ''
     }
   });
 
@@ -89,6 +95,18 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
       form.setValue('maxCVR', defaultMaxCVR);
     }
   }, [defaultMaxCVR, form]);
+
+  useEffect(() => {
+    if (defaultMinCVR) {
+      form.setValue('minCVR', defaultMinCVR);
+    }
+  }, [defaultMinCVR, form]);
+
+  useEffect(() => {
+    if (defaultMinROAS) {
+      form.setValue('minROAS', defaultMinROAS);
+    }
+  }, [defaultMinROAS, form]);
 
   return (
     <Card className="border-0 shadow-none bg-secondary/30 rounded-none">
@@ -319,6 +337,48 @@ export const ReportConfigForm: React.FC<Props> = ({ onSubmit, isProcessing, defa
                           type="number"
                           step="0.01"
                           placeholder="e.g., 10" 
+                          {...field} 
+                          className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="minCVR"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Min CVR (%)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g., 0.5" 
+                          {...field} 
+                          className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="minROAS"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Min ROAS</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g., 1" 
                           {...field} 
                           className="font-mono text-xs bg-background border-border focus:border-primary focus:ring-0 rounded-none h-10"
                         />

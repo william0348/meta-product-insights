@@ -74,24 +74,39 @@ async def init_db():
         await conn.execute(text("SELECT 1"))
     from .models import Base
     async with engine.begin() as conn:
-        # create_all only creates missing tables (mpi_* prefixed, so safe on a shared
-        # TiDB database) — it never ALTERs existing ones, hence the sqlite-only patch below.
+        # create_all only creates missing tables — it never ALTERs existing ones,
+        # hence the manual column-add patch below (runs against both sqlite and
+        # the shared TiDB/MySQL database; table names differ by dialect since the
+        # local sqlite file predates the mpi_ table-name prefix used on TiDB).
         await conn.run_sync(Base.metadata.create_all)
-        if _is_sqlite(settings.database_url):
-            await _sqlite_add_missing_columns(conn)
+        await _add_missing_columns(conn)
     logger.info("[Database] Schema ensured (%s)", "sqlite" if _is_sqlite(settings.database_url) else "mysql")
     logger.info("[Database] Connection verified")
 
 
-async def _sqlite_add_missing_columns(conn) -> None:
-    """Lightweight SQLite migration for columns added after first deploy.
+async def _add_missing_columns(conn) -> None:
+    """Migration for columns added after first deploy.
     create_all() only creates missing tables — it never ALTERs existing ones."""
+    is_sqlite = _is_sqlite(settings.database_url)
+    prefix = "" if is_sqlite else "mpi_"
     desired = [
         ("batch_jobs", "catalogVerification", "TEXT"),
+        ("user_tokens", "minCVR", "VARCHAR(32)"),
+        ("user_tokens", "minROAS", "VARCHAR(32)"),
     ]
     for table, column, coltype in desired:
-        existing = (await conn.exec_driver_sql(f"PRAGMA table_info({table})")).fetchall()
-        if not any(row[1] == column for row in existing):
+        table = f"{prefix}{table}"
+        if is_sqlite:
+            existing = (await conn.exec_driver_sql(f"PRAGMA table_info({table})")).fetchall()
+            has_column = any(row[1] == column for row in existing)
+        else:
+            existing = (await conn.exec_driver_sql(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = DATABASE() AND table_name = %s",
+                (table,),
+            )).fetchall()
+            has_column = any(row[0] == column for row in existing)
+        if not has_column:
             await conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
             logger.info("[Database] Added column %s.%s", table, column)
 

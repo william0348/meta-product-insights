@@ -207,6 +207,8 @@ async def process_report_generation_job(
         "minCTR": float(config["minCTR"]) if config.get("minCTR") else None,
         "maxSpend": float(config["maxSpend"]) if config.get("maxSpend") else None,
         "maxCVR": float(config["maxCVR"]) if config.get("maxCVR") else None,
+        "minCVR": float(config["minCVR"]) if config.get("minCVR") else None,
+        "minROAS": float(config["minROAS"]) if config.get("minROAS") else None,
         "topConversionLimit": config.get("topConversionLimit"),
         "updateToCatalog": config.get("updateToCatalog", False),
         "catalogId": config.get("catalogId"),

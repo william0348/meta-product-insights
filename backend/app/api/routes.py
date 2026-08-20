@@ -40,6 +40,8 @@ class TokenSaveRequest(BaseModel):
     minCTR: Optional[str] = None
     maxSpend: Optional[str] = None
     maxCVR: Optional[str] = None
+    minCVR: Optional[str] = None
+    minROAS: Optional[str] = None
     batchSize: Optional[int] = None
 
 
@@ -79,6 +81,8 @@ class ReportGenerateRequest(BaseModel):
     minCTR: Optional[str] = None
     maxSpend: Optional[str] = None
     maxCVR: Optional[str] = None
+    minCVR: Optional[str] = None
+    minROAS: Optional[str] = None
 
 
 class ScheduleCreateRequest(BaseModel):
@@ -199,6 +203,8 @@ async def save_token(
         existing.minCTR = body.minCTR
         existing.maxSpend = body.maxSpend
         existing.maxCVR = body.maxCVR
+        existing.minCVR = body.minCVR
+        existing.minROAS = body.minROAS
         existing.batchSize = body.batchSize
         await db.commit()
     else:
@@ -212,6 +218,8 @@ async def save_token(
             minCTR=body.minCTR,
             maxSpend=body.maxSpend,
             maxCVR=body.maxCVR,
+            minCVR=body.minCVR,
+            minROAS=body.minROAS,
             batchSize=body.batchSize,
         )
         db.add(token)
@@ -242,6 +250,8 @@ async def get_token(
             "minCTR": None,
             "maxSpend": None,
             "maxCVR": None,
+            "minCVR": None,
+            "minROAS": None,
             "batchSize": None,
         }
     d = _row_to_dict(token)
@@ -542,6 +552,7 @@ async def refilter_insights(
     minCTR: Optional[float] = Query(None),
     maxSpend: Optional[float] = Query(None),
     maxCVR: Optional[float] = Query(None),
+    minCVR: Optional[float] = Query(None),
     maxResults: int = Query(50000),
 ):
     """Re-filter cached report data without re-downloading from Facebook."""
@@ -582,6 +593,8 @@ async def refilter_insights(
             continue
         if maxCVR is not None and cvr > maxCVR:
             continue
+        if minCVR is not None and cvr < minCVR:
+            continue
         filtered.append(row)
 
     total_filtered = len(filtered)
@@ -603,6 +616,7 @@ async def facebook_insights(
     minCTR: Optional[float] = Query(None),
     maxSpend: Optional[float] = Query(None),
     maxCVR: Optional[float] = Query(None),
+    minCVR: Optional[float] = Query(None),
 ):
     """Fetch insights data. If fetchAll=true, fetches ALL pages server-side, filters in Python, and returns combined result."""
     base_url = f"https://graph.facebook.com/v25.0/{reportRunId}/insights"
@@ -736,7 +750,7 @@ async def facebook_insights(
                 return v
         return 0
 
-    if minSpend is not None or minCTR is not None or maxSpend is not None or maxCVR is not None:
+    if minSpend is not None or minCTR is not None or maxSpend is not None or maxCVR is not None or minCVR is not None:
         filtered = []
         for row in all_data:
             spend = _pf(_get(row, "spend", "Product amount spent", "Spend", "Amount Spent"))
@@ -752,6 +766,8 @@ async def facebook_insights(
             if maxSpend is not None and spend > maxSpend:
                 continue
             if maxCVR is not None and cvr > maxCVR:
+                continue
+            if minCVR is not None and cvr < minCVR:
                 continue
             filtered.append(row)
 
@@ -811,6 +827,8 @@ async def generate_report(
             "minCTR": body.minCTR,
             "maxSpend": body.maxSpend,
             "maxCVR": body.maxCVR,
+            "minCVR": body.minCVR,
+            "minROAS": body.minROAS,
         },
         status="queued",
         queuedAt=datetime.utcnow(),
